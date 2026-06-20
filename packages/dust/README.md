@@ -4,7 +4,7 @@ Dust is the layer of small native Unix/Rust tools that make the machine usable f
 and AI agents. It is shell-first and installs tools **globally** (Homebrew + mise); only the
 manifest, scripts, config templates, and metadata live here.
 
-Deep dive: [`../../docs/dust.md`](../../docs/dust.md).
+Deep dive: [`../../docs/native-substrate.md`](../../docs/native-substrate.md).
 
 ## Layout
 
@@ -60,4 +60,4 @@ per `../archon/policies/dust.agent.policy.toml`. See [`AGENTS.md`](AGENTS.md) an
 ## Related
 
 - [`../archon/README.md`](../archon/README.md) — metadata this package produces and is governed by
-- [`../../docs/dust.md`](../../docs/dust.md) · [`../../docs/setup.md`](../../docs/setup.md)
+- [`../../docs/native-substrate.md`](../../docs/native-substrate.md) · [`../../docs/setup.md`](../../docs/setup.md)

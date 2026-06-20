@@ -1,7 +1,7 @@
 # Archon agent guide
 
 Archon is data and contracts. [`README.md`](README.md) and
-[`../../docs/archon.md`](../../docs/archon.md) are the source of truth.
+[`../../docs/metadata-plane.md`](../../docs/metadata-plane.md) are the source of truth.
 
 ## Rules
 

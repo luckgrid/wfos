@@ -15,5 +15,5 @@ and not the tools themselves ([Dust](../dust/README.md)) — it coordinates them
 - The Cargo workspace (`Cargo.toml`) and a `moon.yml` land with this crate; add `kraken` to
   `.moon/workspace.yml` `projects.sources` at that point.
 
-Design: [`../../docs/kraken.md`](../../docs/kraken.md) ·
+Design: [`../../docs/runtime-controller.md`](../../docs/runtime-controller.md) ·
 engine: [`../../docs/runtime-architecture.md`](../../docs/runtime-architecture.md).

@@ -14,4 +14,4 @@ execution.
 - [Hypercube](../hypercube/README.md) packages components, [Kraken](../kraken/README.md) runs
   them (`krk ether run …`), and [Archon](../archon/README.md) defines what they may touch.
 
-Design: [`../../docs/ether.md`](../../docs/ether.md).
+Design: [`../../docs/portable-runtime.md`](../../docs/portable-runtime.md).

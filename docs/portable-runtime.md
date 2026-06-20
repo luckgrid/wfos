@@ -1,7 +1,7 @@
-# Ether — portable runtime (planned)
+# Portable runtime — Ether (planned)
 
 Ether is the WASM/WASI binary interface layer. It makes low-level workflow capabilities
-portable, sandboxed, and componentized. Where [Dust](dust.md) is local-native execution,
+portable, sandboxed, and componentized. Where [Dust](native-substrate.md) is local-native execution,
 Ether is portable sandboxed execution. Status: **planned.**
 
 ## Scope
@@ -47,7 +47,7 @@ Kraken controls when and how.    Archon defines what they may touch.
 ```
 
 The default runtime is [Wasmtime](https://wasmtime.dev/) (the `ether` Dust module), invoked
-by [Kraken](kraken.md) as `krk ether run <component> --scope <path>`.
+by [Kraken](runtime-controller.md) as `krk ether run <component> --scope <path>`.
 
 ## Broader WASM landscape
 

@@ -58,6 +58,21 @@ dust_require_human() {
 # ── tool detection ───────────────────────────────────────────────────────────
 dust_has() { command -v "$1" >/dev/null 2>&1; }
 
+# Resolve a manifest `detect` value to an installed? check. Three forms:
+#   "name"        -> command on PATH         (command -v)
+#   "/abs/path"   -> absolute file/dir exists ([ -e ])
+#   "rel/path"    -> file/dir under the Homebrew prefix exists (sourced plugins)
+# The relative form lets non-binary tools (e.g. sourced zsh plugins under
+# share/) report honestly in the registry.
+dust_detect() {
+  local d="$1"
+  case "$d" in
+    /*) [ -e "$d" ] ;;
+    */*) [ -e "${HOMEBREW_PREFIX:-$(brew --prefix 2>/dev/null)}/$d" ] ;;
+    *) command -v "$d" >/dev/null 2>&1 ;;
+  esac
+}
+
 dust_version() {
   local cmd="$1"
   dust_has "$cmd" || { printf '%s' "-"; return 1; }

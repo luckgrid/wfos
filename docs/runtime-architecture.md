@@ -1,6 +1,6 @@
 # Runtime architecture
 
-This is the engine blueprint that sits under [Kraken](kraken.md): a high-performance,
+This is the engine blueprint that sits under [Kraken](runtime-controller.md): a high-performance,
 terminal-first orchestrator driven by a unified CLI/TUI. It proxies native utilities,
 coordinates asynchronous data across simultaneous workstreams, isolates distinct
 tenant/brand execution profiles, and integrates AI augmentation natively.
@@ -56,7 +56,7 @@ systems-level primitives, each mapped to a WfOS responsibility.
 - **starbase and clap are not alternatives.** starbase is the application shell (app
   lifecycle, sessions, diagnostics); clap is the parser it builds on. Kraken is a starbase
   app with clap-derived commands.
-- **Config is TOML-first.** [Archon](archon.md) descriptors, policies, and the tool manifest
+- **Config is TOML-first.** [Archon](metadata-plane.md) descriptors, policies, and the tool manifest
   are TOML; the registry is JSON. Serde reads all of them — keep TOML as the default and
   reach for JSON/YAML only where a format is already imposed.
 - **Orka is a candidate, not a commitment.** It is young. v0 can sequence tasks directly or
@@ -74,9 +74,9 @@ systems-level primitives, each mapped to a WfOS responsibility.
 
 A single operator works across brands, domains, and clients. Isolation starts at the child
 process boundary — the daemon injects the active profile's context (tenant, brand, scoped
-env) when it spawns a tool. Stronger isolation (capability-scoped WASM via [Ether](ether.md),
+env) when it spawns a tool. Stronger isolation (capability-scoped WASM via [Ether](portable-runtime.md),
 OS sandboxing) layers on later. The classification of what data may cross which boundary is
-[Archon](archon.md) stream policy (`private … federated`), and promotion scope is the abstract
+[Archon](metadata-plane.md) stream policy (`private … federated`), and promotion scope is the abstract
 Leader policy — neither is a folder.
 
 ## Core engine prototype
@@ -140,5 +140,5 @@ MCP (spec)            https://modelcontextprotocol.io
 rmcp (Rust SDK)       https://crates.io/crates/rmcp
 ```
 
-See [kraken.md](kraken.md) for the command surface and [monorepo.md](monorepo.md) for how
+See [runtime-controller.md](runtime-controller.md) for the command surface and [monorepo.md](monorepo.md) for how
 the engine crate slots into the workspace build.

@@ -36,6 +36,36 @@ agent_safe = true
 alternatives = ""
 purpose = "shell script linting"
 
+[[tool]]
+module = "shell"
+id = "zsh-autosuggestions"
+default = true
+brew = "zsh-autosuggestions"
+detect = "share/zsh-autosuggestions/zsh-autosuggestions.zsh"
+agent_safe = true
+alternatives = ""
+purpose = "fish-like async command suggestions from history (sourced plugin)"
+
+[[tool]]
+module = "shell"
+id = "zsh-syntax-highlighting"
+default = true
+brew = "zsh-syntax-highlighting"
+detect = "share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
+agent_safe = true
+alternatives = ""
+purpose = "real-time command-line syntax highlighting (sourced plugin)"
+
+[[tool]]
+module = "shell"
+id = "zsh-autocomplete"
+default = false
+brew = "zsh-autocomplete"
+detect = "share/zsh-autocomplete/zsh-autocomplete.plugin.zsh"
+agent_safe = true
+alternatives = ""
+purpose = "real-time menu completion (sourced plugin; can conflict — optional)"
+
 # ── git ────────────────────────────────────────────────────────────────────
 [[tool]]
 module = "git"
@@ -168,6 +198,47 @@ agent_safe = true
 alternatives = "fzf"
 purpose = "fuzzy finder (Rust alternative to fzf)"
 
+[[tool]]
+module = "nav"
+id = "tldr"
+default = true
+brew = "tealdeer"
+detect = "tldr"
+agent_safe = true
+alternatives = ""
+purpose = "practical command cheatsheets (fast Rust tldr client)"
+
+[[tool]]
+module = "nav"
+id = "choose"
+default = false
+brew = "choose-rust"
+detect = "choose"
+agent_safe = true
+alternatives = ""
+purpose = "field selector — human-friendly cut/awk alternative"
+
+# ── system (resource + disk inspection) ──────────────────────────────────────
+[[tool]]
+module = "system"
+id = "btop"
+default = true
+brew = "btop"
+detect = "btop"
+agent_safe = true
+alternatives = ""
+purpose = "modern resource/process monitor (top/htop replacement)"
+
+[[tool]]
+module = "system"
+id = "dua"
+default = true
+brew = "dua-cli"
+detect = "dua"
+agent_safe = true
+alternatives = ""
+purpose = "fast disk-usage visualizer (du replacement; substitutes 'dust' to avoid CLI name clash)"
+
 # ── session ──────────────────────────────────────────────────────────────────
 [[tool]]
 module = "session"
@@ -250,6 +321,17 @@ detect = "proto"
 agent_safe = true
 alternatives = "mise"
 purpose = "existing tool version manager (kept; not auto-installed)"
+
+# ── dotfiles (cross-machine config management) ───────────────────────────────
+[[tool]]
+module = "dotfiles"
+id = "chezmoi"
+default = false
+brew = "chezmoi"
+detect = "chezmoi"
+agent_safe = true
+alternatives = ""
+purpose = "cross-machine dotfile manager (optional; complements Dust's symlink bootstrap)"
 
 # ── js ───────────────────────────────────────────────────────────────────────
 [[tool]]

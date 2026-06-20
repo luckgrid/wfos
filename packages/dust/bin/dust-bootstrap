@@ -24,7 +24,7 @@ to_install=()
 while IFS=$'\037' read -r module id def brew detect agent_safe alts purpose; do
   [ -n "$id" ] || continue
   [ -n "$brew" ] || continue
-  dust_has "$detect" && continue
+  dust_detect "$detect" && continue
   to_install+=("$brew")
 done < <(dust_manifest_tsv)
 

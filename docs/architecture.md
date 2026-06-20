@@ -41,20 +41,30 @@ Application layer (high)  apps, sites, dashboards — minimal path surface
 
 A developer lives mostly in the toolchain layer. An agent operator works through the agent
 layer (scoped skills and tools, not folder trees). A reader of the docs site only sees the
-application layer. [Archon](archon.md) binds these layers to what lives on disk: full
+application layer. [Archon](metadata-plane.md) binds these layers to what lives on disk: full
 abstraction for higher levels, direct access for lower levels when needed.
+
+## Workstreams collection
+
+The **`Workstreams/`** tree (Plan, Brand, Build, Control) lives outside this workspace and registers units via Archon. Canon:
+
+- [Plan/bin/lg_wfos_ws_namespaces.md](../../../../../../Plan/bin/lg_wfos_ws_namespaces.md)
+- [Plan/bin/lg_wfos_ws_layers_and_gates.md](../../../../../../Plan/bin/lg_wfos_ws_layers_and_gates.md)
 
 ## System map
 
 ```mermaid
 flowchart TD
+  WS[Workstreams Plan Brand Build Control]
   Dev[Developer / Agent] --> KRK[Kraken krk]
+  KRK --> WS
   KRK --> CX[Archon metadata]
   KRK --> HQB[Hypercube hqb]
   KRK --> DUST[Dust native tools]
   KRK --> ETH[Ether WASM/WASI]
   HQB --> CX
   DUST --> CX
+  WS --> CX
   CX --> Reg[registry + descriptors + policies]
 ```
 
@@ -77,4 +87,4 @@ the shared meaning underneath all of it.
 
 - Engine internals and the CLI/daemon/TUI plan: [runtime-architecture.md](runtime-architecture.md)
 - How the workspace is built and tasks run: [monorepo.md](monorepo.md)
-- The implemented pair: [dust.md](dust.md) and [archon.md](archon.md)
+- The implemented pair: [native-substrate.md](native-substrate.md) and [metadata-plane.md](metadata-plane.md)

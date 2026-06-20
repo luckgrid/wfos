@@ -1,9 +1,9 @@
-# Kraken — runtime controller (planned)
+# Runtime controller — Kraken (planned)
 
 Kraken is the runtime CLI and low-level control interface (`krk`). It is the daily command
 surface that reaches into many tools, libraries, sessions, descriptors, policies, and agents.
-It is **not** the package manager (that is [Hypercube](hypercube.md)) and **not** the tools
-themselves (that is [Dust](dust.md)) — it discovers, routes, and coordinates.
+It is **not** the package manager (that is [Hypercube](package-translator.md)) and **not** the tools
+themselves (that is [Dust](native-substrate.md)) — it discovers, routes, and coordinates.
 
 Status: **planned.** This guide is the design target; the package starts as a stub.
 
@@ -34,6 +34,33 @@ hqb …            hand off to the package translator
 Every command should be explainable: `krk <cmd> --explain` prints the unit, the descriptor
 and native manifest it resolved, the runtime/package adapter, the native command, the session
 id, and the policies applied.
+
+## Workstreams routing
+
+Kraken routes into the four Workstreams namespaces (design target):
+
+```txt
+krk plan …       Plan — Decisions (briefs, specs, strategy)
+krk brand …      Brand — Expressions (design, content)
+krk build …      Build — Implementations (code, wfos, ds)
+krk control …    Control — Operations (records, sync)
+krk spec …       Plan filter (kind: spec)
+krk qa …         Build QA gateway
+krk release …    Build + Control when enabled
+```
+
+```mermaid
+flowchart LR
+  K[Kraken krk] --> PlanNs[Plan]
+  K --> BrandNs[Brand]
+  K --> BuildNs[Build]
+  K --> ControlNs[Control]
+  PlanNs -->|validated| BuildNs
+  BrandNs -->|approved| BuildNs
+  BuildNs -->|ship_ready| ControlNs
+```
+
+Canon: [Plan/bin/lg_wfos_ws_namespaces.md](../../../../../../Plan/bin/lg_wfos_ws_namespaces.md) · [Plan/bin/lg_wfos_ws_layers_and_gates.md](../../../../../../Plan/bin/lg_wfos_ws_layers_and_gates.md)
 
 ## Routing flow
 
@@ -66,7 +93,7 @@ Kraken is built on the Rust stack described in [runtime-architecture.md](runtime
   proxying.
 - **[Ratatui](https://crates.io/crates/ratatui)** for the later multi-panel TUI.
 
-It routes to the [moon](monorepo.md) task graph as a compat backend and to [Dust](dust.md)
+It routes to the [moon](monorepo.md) task graph as a compat backend and to [Dust](native-substrate.md)
 for native execution. The v0 build is a single-process CLI; the daemon and TUI phases follow
 (see [runtime-architecture.md](runtime-architecture.md#client-daemon-model)).
 

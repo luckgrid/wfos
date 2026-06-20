@@ -15,4 +15,4 @@ and runtime contracts. It packages more than code.
 - Package contracts live in [Archon](../archon/README.md); [Kraken](../kraken/README.md) may
   invoke `hqb` during routing.
 
-Design: [`../../docs/hypercube.md`](../../docs/hypercube.md).
+Design: [`../../docs/package-translator.md`](../../docs/package-translator.md).

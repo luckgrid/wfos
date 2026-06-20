@@ -35,7 +35,7 @@ After `bootstrap`, `dust` is on `PATH` (symlinked into `~/.local/bin`), so you c
 
 ## mise / proto coexistence
 
-proto pins the workspace build toolchains (`.prototools`). [Dust](dust.md) uses **mise** as
+proto pins the workspace build toolchains (`.prototools`). [Dust](native-substrate.md) uses **mise** as
 its runtime manager for day-to-day shells and activates it in `config/shell/dust.zsh`. The two
 coexist: activation order lets mise manage Dust-scoped runtimes while proto handles the
 workspace. Nothing is removed from your existing setup.
@@ -44,9 +44,9 @@ workspace. Nothing is removed from your existing setup.
 
 You do not have to take all of WfOS:
 
-- Want just the tool substrate? Use [Dust](dust.md) (`dust doctor` / `bootstrap`) and ignore
+- Want just the tool substrate? Use [Dust](native-substrate.md) (`dust doctor` / `bootstrap`) and ignore
   the rest.
-- Want the metadata contracts? Use [Archon](archon.md) descriptors/policies in your own tooling.
+- Want the metadata contracts? Use [Archon](metadata-plane.md) descriptors/policies in your own tooling.
 - Want the monorepo conventions? Use the [moon + proto](monorepo.md) skeleton.
 
 Adopt one piece, keep your own workflow, and grow into more when it earns its place.
@@ -68,6 +68,13 @@ reads, and dotfile edits. See [agent-rails.md](agent-rails.md) for the full poli
 DUST_AGENT=1 packages/dust/bin/dust doctor   # ok
 DUST_AGENT=1 packages/dust/bin/dust bootstrap # blocked
 ```
+
+## Core workflow apps (separate, documented install)
+
+The native writing/notes/AI stack — Logseq, Obsidian, Typst, aichat, Ollama, OpenRouter — is a
+**documented recommendation, not part of `dust bootstrap`**. Install it yourself when you want
+it; the full guide and quick-start commands are in [workflow-apps.md](workflow-apps.md). The
+markdown-on-disk source of truth keeps every choice swappable.
 
 ## Apps preview
 

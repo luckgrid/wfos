@@ -1,10 +1,10 @@
-# Dust — native substrate
+# Native substrate — Dust
 
 Dust is the layer of small native Unix/Rust tools that make the machine usable for both
 developers and AI agents. It is shell-first and installs tools **globally** (via Homebrew +
 mise); only the manifest, scripts, config templates, and metadata live in this repo.
 
-Dust is where work is physically executed on the machine. [Kraken](kraken.md) controls and
+Dust is where work is physically executed on the machine. [Kraken](runtime-controller.md) controls and
 routes; Dust runs the native commands.
 
 ## What lives in the package
@@ -17,7 +17,7 @@ config/                    Brewfile + shell fragment + tool config templates
 moon.yml                   doctor/list/env tasks for the project graph
 ```
 
-The generated tool registry is written to the [Archon](archon.md) package
+The generated tool registry is written to the [Archon](metadata-plane.md) package
 (`packages/archon/registry/tools.json`) and is host-specific (gitignored).
 
 ## Commands
@@ -39,20 +39,40 @@ alternatives are detected if present but never forced.
 
 | Module | Default | Alternatives | Purpose |
 |--------|---------|--------------|---------|
-| `shell` | starship, shellcheck | — | prompt context and script linting |
+| `shell` | starship, shellcheck, zsh-autosuggestions, zsh-syntax-highlighting | zsh-autocomplete | prompt context, script linting, shell UX plugins |
 | `git` | git, gh | jj, lazygit, git-delta | version control and source status |
-| `nav` | fzf, zoxide, eza, bat, ripgrep, fd, jq | skim | search, selection, navigation |
+| `nav` | fzf, zoxide, eza, bat, ripgrep, fd, jq, tldr | skim, choose | search, selection, navigation, cheatsheets |
+| `system` | btop, dua | — | resource monitor and disk-usage visualizer |
 | `session` | tmux | zellij | persistent terminal sessions |
 | `secrets` | pass | age, sops | local secret handling (agent-blocked) |
 | `tools` | mise, direnv | proto, asdf | runtime/version + per-dir env |
+| `dotfiles` | — | chezmoi | cross-machine dotfile management |
 | `js` | node, pnpm | bun, deno, aube | JS/TS runtime and package routing |
 | `rust` | cargo | rustup, cargo-nextest | Rust build/test routing |
 | `ether` | wasmtime | — | WASM/WASI runtime for portable components |
 | `logs` | files | sqlite3 | session and command traceability |
 
+The `dust` disk tool from the Unix-substrate research is intentionally **substituted by `dua`**
+to avoid a CLI name clash with the Dust product binary (`~/.local/bin/dust`).
+
 The manifest (`manifest/dust.tools.toml`) is the authoritative list, with per-tool `brew`,
 `detect`, `agent_safe`, and `alternatives` fields. `doctor` reads it to produce the registry;
 see the catalog in [tool-catalog.md](tool-catalog.md) for descriptions and links.
+
+### Detection forms
+
+`doctor` and `bootstrap` resolve the manifest `detect` field through `dust_detect()`, which
+handles three forms so non-binary tools report honestly:
+
+| `detect` value | Check | Used by |
+|----------------|-------|---------|
+| `name` (no slash) | `command -v name` on `PATH` | most CLIs |
+| `/abs/path` | absolute file/dir exists | absolute installs |
+| `rel/path` | exists under `${HOMEBREW_PREFIX}` | sourced zsh plugins (`share/…`) |
+
+The relative form lets sourced plugins (zsh-autosuggestions, zsh-syntax-highlighting,
+zsh-autocomplete) appear in the registry even though they are not on `PATH`. Path-detected tools
+report `installed` without a version string (there is no binary to query).
 
 ## Install model
 
@@ -81,6 +101,14 @@ fragment. If a machine already uses **proto**, Dust does not remove it: activati
 mise manage Dust-scoped runtimes while proto stays available for existing workflows. To
 retire proto later, remove its block from `~/.zshrc` and its `PATH` entry. (Note: proto also
 pins the workspace's own build toolchains — see [monorepo.md](monorepo.md).)
+
+## chezmoi coexistence
+
+Dust's own config flow stays the default: `bootstrap` symlinks a small set of `~/.config`
+templates and wires one sourced line into `~/.zshrc`. [chezmoi](https://www.chezmoi.io/) is
+offered as an **optional** tool in the `dotfiles` module for operators who want full
+cross-machine dotfile management (templating, per-host variants, encrypted secrets) on top of
+or instead of the symlink flow. It is never auto-installed and Dust does not require it.
 
 ## Agent rails
 

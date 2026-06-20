@@ -24,7 +24,7 @@ shell = "zsh"
 note = "Binaries install globally; only manifest, scripts, configs, and metadata live in-repo."
 
 [modules]
-ids = ["shell", "git", "nav", "session", "secrets", "tools", "js", "rust", "ether", "logs"]
+ids = ["shell", "git", "nav", "system", "session", "secrets", "tools", "dotfiles", "js", "rust", "ether", "logs"]
 
 [runtime_manager]
 default = "mise"

@@ -11,30 +11,42 @@ Status legend: **core** (installed by Dust today) · **optional** (detected/swap
 ## Core dependencies — Unix substrate (Dust)
 
 The low-level CLI layer. Defaults are installed by `dust bootstrap`; alternatives are
-detected if present. See [dust.md](dust.md).
+detected if present. See [native-substrate.md](native-substrate.md).
 
-| Tool | Status | Role |
-|------|--------|------|
-| [git](https://git-scm.com/) | core | version control |
-| [gh](https://cli.github.com/) | core | GitHub CLI |
-| [OpenSSH](https://www.openssh.com/) | core | secure remote access and keys |
-| [fzf](https://github.com/junegunn/fzf) | core | fuzzy finder and selection |
-| [tmux](https://github.com/tmux/tmux) | core | persistent terminal sessions |
-| [starship](https://github.com/starship/starship) | core | cross-shell prompt context |
-| [zoxide](https://github.com/ajeetdsouza/zoxide) | core | smarter directory jumping |
-| [eza](https://github.com/eza-community/eza) | core | modern `ls` |
-| [bat](https://github.com/sharkdp/bat) | core | `cat` with syntax highlighting |
-| [ripgrep](https://github.com/BurntSushi/ripgrep) | core | fast recursive search |
-| [fd](https://github.com/sharkdp/fd) | core | fast file find |
-| [jq](https://github.com/jqlang/jq) | core | JSON processor |
-| [direnv](https://direnv.net/) | core | per-directory environment activation |
-| [shellcheck](https://www.shellcheck.net/) | core | shell script linting |
-| [pass](https://www.passwordstore.org/) | core | Unix password store (agent-blocked) |
-| [age](https://github.com/FiloSottile/age) / [sops](https://github.com/getsops/sops) | optional | file/secret encryption |
-| [jj](https://github.com/jj-vcs/jj) | optional | Git-compatible VCS alternative |
-| [skim](https://github.com/skim-rs/skim) | optional | Rust fuzzy finder (fzf alternative) |
-| [zellij](https://github.com/zellij-org/zellij) | optional | terminal workspace (tmux alternative) |
-| [Fabric](https://github.com/danielmiessler/fabric) | planned | AI-augmentation patterns runnable from the shell |
+| Tool | Status | Role | License |
+|------|--------|------|---------|
+| [git](https://git-scm.com/) | core | version control | GPL-2.0 |
+| [gh](https://cli.github.com/) | core | GitHub CLI | MIT |
+| [OpenSSH](https://www.openssh.com/) | core | secure remote access and keys | BSD |
+| [fzf](https://github.com/junegunn/fzf) | core | fuzzy finder and selection | MIT |
+| [tmux](https://github.com/tmux/tmux) | core | persistent terminal sessions | ISC |
+| [starship](https://github.com/starship/starship) | core | cross-shell prompt context | ISC |
+| [zoxide](https://github.com/ajeetdsouza/zoxide) | core | smarter directory jumping | MIT |
+| [eza](https://github.com/eza-community/eza) | core | modern `ls` | MIT |
+| [bat](https://github.com/sharkdp/bat) | core | `cat` with syntax highlighting | MIT/Apache-2.0 |
+| [ripgrep](https://github.com/BurntSushi/ripgrep) | core | fast recursive search | MIT/Unlicense |
+| [fd](https://github.com/sharkdp/fd) | core | fast file find | MIT/Apache-2.0 |
+| [jq](https://github.com/jqlang/jq) | core | JSON processor | MIT |
+| [tldr (tealdeer)](https://github.com/tldr-pages/tealdeer) | core | practical command cheatsheets | MIT/Apache-2.0 |
+| [btop](https://github.com/aristocratos/btop) | core | resource/process monitor (top/htop replacement) | Apache-2.0 |
+| [dua](https://github.com/Byron/dua-cli) | core | disk-usage visualizer (`du` replacement; substitutes `dust` to avoid CLI name clash) | MIT |
+| [direnv](https://direnv.net/) | core | per-directory environment activation | MIT |
+| [shellcheck](https://www.shellcheck.net/) | core | shell script linting | GPL-3.0 |
+| [zsh-autosuggestions](https://github.com/zsh-users/zsh-autosuggestions) | core | async command suggestions from history (sourced plugin) | MIT |
+| [zsh-syntax-highlighting](https://github.com/zsh-users/zsh-syntax-highlighting) | core | real-time command-line syntax highlighting (sourced plugin) | BSD-3-Clause |
+| [pass](https://www.passwordstore.org/) | core | Unix password store (agent-blocked) | GPL-2.0 |
+| [age](https://github.com/FiloSottile/age) / [sops](https://github.com/getsops/sops) | optional | file/secret encryption (config files: sops+age; interactive: pass) | BSD-3 / MPL-2.0 |
+| [chezmoi](https://www.chezmoi.io/) | optional | cross-machine dotfile manager (complements Dust's symlink bootstrap) | MIT |
+| [choose](https://github.com/theryangeary/choose) | optional | field selector — human-friendly `cut`/`awk` alternative | MIT |
+| [zsh-autocomplete](https://github.com/marlonrichert/zsh-autocomplete) | optional | real-time menu completion (sourced plugin; can conflict) | MIT |
+| [jj](https://github.com/jj-vcs/jj) | optional | Git-compatible VCS alternative | MIT/Apache-2.0 |
+| [skim](https://github.com/skim-rs/skim) | optional | Rust fuzzy finder (fzf alternative) | MIT |
+| [zellij](https://github.com/zellij-org/zellij) | optional | terminal workspace (tmux alternative) | MIT |
+| [Fabric](https://github.com/danielmiessler/fabric) | planned | AI-augmentation patterns runnable from the shell | MIT |
+
+Secrets are tiered by concern: **pass** for interactive CLI logins/keys, **sops + age** for
+configuration files checked into git (encrypts values, keeps keys and diffs readable). See
+[native-substrate.md](native-substrate.md#modules).
 
 Dotfiles practice and bootstrap inspiration: [dotfiles.github.io](https://dotfiles.github.io/)
 (utilities, frameworks, bootstrap, tips). WfOS integrates low-level tooling in this spirit —
@@ -53,7 +65,7 @@ See [monorepo.md](monorepo.md).
 
 ## Runtime engine — Rust crates
 
-The engine under [Kraken](kraken.md); see [runtime-architecture.md](runtime-architecture.md).
+The engine under [Kraken](runtime-controller.md); see [runtime-architecture.md](runtime-architecture.md).
 
 | Crate / spec | Status | Role |
 |--------------|--------|------|
@@ -94,16 +106,37 @@ required for WfOS to be useful.
 OpenRouter is the intended substrate for model adapters and routing inside WfOS-built tools —
 a primitive to build on, not a replacement for an agent CLI.
 
-## Native / local apps
+## AI engine / writing (docs-only — see workflow-apps.md)
 
-| App | Status | Role |
-|-----|--------|------|
-| [Obsidian](https://obsidian.md/) | planned | local notes for shared context without vendor lock-in (first phase) |
-| [open-notebook](https://github.com/lfnovo/open-notebook) | planned | AI-assisted notes; proof-of-concept for the Mindflow idea |
+Recommended for local-first, native writing and AI-assisted document workflows. These are
+**documented recommendations**, not Dust-managed tools — install them yourself. Full guide and
+quick-start in [workflow-apps.md](workflow-apps.md).
+
+| Tool | Status | Role | License |
+|------|--------|------|---------|
+| [aichat](https://github.com/sigoden/aichat) | docs-only | Rust LLM CLI — RAG over notes, sessions, `--serve` local API | MIT/Apache-2.0 |
+| [Ollama](https://ollama.com/) | docs-only | run open models locally, no Docker | MIT |
+| [OpenRouter](https://openrouter.ai/) | docs-only | cloud-model routing for high-tier models (aichat provider) | hosted |
+| [Typst](https://typst.app/) | docs-only | compile markdown/Typst into publish-grade PDFs | Apache-2.0 |
+| [tinymist](https://github.com/Myriad-Dreamin/tinymist) | docs-only | Typst language server (editor integration) | Apache-2.0 |
+| [Fabric](https://github.com/danielmiessler/fabric) | optional | crowdsourced AI prompt "patterns" usable from the shell | MIT |
+
+## Native / local apps (docs-only — see workflow-apps.md)
+
+Core writing, note-taking, and session-restoration apps. Documented recommendations, not Dust
+dependencies; the full guide is in [workflow-apps.md](workflow-apps.md).
+
+| App | Status | Role | License |
+|-----|--------|------|---------|
+| [Logseq](https://logseq.com/) | recommended | quick notes, ideas, research, journaling | AGPL-3.0 |
+| [Obsidian](https://obsidian.md/) | recommended | larger docs, specs, structured vaults | proprietary (free tier) |
+| [SilverBullet](https://silverbullet.md/) | optional | OSS, hackable single-process markdown workspace | MIT |
+| [Kilo Code](https://github.com/Kilo-Org/kilocode) | reference | context/session storage and knowledge transfer | Apache-2.0 |
+| [Reor](https://github.com/reorproject/reor) | reference | local AI notes app (archived Mar 2026; reference only) | AGPL-3.0 |
 
 ## WASM / WASI runtimes
 
-The portable execution target; see [ether.md](ether.md).
+The portable execution target; see [portable-runtime.md](portable-runtime.md).
 
 | Project | Status | Role |
 |---------|--------|------|
@@ -127,7 +160,8 @@ Local-first today; relevant when work spans machines (federation).
 ## Workflow inspirations
 
 Local-first workflow apps that prove ideas WfOS borrows from (window/session/space layouts,
-scattered-knowledge capture). Reference, not dependencies.
+scattered-knowledge capture). Reference, not dependencies. See the sessions & workspace
+restoration section of [workflow-apps.md](workflow-apps.md#sessions--workspace-restoration).
 
 | App | Idea |
 |-----|------|

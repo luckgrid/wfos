@@ -5,6 +5,9 @@
 # shell
 brew "starship"
 brew "shellcheck"
+brew "zsh-autosuggestions"
+brew "zsh-syntax-highlighting"
+brew "zsh-autocomplete"
 
 # git
 brew "git"
@@ -22,6 +25,12 @@ brew "ripgrep"
 brew "fd"
 brew "jq"
 brew "sk"
+brew "tealdeer"
+brew "choose-rust"
+
+# system
+brew "btop"
+brew "dua-cli"
 
 # session
 brew "tmux"
@@ -35,6 +44,9 @@ brew "sops"
 # tools
 brew "mise"
 brew "direnv"
+
+# dotfiles
+brew "chezmoi"
 
 # rust
 brew "cargo-nextest"

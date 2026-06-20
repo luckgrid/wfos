@@ -1,4 +1,4 @@
-# Hypercube — package translator (planned)
+# Package translator — Hypercube (planned)
 
 Hypercube is the language-agnostic high-level-to-low-level package interface (`hqb`). It
 turns higher-level workflow logic, rules, policies, profiles, and patterns into lower-level
@@ -21,7 +21,7 @@ Owns: package definitions and metadata, interface compilation, artifact packagin
 cross-language package mapping, policy/profile/adapter packaging, WASM/WASI package patterns.
 
 Does **not** own: runtime command orchestration, terminal sessions, machine setup, shell
-execution, tool detection, or session logs — those belong to [Kraken](kraken.md).
+execution, tool detection, or session logs — those belong to [Kraken](runtime-controller.md).
 
 ## Workflow
 
@@ -59,7 +59,7 @@ deployment-package  deployment/infrastructure targets (future)
 Hypercube does not replace native package managers — it compiles, wraps, links, validates,
 and describes packages across systems. A TypeScript target is still installed by
 pnpm/bun/npm; a Rust crate is still built by Cargo; a WASM component is still run by
-[Ether](ether.md)/Wasmtime. Hypercube packages the system meaning; native tools execute
+[Ether](portable-runtime.md)/Wasmtime. Hypercube packages the system meaning; native tools execute
 native responsibilities.
 
 ## Command surface
@@ -69,5 +69,5 @@ hqb init        hqb inspect <pkg>    hqb pack <pkg>
 hqb compile     hqb publish local    hqb install <pkg>    hqb link
 ```
 
-[Kraken](kraken.md) may invoke `hqb` during routing; `hqb` is the daily CLI for package and
-interface operations. Package contracts live in [Archon](archon.md).
+[Kraken](runtime-controller.md) may invoke `hqb` during routing; `hqb` is the daily CLI for package and
+interface operations. Package contracts live in [Archon](metadata-plane.md).

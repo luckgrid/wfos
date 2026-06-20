@@ -30,8 +30,11 @@ while IFS=$'\037' read -r module id def brew detect agent_safe alts purpose; do
     current_module="$module"
   fi
   total=$((total + 1))
-  if dust_has "$detect"; then
-    ver="$(dust_version "$detect")"
+  if dust_detect "$detect"; then
+    case "$detect" in
+      */*) ver="installed" ;;   # path-detected (e.g. sourced plugin) — no --version
+      *) ver="$(dust_version "$detect")" ;;
+    esac
     installed=$((installed + 1))
     printf '  %sok%s  %-14s %s%s%s\n' "$_C_GREEN" "$_C_RESET" "$id" "$_C_DIM" "$ver" "$_C_RESET"
     is_installed=true

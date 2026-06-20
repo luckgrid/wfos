@@ -1,7 +1,7 @@
 # Dust agent guide
 
 Read-only by default. [`README.md`](README.md) and
-[`../../docs/dust.md`](../../docs/dust.md) are the source of truth.
+[`../../docs/native-substrate.md`](../../docs/native-substrate.md) are the source of truth.
 
 ## Rails
 

@@ -14,15 +14,17 @@ This folder is the self-contained reference for the workspace. Start with
 | [architecture.md](architecture.md) | Archetypes vs products, interface layers, the system map |
 | [runtime-architecture.md](runtime-architecture.md) | Terminal-first engine: client-daemon model and the Rust stack |
 | [monorepo.md](monorepo.md) | moon project graph + proto toolchains, tasks, conventions |
-| [dust.md](dust.md) | Native substrate — Unix/Rust tools, modules, config templates |
-| [archon.md](archon.md) | Metadata plane — descriptors, registry, schemas, policies |
-| [kraken.md](kraken.md) | Runtime controller (`krk`) — discovery, routing, sessions (planned) |
-| [hypercube.md](hypercube.md) | Package translator (`hqb`) — intent → packages (planned) |
-| [ether.md](ether.md) | Portable runtime — WASM/WASI components (planned) |
+| [native-substrate.md](native-substrate.md) | Native substrate — Unix/Rust tools, modules, config templates |
+| [metadata-plane.md](metadata-plane.md) | Metadata plane — descriptors, registry, schemas, policies |
+| [runtime-controller.md](runtime-controller.md) | Runtime controller (`krk`) — discovery, routing, sessions (planned) |
+| [package-translator.md](package-translator.md) | Package translator (`hqb`) — intent → packages (planned) |
+| [portable-runtime.md](portable-runtime.md) | Portable runtime — WASM/WASI components (planned) |
 | [agent-rails.md](agent-rails.md) | Agent rails, gates, MCP exposure, skill scanning |
 | [apps.md](apps.md) | Docs site + marketing site (Zola) |
 | [tool-catalog.md](tool-catalog.md) | Grouped catalog of tools, libraries, skills, and crates |
+| [workflow-apps.md](workflow-apps.md) | Core native workflow apps — notes, writing, AI engine, sessions |
 | [setup.md](setup.md) | Setup for developers and agents |
+| Workstreams canon (external) | [Plan/bin/lg_wfos_ws_namespaces.md](../../../../../../Plan/bin/lg_wfos_ws_namespaces.md) — filesystem namespaces |
 
 ## The five products
 

@@ -1,4 +1,4 @@
-# Archon — metadata plane
+# Metadata plane — Archon
 
 Archon stores the machine-readable meaning of the system: **descriptors, registry, schemas,
 policies, graphs, models, and package contracts**. It has no CLI of its own — it is data and
@@ -67,5 +67,5 @@ example: a descriptor for how it connects, a schema for any generated artifact, 
 for its agent rails. Generated, host-specific output goes under `registry/` and is gitignored;
 contracts and policies are tracked.
 
-See [dust.md](dust.md) for the producer side and [agent-rails.md](agent-rails.md) for how
+See [native-substrate.md](native-substrate.md) for the producer side and [agent-rails.md](agent-rails.md) for how
 policies are enforced.

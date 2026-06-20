@@ -6,9 +6,9 @@ dotfiles require a human.**
 
 ## How rails work today
 
-[Dust](dust.md) reads the `DUST_AGENT` environment variable. When `DUST_AGENT=1`, only
+[Dust](native-substrate.md) reads the `DUST_AGENT` environment variable. When `DUST_AGENT=1`, only
 read-only commands run; mutating ones exit with a non-zero status. The rules live in
-[Archon](archon.md) at `packages/archon/policies/dust.agent.policy.toml`:
+[Archon](metadata-plane.md) at `packages/archon/policies/dust.agent.policy.toml`:
 
 ```toml
 [agent]
@@ -36,7 +36,7 @@ cannot `bootstrap`, install tools, read secrets, or change dotfiles.
 
 ## MCP exposure (planned)
 
-[Kraken](kraken.md)'s daemon can embed an MCP server (via
+[Kraken](runtime-controller.md)'s daemon can embed an MCP server (via
 [`rmcp`](https://crates.io/crates/rmcp)) that exposes native commands as standardized LLM
 tools. Every tool call is checked against the same Archon policies — the MCP surface is a
 front door to the rails, not a way around them.

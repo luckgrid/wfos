@@ -69,14 +69,14 @@ is intentionally not exposed as a task (it is human-only — see [agent-rails.md
 ## Rust workspace (deferred)
 
 There are no Rust crates yet, so there is no root `Cargo.toml`. The Cargo workspace lands
-with the first crate ([Kraken](kraken.md)); at that point the root `Cargo.toml` lists
+with the first crate ([Kraken](runtime-controller.md)); at that point the root `Cargo.toml` lists
 `packages/kraken` as a member, and `.moon/toolchains.yml` already has the rust toolchain
 enabled with `clippy` and `rustfmt`.
 
 ## How Kraken relates to moon
 
-[Kraken](kraken.md) (`krk`) is the WfOS runtime controller, not a replacement for moon. moon
+[Kraken](runtime-controller.md) (`krk`) is the WfOS runtime controller, not a replacement for moon. moon
 is the project-graph and task backend; Kraken routes higher-level workflow commands to moon's
-task graph (a compat backend) and to [Dust](dust.md) native tools, recording sessions and
+task graph (a compat backend) and to [Dust](native-substrate.md) native tools, recording sessions and
 applying policy along the way. Native manifests and the moon graph stay authoritative for
 builds; Kraken adds discovery, routing, and rails on top.

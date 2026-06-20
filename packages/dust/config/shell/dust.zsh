@@ -30,3 +30,18 @@ fi
 # Modern coreutils-style aliases when available.
 command -v eza >/dev/null 2>&1 && alias ls='eza' && alias ll='eza -l --git' && alias la='eza -la --git'
 command -v bat >/dev/null 2>&1 && alias cat='bat --paging=never'
+
+# Zsh plugins (Homebrew, sourced files — guarded so missing plugins are harmless).
+# Order matters: autosuggestions/autocomplete first, syntax-highlighting LAST.
+_dust_brew_prefix="${HOMEBREW_PREFIX:-$(brew --prefix 2>/dev/null)}"
+if [ -n "$_dust_brew_prefix" ]; then
+  [ -f "$_dust_brew_prefix/share/zsh-autosuggestions/zsh-autosuggestions.zsh" ] && \
+    source "$_dust_brew_prefix/share/zsh-autosuggestions/zsh-autosuggestions.zsh"
+  # zsh-autocomplete is optional and can conflict with other completion setups.
+  [ -f "$_dust_brew_prefix/share/zsh-autocomplete/zsh-autocomplete.plugin.zsh" ] && \
+    source "$_dust_brew_prefix/share/zsh-autocomplete/zsh-autocomplete.plugin.zsh"
+  # Must be sourced last to wrap the final widget set.
+  [ -f "$_dust_brew_prefix/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" ] && \
+    source "$_dust_brew_prefix/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
+fi
+unset _dust_brew_prefix

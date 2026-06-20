@@ -61,12 +61,13 @@ Pins live in [`.prototools`](.prototools); graph and tasks in [`.moon/`](.moon/)
 | [architecture](docs/architecture.md) | Archetypes vs products, interface layers, system map |
 | [runtime-architecture](docs/runtime-architecture.md) | Terminal-first engine: client-daemon, Rust stack |
 | [monorepo](docs/monorepo.md) | moon + proto graph, tasks, conventions |
-| [dust](docs/dust.md) | Native substrate — tools, modules, config |
-| [archon](docs/archon.md) | Metadata plane — descriptors, registry, schemas, policies |
-| [kraken](docs/kraken.md) · [hypercube](docs/hypercube.md) · [ether](docs/ether.md) | Planned products |
+| [native-substrate](docs/native-substrate.md) | Native substrate — tools, modules, config |
+| [metadata-plane](docs/metadata-plane.md) | Metadata plane — descriptors, registry, schemas, policies |
+| [runtime-controller](docs/runtime-controller.md) · [package-translator](docs/package-translator.md) · [portable-runtime](docs/portable-runtime.md) | Planned products |
 | [agent-rails](docs/agent-rails.md) | Agent rails, gates, MCP, skill scanning |
 | [apps](docs/apps.md) | Docs + marketing sites |
 | [tool-catalog](docs/tool-catalog.md) | Grouped tools, libraries, skills, crates |
+| [workflow-apps](docs/workflow-apps.md) | Core native workflow apps — notes, writing, AI engine, sessions |
 | [setup](docs/setup.md) | Developer and agent setup |
 
 For agents, see [AGENTS.md](AGENTS.md).

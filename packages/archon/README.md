@@ -4,7 +4,7 @@ Archon stores the machine-readable meaning of the system: **descriptors, registr
 policies, graphs, models, and package contracts**. It has no CLI — it is data and contracts
 the other products read and write.
 
-Deep dive: [`../../docs/archon.md`](../../docs/archon.md).
+Deep dive: [`../../docs/metadata-plane.md`](../../docs/metadata-plane.md).
 
 ## What lives here now
 
@@ -49,4 +49,4 @@ Application layer (high)  workflow intent, domain/system labels — minimal path
 
 - [`AGENTS.md`](AGENTS.md) — agent rules for editing metadata
 - [`../dust/README.md`](../dust/README.md) — the producer/consumer of this metadata
-- [`../../docs/archon.md`](../../docs/archon.md) · [`../../docs/agent-rails.md`](../../docs/agent-rails.md)
+- [`../../docs/metadata-plane.md`](../../docs/metadata-plane.md) · [`../../docs/agent-rails.md`](../../docs/agent-rails.md)
