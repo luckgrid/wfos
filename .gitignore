@@ -1,6 +1,9 @@
 # OS
 .DS_Store
 
+# Agents
+.cursor/
+
 # Generated, host-specific Archon output
 packages/archon/registry/tools.json
 

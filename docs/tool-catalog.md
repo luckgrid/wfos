@@ -95,6 +95,7 @@ required for WfOS to be useful.
 | Tool | Status | What it does |
 |------|--------|--------------|
 | [RTK (Rust Token Killer)](https://github.com/rtk-ai/rtk) | optional | CLI proxy that compresses command output to cut LLM token use 60–90%; single Rust binary |
+| [QMD](https://github.com/tobi/qmd) | optional | Local hybrid search (BM25 + vectors + rerank) over markdown collections; CLI/MCP `query` → `get` retrieval for agents without loading full vaults |
 | [ponytail](https://github.com/DietrichGebert/ponytail) | optional | forces the simplest, most minimal solution that works (anti-over-engineering) |
 | [drawio-skill](https://github.com/Agents365-ai/drawio-skill) | optional | generate diagrams/flowcharts as draw.io files and export images |
 | [SkillSpector](https://github.com/nvidia/skillspector) | optional | security scanner for AI agent skills — detect vulnerabilities and malicious patterns |
@@ -106,6 +107,9 @@ required for WfOS to be useful.
 OpenRouter is the intended substrate for model adapters and routing inside WfOS-built tools —
 a primitive to build on, not a replacement for an agent CLI.
 
+**RTK** compresses shell output; **QMD** compresses document retrieval — both cut agent token use,
+but at different layers. See [workflow-apps.md](workflow-apps.md#agent-retrieval--qmd).
+
 ## AI engine / writing (docs-only — see workflow-apps.md)
 
 Recommended for local-first, native writing and AI-assisted document workflows. These are
@@ -115,6 +119,7 @@ quick-start in [workflow-apps.md](workflow-apps.md).
 | Tool | Status | Role | License |
 |------|--------|------|---------|
 | [aichat](https://github.com/sigoden/aichat) | docs-only | Rust LLM CLI — RAG over notes, sessions, `--serve` local API | MIT/Apache-2.0 |
+| [QMD](https://github.com/tobi/qmd) | docs-only | Agent retrieval index over local markdown (collections, context, line-range `get`) | MIT |
 | [Ollama](https://ollama.com/) | docs-only | run open models locally, no Docker | MIT |
 | [OpenRouter](https://openrouter.ai/) | docs-only | cloud-model routing for high-tier models (aichat provider) | hosted |
 | [Typst](https://typst.app/) | docs-only | compile markdown/Typst into publish-grade PDFs | Apache-2.0 |

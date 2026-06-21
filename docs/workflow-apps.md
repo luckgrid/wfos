@@ -21,6 +21,7 @@ alternative) · **reference** (noted, not endorsed for new work).
 | Quick capture | [Logseq](https://logseq.com/) | fast notes, ideas, research, daily journaling |
 | Long-form docs | [Obsidian](https://obsidian.md/) | larger docs, specs, structured vaults |
 | Typeset / publish | [Typst](https://typst.app/) | compile markdown/Typst into polished PDFs |
+| Agent retrieval | [QMD](https://github.com/tobi/qmd) | index local markdown; hybrid search; fetch snippets/line ranges via CLI or MCP |
 | AI engine (local) | [aichat](https://github.com/sigoden/aichat) + [Ollama](https://ollama.com/) | RAG over notes, sessions, local models, no Docker |
 | AI engine (cloud) | [OpenRouter](https://openrouter.ai/) | high-tier cloud models when local isn't enough |
 
@@ -86,16 +87,57 @@ give — same `aichat` interface, different backend.
 
 ---
 
+## Agent retrieval — QMD
+
+[QMD](https://github.com/tobi/qmd) (Query Markup Documents, MIT) is a local hybrid search engine
+for markdown collections. Agents search first (`query`, `search`), then retrieve only the sections
+they need (`get`, `multi_get` with line ranges and docids). The index and full corpus stay
+off-context; snippets lead, full text follows on demand. Cite docids and line numbers in answers.
+
+Suggested Workstreams collections (configure yourself):
+
+- `Plan/bin/` — fleeting capture / workbench docs
+- `Plan/src/` — validated specs and foundation docs
+- `wfos/docs/` — workspace reference
+- Obsidian vault root, if separate from Plan
+
+Use `qmd context add` per collection so search results carry human-readable corpus labels.
+
+```bash
+npm install -g @tobilu/qmd   # Node >= 22; macOS: brew install sqlite
+qmd collection add ~/path/to/markdown --name mynotes
+qmd context add qmd://mynotes "Description for ranking"
+qmd update && qmd embed
+qmd query "..." -n 5          # hybrid search
+qmd get "#docid:120:40"       # line-range retrieval
+```
+
+Agent integration (install yourself; WfOS does not manage these):
+
+- Official skill: `npx skills add tobi/qmd --skill qmd` or copy from the repo `skills/qmd/`
+- MCP: `qmd mcp` (stdio) or `qmd mcp --http --daemon` for a shared server
+- MCP setup for Cursor/OpenClaw: [mcp-setup.md](https://github.com/tobi/qmd/blob/main/skills/qmd/references/mcp-setup.md)
+
+First run downloads ~2GB of local GGUF models into `~/.cache/qmd/`. Run `qmd doctor` if
+model-backed commands fail. QMD indexes and retrieves; aichat chats and writes back — use both or
+either.
+
+---
+
 ## How they fit together
 
 ```mermaid
 flowchart LR
   Notes[Markdown notes dir<br/>Logseq + Obsidian]
+  QMD[QMD<br/>index and search]
+  Agents[Cursor / OpenClaw agents]
   AIChat[aichat<br/>RAG + sessions + serve]
   Ollama[Ollama<br/>local models]
   OR[OpenRouter<br/>cloud models]
   Typst[Typst<br/>compile to PDF]
 
+  Notes --> QMD
+  QMD -->|"snippets then line ranges"| Agents
   Notes --> AIChat
   AIChat --> Ollama
   AIChat --> OR
@@ -105,10 +147,12 @@ flowchart LR
 
 1. **Capture** ideas/research in Logseq; develop docs and specs in Obsidian — all plain markdown
    in one directory.
-2. **Augment** with aichat: RAG and sessions read that directory; responses and structured
+2. **Index** with QMD: `collection add`, `update`, `embed`; agents search before reading whole
+   files.
+3. **Augment** with aichat: RAG and sessions read that directory; responses and structured
    outputs are written back as markdown.
-3. **Route** to Ollama locally by default, or OpenRouter for high-tier cloud models when needed.
-4. **Publish** finished specs/docs through Typst.
+4. **Route** to Ollama locally by default, or OpenRouter for high-tier cloud models when needed.
+5. **Publish** finished specs/docs through Typst.
 
 ---
 
@@ -127,6 +171,7 @@ flowchart LR
   end
   Capture --> Specs
   Specs --> Publish
+  QMD[QMD retrieval] --> PlanNs
   AIChat[aichat RAG] --> PlanNs
 ```
 
@@ -143,6 +188,9 @@ These are documented installs you run manually — WfOS does not install or mana
 ```bash
 # CLI tools (Homebrew)
 brew install aichat ollama typst
+
+# Agent retrieval (npm; Node >= 22)
+npm install -g @tobilu/qmd
 
 # Apps (Homebrew casks)
 brew install --cask obsidian logseq
@@ -163,9 +211,13 @@ ollama serve                  # background local model server
 #         api_key: <OPENROUTER_API_KEY>
 aichat --rag notes            # build/query a RAG over your notes directory
 aichat --serve                # expose a local OpenAI-compatible API + playground
+
+# QMD — index markdown for agent search/retrieval (see Agent retrieval section above)
+qmd collection add ~/path/to/markdown --name mynotes
+qmd update && qmd embed
 ```
 
-License notes: aichat (MIT/Apache-2.0), Ollama (MIT), Typst (Apache-2.0), Logseq (AGPL-3.0),
+License notes: aichat (MIT/Apache-2.0), Ollama (MIT), QMD (MIT), Typst (Apache-2.0), Logseq (AGPL-3.0),
 Obsidian (proprietary, free tier), SilverBullet (MIT), OpenRouter (hosted service).
 
 ---
