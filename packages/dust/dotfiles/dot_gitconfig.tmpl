@@ -1,0 +1,29 @@
+{{- $p := index .profiles .profile -}}
+# ~/.gitconfig — managed by chezmoi (WfOS). Profile: {{ .profile }} ({{ $p.description }})
+# Secret-bearing values (signing keys, tokens, credential helpers) are NEVER stored here.
+# They are referenced via sops/pass (secrets module). This file holds non-secret config only.
+[user]
+{{- if .git.name }}
+	name = {{ .git.name }}
+{{- end }}
+{{- if .git.email }}
+	email = {{ .git.email }}
+{{- end }}
+
+[init]
+	defaultBranch = main
+
+[pull]
+	rebase = true
+
+[fetch]
+	prune = true
+{{ if $p.remote_writes }}
+[push]
+	default = simple
+	autoSetupRemote = true
+{{ else }}
+# profile declares remote_writes = false: no push convenience, no credential helper.
+[push]
+	default = nothing
+{{ end -}}

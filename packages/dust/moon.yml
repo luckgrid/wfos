@@ -26,3 +26,8 @@ tasks:
     args: ["env"]
     options:
       cache: false
+
+  validate-dotfiles:
+    command: "dotfiles/bin/validate-dotfiles.sh"
+    options:
+      cache: false

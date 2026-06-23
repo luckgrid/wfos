@@ -60,7 +60,7 @@ flowchart LR
   BuildNs -->|ship_ready| ControlNs
 ```
 
-Canon: [Plan/bin/lg_wfos_ws_namespaces.md](../../../../../../Plan/bin/lg_wfos_ws_namespaces.md) · [Plan/bin/lg_wfos_ws_layers_and_gates.md](../../../../../../Plan/bin/lg_wfos_ws_layers_and_gates.md)
+Canon: [architecture.md#workstreams-collection](architecture.md#workstreams-collection)
 
 ## Routing flow
 

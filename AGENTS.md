@@ -46,3 +46,22 @@ Agent skills are third-party code. Scan with
 [SkillSpector](https://github.com/nvidia/skillspector) before trusting a skill, the same way
 you would review a dependency. Optional AI enhancements are catalogued in
 [docs/tool-catalog.md](docs/tool-catalog.md).
+
+## Learned User Preferences
+
+- WfOS public docs and READMEs must be self-contained: do not link to Build/bin or Plan/bin spec
+  files; cite in-repo paths, published URLs, or conceptual namespace names only (session JSON
+  provenance may keep bin refs).
+- In user-facing wfos docs, replace epic IDs (E01, E02, etc.) with wfos-native terms (secrets
+  module, dust bootstrap, archon, etc.).
+
+## Learned Workspace Facts
+
+- Chezmoi profile exclusions live in `.chezmoiignore.tmpl` (not bare `.chezmoiignore`); use a
+  dict+range template pattern so YAML linters do not mis-parse the file.
+- Draft chezmoi source: `packages/dust/dotfiles/`; promotion to `$HOME` /
+  `~/.local/share/chezmoi/` is human-gated (agent rails block apply).
+- `DUST_HOME` default suggests `~/Workstreams/Build/src/workspaces/wfos/packages/dust`;
+  override in `~/.zshenv` when your layout differs; `bootstrap` exports the resolved path.
+- Local dotfiles testing: `packages/dust/dotfiles/bin/validate-dotfiles.sh` (optional `--apply` for temp
+  HOME smoke test); `moon run dust:validate-dotfiles`.

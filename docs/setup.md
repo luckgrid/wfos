@@ -33,6 +33,32 @@ packages/dust/bin/dust bootstrap          # or: --dry-run to preview
 After `bootstrap`, `dust` is on `PATH` (symlinked into `~/.local/bin`), so you can call
 `dust doctor` from anywhere.
 
+## DUST_HOME and Workstreams layout
+
+Dust resolves its package from the script location at runtime (`dust doctor`, `bootstrap`, etc.).
+The shell fragment [`config/shell/dust.zsh`](../packages/dust/config/shell/dust.zsh) also defines a
+**suggested** default when `DUST_HOME` is unset:
+
+```txt
+~/Workstreams/Build/src/workspaces/wfos/packages/dust
+```
+
+That path is a convention, not a requirement. If your wfos clone lives elsewhere, export
+`DUST_HOME` before the shell loads (typically in `~/.zshenv` or `~/.zprofile`):
+
+```bash
+export DUST_HOME="$HOME/path/to/wfos/packages/dust"
+```
+
+`dust bootstrap` writes `export DUST_HOME="<resolved path>"` into `~/.zshrc` from the actual
+package location, so bootstrap users get the correct path automatically. Chezmoi-managed
+`.zshrc` uses the same suggested default with the same override — see
+[`packages/dust/dotfiles/README.md`](../packages/dust/dotfiles/README.md).
+
+The `Workstreams/` tree layout (`Plan/`, `Brand/`, `Build/`, `Control/`) is documented in
+[architecture.md](architecture.md#workstreams-collection) as a typical arrangement; mount points
+and namespace paths are yours to choose.
+
 ## mise / proto coexistence
 
 proto pins the workspace build toolchains (`.prototools`). [Dust](native-substrate.md) uses **mise** as

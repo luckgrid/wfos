@@ -46,10 +46,28 @@ abstraction for higher levels, direct access for lower levels when needed.
 
 ## Workstreams collection
 
-The **`Workstreams/`** tree (Plan, Brand, Build, Control) lives outside this workspace and registers units via Archon. Canon:
+The **`Workstreams/`** tree lives outside this workspace. It organizes work across four
+namespaces — each with its own role, typical artifacts, and promotion gates between them.
+Archon registers units from these namespaces so Kraken and agents can route without crawling
+raw paths.
 
-- [Plan/bin/lg_wfos_ws_namespaces.md](../../../../../../Plan/bin/lg_wfos_ws_namespaces.md)
-- [Plan/bin/lg_wfos_ws_layers_and_gates.md](../../../../../../Plan/bin/lg_wfos_ws_layers_and_gates.md)
+| Namespace | Role | Typical artifacts | Gate to next |
+|-----------|------|-------------------|--------------|
+| **Plan** | Decisions — briefs, specs, strategy | fleeting capture (`bin/`), validated specs (`src/`) | validated → Build |
+| **Brand** | Expressions — design, content, voice | design tokens, copy, export-ready assets | approved → Build |
+| **Build** | Implementations — code, workspaces, data science | repos (`src/workspaces/`), packages, pipelines | ship-ready → Control |
+| **Control** | Operations — records, sync, release | ledgers, deployment records, sync state | — |
+
+**Interface layers and gates.** Content moves through the same three interface layers described
+above (toolchain → agent → application). Promotion between namespaces is gated: Plan content must
+be validated before Build implements it; Brand assets must be approved before they ship; Build
+artifacts must be ship-ready before Control records a release. Kraken (`krk`) is the design
+target for exposing these gates as routable commands (`krk plan`, `krk build`, `krk qa`, etc.).
+
+**Filesystem layout.** On a typical machine, Workstreams roots sit alongside each other under
+`~/Workstreams/` (or your chosen mount — the namespace names are conventions, not requirements).
+WfOS itself often lives under `Build/src/workspaces/wfos/` in that layout; if yours differs,
+set `DUST_HOME` to your Dust package path (see [setup.md](setup.md#dust_home-and-workstreams-layout)).
 
 ## System map
 

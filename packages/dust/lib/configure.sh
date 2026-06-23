@@ -53,6 +53,7 @@ dust_wire_shell() {
   fi
   {
     printf '\n%s\n' "$marker"
+    printf '%s\n' "export DUST_HOME=\"$DUST_PKG\""
     printf '%s\n' "[ -f \"$fragment\" ] && source \"$fragment\""
   } >> "$rc"
   dust_ok "wired Dust shell fragment into $rc"

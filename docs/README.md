@@ -24,7 +24,7 @@ This folder is the self-contained reference for the workspace. Start with
 | [tool-catalog.md](tool-catalog.md) | Grouped catalog of tools, libraries, skills, and crates |
 | [workflow-apps.md](workflow-apps.md) | Core native workflow apps — notes, writing, AI engine, sessions |
 | [setup.md](setup.md) | Setup for developers and agents |
-| Workstreams canon (external) | [Plan/bin/lg_wfos_ws_namespaces.md](../../../../../../Plan/bin/lg_wfos_ws_namespaces.md) — filesystem namespaces |
+| Workstreams namespaces | [architecture.md#workstreams-collection](architecture.md#workstreams-collection) — Plan, Brand, Build, Control |
 
 ## The five products
 

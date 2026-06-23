@@ -1,0 +1,50 @@
+# Config routing rules — machine-readable.
+#
+# The routing contract keeps SHARED INTENT in registries / Workstreams/.agents and APP-SPECIFIC
+# SYNTAX in each app's own config file. App configs CONSUME shared profile data (via chezmoi
+# templates); they are NEVER the policy source of truth, and they NEVER hold secrets.
+#
+# Each [routing.<app>] declares:
+#   target                rendered config path under $HOME (app-specific syntax)
+#   intent_source         where this app's policy/intent actually lives (the source of truth)
+#   consumes_profile_data true  — the config is rendered from shared profile data, not hand-forked
+#   holds_secrets         false — secrets are referenced via sops/pass (secrets module), never inlined
+#   owned_by              the layer that materializes the app config template
+#
+# Invariant (enforced by bin/validate.sh): for every app, consumes_profile_data = true and
+# holds_secrets = false. No app config is a policy source of truth.
+
+[routing.zed]
+target = ".config/zed/settings.json"
+intent_source = "Workstreams/.agents/profiles + archon descriptors"
+consumes_profile_data = true
+holds_secrets = false
+owned_by = "archon-agent-configs"
+
+[routing.cursor]
+target = ".cursor/ (rules + mcp.json)"
+intent_source = "Workstreams/.agents/profiles + archon policies"
+consumes_profile_data = true
+holds_secrets = false
+owned_by = "archon-agent-configs"
+
+[routing.claude]
+target = ".claude/ (settings + CLAUDE.md)"
+intent_source = "Workstreams/.agents/profiles + lean AGENTS.md"
+consumes_profile_data = true
+holds_secrets = false
+owned_by = "archon-agent-configs"
+
+[routing.factory]
+target = ".factory/ (config)"
+intent_source = "Workstreams/.agents/profiles"
+consumes_profile_data = true
+holds_secrets = false
+owned_by = "archon-agent-configs"
+
+[routing.opencode]
+target = ".config/opencode/ (config)"
+intent_source = "Workstreams/.agents/profiles + archon descriptors"
+consumes_profile_data = true
+holds_secrets = false
+owned_by = "archon-agent-configs"

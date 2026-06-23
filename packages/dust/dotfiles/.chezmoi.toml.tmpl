@@ -1,0 +1,18 @@
+# chezmoi config — generated to ~/.config/chezmoi/chezmoi.toml (WfOS chezmoi-managed).
+#
+# Declares the `profile` data variable that every template gates on. Kept non-interactive and
+# deterministic (env vars with safe defaults, no prompts) so agent-safe dry-runs never block.
+# `git.name`/`git.email` are personal *config*, not secrets; secret backends wired via secrets module.
+{{- $profile := (env "WFOS_PROFILE") | default "local-macos-full" -}}
+{{- $gitName := (env "WFOS_GIT_NAME") | default "" -}}
+{{- $gitEmail := (env "WFOS_GIT_EMAIL") | default "" -}}
+
+# No secret backend referenced yet. Secrets module wires `encryption = "age"` + sops/pass references.
+encryption = ""
+
+[data]
+profile = {{ $profile | quote }}
+
+[data.git]
+name = {{ $gitName | quote }}
+email = {{ $gitEmail | quote }}

@@ -94,6 +94,11 @@ is safe to source even when a tool is missing — it puts the Dust CLI on `PATH`
 mise, direnv, starship, zoxide, fzf, and modern coreutils aliases (`eza`, `bat`) only when
 each is installed.
 
+**`DUST_HOME`** points at the Dust package root (manifest, `bin/`, `config/`). If unset,
+`dust.zsh` falls back to a suggested path under `~/Workstreams/Build/src/workspaces/wfos/…`.
+Override with `export DUST_HOME=…` in `~/.zshenv` when your clone lives elsewhere;
+`dust bootstrap` exports the resolved path from the running package automatically.
+
 ## mise / proto coexistence
 
 Dust standardizes on **mise** as its runtime manager and activates it in the Dust shell
@@ -109,6 +114,20 @@ templates and wires one sourced line into `~/.zshrc`. [chezmoi](https://www.chez
 offered as an **optional** tool in the `dotfiles` module for operators who want full
 cross-machine dotfile management (templating, per-host variants, encrypted secrets) on top of
 or instead of the symlink flow. It is never auto-installed and Dust does not require it.
+
+A draft chezmoi source tree lives at [`packages/dust/dotfiles/`](../packages/dust/dotfiles/README.md).
+It defines four profile classes (`$WFOS_PROFILE`, default `local-macos-full`) that renders a
+narrower environment for `headless-dev` and `agent-safe` machines. Validate without touching
+`$HOME`:
+
+```bash
+bash packages/dust/dotfiles/bin/validate.sh
+bash packages/dust/dotfiles/bin/validate-dotfiles.sh      # + profile preview when chezmoi is installed
+moon run dust:validate-dotfiles
+```
+
+Promotion to `~/.local/share/chezmoi/` and `chezmoi apply` are human-gated — see the dotfiles
+README for the promotion workflow.
 
 ## Agent rails
 

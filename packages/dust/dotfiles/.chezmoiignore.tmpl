@@ -1,0 +1,16 @@
+{{/* Profile-driven ignore list. Maps category names from .chezmoidata/profiles.toml excludes
+     to target paths chezmoi must not render for the active profile. */}}
+{{- $p := index .profiles .profile -}}
+{{- $byCat := dict
+  "prompt" (list ".config/starship.toml")
+  "session" (list ".config/tmux" ".tmux.conf")
+  "runtime" (list ".config/mise")
+  "editor-gui" (list ".config/zed")
+  "agent-tools" (list ".config/opencode")
+  "secrets" (list ".config/wfos-secrets")
+-}}
+{{- range $cat := $p.excludes }}
+{{- range $path := index $byCat $cat }}
+{{ $path }}
+{{- end }}
+{{- end }}

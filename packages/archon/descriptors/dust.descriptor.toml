@@ -7,11 +7,13 @@ version = "0.1.0"
 summary = "Global low-level Unix/Rust tool substrate for devs and agents."
 
 [paths]
-package = "Tech/Dev/src/workspaces/wfos/packages/dust"
-manifest = "Tech/Dev/src/workspaces/wfos/packages/dust/manifest/dust.tools.toml"
-registry = "Tech/Dev/src/workspaces/wfos/packages/archon/registry/tools.json"
-policy = "Tech/Dev/src/workspaces/wfos/packages/archon/policies/dust.agent.policy.toml"
-schema = "Tech/Dev/src/workspaces/wfos/packages/archon/schemas/dust.tools.schema.json"
+# Relative to ~/Workstreams/ by convention — adjust if your tree differs.
+package = "Build/src/workspaces/wfos/packages/dust"
+manifest = "Build/src/workspaces/wfos/packages/dust/manifest/dust.tools.toml"
+registry = "Build/src/workspaces/wfos/packages/archon/registry/tools.json"
+policy = "Build/src/workspaces/wfos/packages/archon/policies/dust.agent.policy.toml"
+schema = "Build/src/workspaces/wfos/packages/archon/schemas/dust.tools.schema.json"
+note = "Paths are suggested layout hints for Archon routing, not hard requirements."
 
 [cli]
 entry = "dust"

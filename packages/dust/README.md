@@ -29,6 +29,12 @@ bin/dust bootstrap            # install missing tools + wire shell (human-only; 
 
 After `bootstrap`, `dust` is on `PATH` (symlinked into `~/.local/bin`).
 
+## DUST_HOME
+
+The shell fragment sets a suggested default (`~/Workstreams/Build/src/workspaces/wfos/packages/dust`)
+when `DUST_HOME` is unset. Override in `~/.zshenv` if your layout differs; `bootstrap` exports
+the resolved package path into `~/.zshrc` automatically. See [`../../docs/setup.md`](../../docs/setup.md#dust_home-and-workstreams-layout).
+
 ## Commands
 
 | Command | Mutating | Agent-safe | Purpose |
@@ -59,5 +65,6 @@ per `../archon/policies/dust.agent.policy.toml`. See [`AGENTS.md`](AGENTS.md) an
 
 ## Related
 
+- [`dotfiles/README.md`](dotfiles/README.md) — chezmoi source (profiles, validation, promotion)
 - [`../archon/README.md`](../archon/README.md) — metadata this package produces and is governed by
 - [`../../docs/native-substrate.md`](../../docs/native-substrate.md) · [`../../docs/setup.md`](../../docs/setup.md)

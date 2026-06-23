@@ -1,0 +1,38 @@
+{
+  "session_id": "2026-06-23-e01-s3",
+  "epic": "E01",
+  "story": "S3",
+  "title": "zsh plugin stack (guarded, profile-aware)",
+  "status": "done",
+  "started_at": "2026-06-23T00:00:00Z",
+  "ended_at": "2026-06-23T00:00:00Z",
+  "agent": "zed/claude-opus-4.8",
+  "profile": "workspace-dev",
+  "loaded_context": [
+    "Build/bin/STATE.md",
+    "Build/bin/SESSIONS.md (tail)",
+    "Build/bin/E01_dotfiles_shell_substrate.md#s3",
+    "Plan/bin/wfos/lg_wfos_lvl_0_native_substrate.md"
+  ],
+  "changed_paths": [
+    "Build/src/workspaces/wfos/packages/dust/dotfiles/dot_config/zsh/plugins.zsh.tmpl",
+    "Build/src/workspaces/wfos/packages/dust/dotfiles/dot_zshrc.tmpl",
+    "Build/src/workspaces/wfos/packages/dust/dotfiles/README.md",
+    "Build/src/workspaces/wfos/packages/dust/dotfiles/bin/validate.sh",
+    "Build/src/workspaces/wfos/packages/dust/config/shell/dust.zsh"
+  ],
+  "commands_run": [
+    "bash -n packages/dust/config/shell/dust.zsh",
+    "bash packages/dust/dotfiles/bin/validate.sh"
+  ],
+  "outcome": "Guarded, profile-aware zsh plugin stack added at dot_config/zsh/plugins.zsh.tmpl (bare zsh; no Oh My Zsh / Powerlevel10k; Starship prompt retained). zsh-autosuggestions (MIT) + zsh-syntax-highlighting (BSD-3, sourced LAST); zsh-autocomplete (MIT) opt-in via WFOS_ZSH_AUTOCOMPLETE on full/maintainer only; agent-safe loads no interactive plugins. dot_zshrc sources the fragment and sets DUST_PLUGINS_MANAGED=1; dust.zsh's plugin block was wrapped to stand down when that flag is set (additive, default behavior unchanged) to prevent double-sourcing.",
+  "validation": "validate.sh PASS — fragment sources both required plugins, highlighting after autosuggestions, sourcing guarded, agent-safe opt-out present, no heavy-framework artifacts, dust.zsh respects DUST_PLUGINS_MANAGED; bash -n clean on dust.zsh; chezmoi-render DEFERRED (binary not installed)",
+  "decisions": [
+    "chezmoi plugin fragment is the single authority in the chezmoi wiring path; dust.zsh stands down via the new opt-in DUST_PLUGINS_MANAGED guard (additive edit to existing dust.zsh, default behavior preserved)",
+    "zsh-autocomplete kept optional + opt-in (conflict risk) and excluded from headless-dev/agent-safe",
+    "install of the plugins remains E03's responsibility; this story delivered only the shell integration"
+  ],
+  "next": "E01.S4 — config routing rules",
+  "blockers": [],
+  "token_note": "loaded 1 story block + 1 canon ref (native-substrate) + STATE + ledger tail; compact PASS/FAIL gate output instead of raw shell logs"
+}
