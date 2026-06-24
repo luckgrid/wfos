@@ -36,7 +36,7 @@ done
 while IFS= read -r f; do
   rel="${f#"$SRC"/}"; top="${rel%%/*}"
   case "$top" in
-    .chezmoi*|README.md|ROUTING.md|validate.sh) ;;            # control/meta — not targets
+    .chezmoi*|README.md|ROUTING.md|SECRETS.md|validate.sh) ;; # control/meta — not targets
     dot_*|private_*|exact_*|executable_*|symlink_*|create_*|modify_*|encrypted_*) ;;  # valid prefixes
     *) bad "source target without a chezmoi attribute prefix: $rel (top: $top)" ;;
   esac

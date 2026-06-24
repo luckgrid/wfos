@@ -31,3 +31,8 @@ tasks:
     command: "dotfiles/bin/validate-dotfiles.sh"
     options:
       cache: false
+
+  validate-secrets:
+    command: "dotfiles/bin/validate-secrets.sh"
+    options:
+      cache: false

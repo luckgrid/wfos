@@ -55,6 +55,17 @@ dust_require_human() {
   fi
 }
 
+# Secret-read hard block (no_secret_read gate). Any path that would invoke a secrets-vault
+# tool (pass/age/sops) to resolve a value must call this first. In DUST_AGENT=1 mode it exits
+# non-zero (13) so secret material can never enter agent context.
+dust_require_secret_access() {
+  if dust_is_agent; then
+    dust_err "blocked: secret read via '${1:-pass/age/sops}' is not permitted in agent mode (DUST_AGENT=1)."
+    dust_err "policy no_secret_read=true — see archon/policies/dust.agent.policy.toml [secrets]"
+    exit 13
+  fi
+}
+
 # ── tool detection ───────────────────────────────────────────────────────────
 dust_has() { command -v "$1" >/dev/null 2>&1; }
 

@@ -1,0 +1,24 @@
+# Tiered secrets vaults — one vault per concern, no overlap.
+# chezmoi auto-loads .chezmoidata/*.toml into template data, so these become the
+# `.vaults` namespace; the profile-gated secret-reference templates consume it.
+#
+# Each vault declares:
+#   concern         the single concern it owns (interactive | files) — no two vaults share one
+#   scope           one line describing what it holds
+#   backend         the cryptographic/storage backend
+#   files           true if it operates on git-checked files (vs interactive CLI state)
+#   agent_readable  always false — secret material must never enter agent context
+
+[vaults.pass]
+concern = "interactive"
+scope = "CLI logins, personal API keys, script env queries"
+backend = "gnupg"
+files = false
+agent_readable = false
+
+[vaults.sops]
+concern = "files"
+scope = "values inside git-checked config files (YAML/JSON/env)"
+backend = "age"
+files = true
+agent_readable = false

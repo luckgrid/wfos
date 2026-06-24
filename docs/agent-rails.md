@@ -20,10 +20,24 @@ block = ["bootstrap"]
 no_global_install = true   # no brew/mise installs
 no_secret_read = true      # no pass/age/sops invocation
 no_shell_mutation = true   # no edits to ~/.zshrc or ~/.config symlinks
+
+[secrets]
+block_tools = ["pass", "age", "sops"]   # the no_secret_read hard block
 ```
 
 So an agent can run `dust doctor`, `dust list`, and `dust env` to understand the machine, but
 cannot `bootstrap`, install tools, read secrets, or change dotfiles.
+
+## The secret-read hard block
+
+The `no_secret_read` gate is enforced, not advisory. Any code path that would invoke a
+secrets-vault tool (`pass`, `age`, `sops`) to resolve a value first calls the
+`dust_require_secret_access` guard, which exits non-zero (13) under `DUST_AGENT=1` — so secret
+material can never enter agent context. `dust doctor` asserts the rail on every run: it confirms
+the blocked tools are marked `agent_safe = false` in the manifest, the policy gate is set, and a
+live guard self-test blocks under `DUST_AGENT=1`. A misconfigured rail makes `dust doctor` exit
+non-zero. The tiered vault model (interactive `pass` vs file-oriented `sops` + `age`) is documented
+in the secrets module.
 
 ## Conventions
 

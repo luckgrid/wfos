@@ -29,14 +29,19 @@ dotfiles/                         # chezmoi source root (this dir)
 ├── .chezmoi.toml.tmpl            # generates ~/.config/chezmoi/chezmoi.toml; declares `profile` data
 ├── .chezmoidata/profiles.toml    # the four profile classes + their render/exclude declarations
 ├── .chezmoidata/routing.toml     # machine-readable config routing contract (apps consume profiles)
+├── .chezmoidata/vaults.toml      # machine-readable tiered vault contract (pass vs sops+age)
 ├── .chezmoiignore.tmpl           # templated: excludes targets per profile (the exclusion mechanism)
 ├── ROUTING.md                    # config routing rules: shared intent vs app syntax, no secrets
+├── SECRETS.md                    # tiered vault model + agent secret-read hard block
 ├── dot_zshrc.tmpl                # -> ~/.zshrc   (sources the Dust shell fragment, guarded)
 ├── dot_gitconfig.tmpl            # -> ~/.gitconfig
 ├── dot_config/zsh/plugins.zsh.tmpl  # guarded, profile-aware zsh plugin stack
 ├── dot_config/                   # starship, mise, tmux, zed, opencode (added after first clean dry run)
-└── private_dot_config/           # sops/pass secret *references* only — never values (secrets module)
+└── private_dot_config/wfos-secrets/ # sops/pass secret *references* only — never values (resolved on apply)
 ```
+
+The file-oriented `sops` + `age` vault fixtures (`.sops.yaml` + structure-only sample) live in
+[`../secrets/`](../secrets/README.md); see [`SECRETS.md`](SECRETS.md) for the tiered model.
 
 ## Profile classes
 
@@ -114,6 +119,7 @@ chezmoi apply --source <this dir>              # WRITE to $HOME — explicit hum
 
 ## Related
 
+- [`SECRETS.md`](SECRETS.md) — tiered vault model + agent secret-read hard block
 - [`ROUTING.md`](ROUTING.md) — config routing rules (shared intent vs app syntax)
 - [`../config/shell/dust.zsh`](../config/shell/dust.zsh) — the Dust activation fragment `dot_zshrc` sources
 - [`../../../docs/native-substrate.md`](../../../docs/native-substrate.md) — native substrate + chezmoi coexistence

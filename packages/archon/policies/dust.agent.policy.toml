@@ -16,5 +16,12 @@ no_global_install = true        # no brew/mise installs
 no_secret_read = true           # no pass/age/sops invocation
 no_shell_mutation = true        # no edits to ~/.zshrc or ~/.config symlinks
 
+[secrets]
+# Hard block for the no_secret_read gate. The manifest `agent_safe = false` flags on these
+# tools are the source of truth; this list is the authoritative policy statement of intent.
+# Enforced by lib/common.sh `dust_require_secret_access` (exit 13) and asserted by `dust doctor`.
+block_tools = ["pass", "age", "sops"]
+rationale = "Reading a secret would place secret material into agent context; it is structurally excluded."
+
 [rationale]
 text = "Detection and reporting are safe for agents; installing software, reading secrets, and editing dotfiles require a human."

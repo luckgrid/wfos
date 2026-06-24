@@ -73,3 +73,59 @@ if [ "$write_json" = "1" ]; then
   } > "$out"
   dust_ok "wrote $out"
 fi
+
+# ── secrets rail assertion (read-only; agent-safe) ───────────────────────────
+# Asserts the no_secret_read gate is intact: manifest flags + policy gate + a live
+# guard self-test. Never invokes pass/age/sops; only checks config and the guard.
+echo
+dust_info "secrets rail (no_secret_read gate)"
+policy="$ARCHON_PKG/policies/dust.agent.policy.toml"
+rail_fail=0
+
+# agent_safe value for a manifest tool id (field 6), or MISSING.
+_agent_safe_of() {
+  dust_manifest_tsv | awk -F'\037' -v id="$1" '$2==id {print $6; f=1} END{if(!f) print "MISSING"}'
+}
+
+# 1) every policy-blocked secret tool must be agent_safe = false in the manifest.
+if [ -f "$policy" ]; then
+  block_tools="$(grep -E '^[[:space:]]*block_tools[[:space:]]*=' "$policy" | sed -E 's/.*\[(.*)\].*/\1/; s/[",]/ /g')"
+else
+  block_tools=""
+fi
+[ -n "$block_tools" ] || { printf '  %sxx%s  policy        block_tools missing (or policy missing)\n' "$_C_RED" "$_C_RESET"; rail_fail=1; }
+for t in $block_tools; do
+  as="$(_agent_safe_of "$t")"
+  if [ "$as" = "false" ]; then
+    printf '  %sok%s  %-14s agent_safe=false\n' "$_C_GREEN" "$_C_RESET" "$t"
+  else
+    printf '  %sxx%s  %-14s agent_safe=%s (must be false)\n' "$_C_RED" "$_C_RESET" "$t" "$as"
+    rail_fail=1
+  fi
+done
+
+# 2) policy must declare no_secret_read = true.
+if [ -f "$policy" ] && grep -Eq '^[[:space:]]*no_secret_read[[:space:]]*=[[:space:]]*true' "$policy"; then
+  printf '  %sok%s  policy        no_secret_read = true\n' "$_C_GREEN" "$_C_RESET"
+else
+  printf '  %sxx%s  policy        no_secret_read not true (or policy missing)\n' "$_C_RED" "$_C_RESET"
+  rail_fail=1
+fi
+
+# 3) live guard self-test: under DUST_AGENT=1 the secret-read guard must exit 13.
+( export DUST_AGENT=1; dust_require_secret_access pass ) >/dev/null 2>&1
+guard_rc=$?
+if [ "$guard_rc" -eq 13 ]; then
+  printf '  %sok%s  guard         DUST_AGENT=1 blocks secret read (exit 13)\n' "$_C_GREEN" "$_C_RESET"
+else
+  printf '  %sxx%s  guard         DUST_AGENT=1 did not block (exit %s, expected 13)\n' "$_C_RED" "$_C_RESET" "$guard_rc"
+  rail_fail=1
+fi
+
+if [ "$rail_fail" -eq 0 ]; then
+  dust_ok "secrets rail: ENFORCED"
+else
+  dust_err "secrets rail: DRIFT — secret material could reach agent context"
+fi
+
+exit "$rail_fail"

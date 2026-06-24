@@ -291,6 +291,16 @@ agent_safe = false
 alternatives = "age"
 purpose = "encrypted secrets in files"
 
+[[tool]]
+module = "secrets"
+id = "gitleaks"
+default = false
+brew = "gitleaks"
+detect = "gitleaks"
+agent_safe = true
+alternatives = ""
+purpose = "scan staged/committed files for leaked secrets (pre-commit gate)"
+
 # ── tools (version + env managers) ────────────────────────────────────────────
 [[tool]]
 module = "tools"

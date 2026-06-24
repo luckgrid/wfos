@@ -40,6 +40,7 @@ brew "zellij"
 brew "pass"
 brew "age"
 brew "sops"
+brew "gitleaks"
 
 # tools
 brew "mise"
