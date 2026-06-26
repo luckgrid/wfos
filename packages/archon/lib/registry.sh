@@ -106,12 +106,15 @@ archon_emit_local_toolkit() {
 archon_emit_graph() {
   local units="$ARCHON_REGISTRY/units.json"
   local policies="$ARCHON_REGISTRY/policies.json"
+  local profiles="$ARCHON_REGISTRY/profiles.json"
   [ -f "$units" ]   || { archon_warn "units.json absent — graph requires sync to run first"; return 1; }
   [ -f "$policies" ] || { archon_warn "policies.json absent — graph requires sync to run first"; return 1; }
+  [ -f "$profiles" ] || printf '{"profiles":[]}' > "$profiles"
 
-  jq -n --arg ts "$(_archon_now)" --slurpfile U "$units" --slurpfile P "$policies" '
+  jq -n --arg ts "$(_archon_now)" --slurpfile U "$units" --slurpfile P "$policies" --slurpfile PR "$profiles" '
     ($U[0].units)    as $units    |
     ($P[0].policies) as $policies |
+    (($PR[0].profiles) // []) as $profiles |
     ($units | map(. as $u | (.provides // [])[] | {from: $u.id, rel: "provides", to: ("capability:" + .)}))
       as $provides_edges |
     ($units | map(. as $u | (.requires // [])[] | {from: $u.id, rel: "requires", to: ("capability:" + .)}))
@@ -129,16 +132,21 @@ archon_emit_graph() {
     [($policies | map(select(.applies_to == "agent")) | .[] |
                {from: "agent", rel: "blocked-by", to: ("policy:" + .id)})]
       as $blocked_edges |
+    ([$policies[].id] | unique) as $policy_ids |
+    ($profiles | map(. as $pr | select(($pr.rails // null) != null and ($policy_ids | index($pr.rails))) |
+               {from: ("profile:" + $pr.id), rel: "selects", to: ("policy:" + $pr.rails)}))
+      as $selects_edges |
     ($units | map({id: .id, kind: .kind})) as $unit_nodes |
     (($provides_edges + $requires_edges | map(.to) | unique) | map({id: ., kind: "capability"}))
       as $cap_nodes |
     ($policies | map({id: ("policy:" + .id), kind: "policy"})) as $policy_nodes |
     (if ($blocked_edges | length) > 0 then [{id: "agent", kind: "actor"}] else [] end)
       as $actor_nodes |
+    ($profiles | map({id: ("profile:" + .id), kind: "profile"})) as $profile_nodes |
     {
       generated_at: $ts,
-      nodes: ($unit_nodes + $cap_nodes + $policy_nodes + $actor_nodes),
-      edges: ($provides_edges + $requires_edges + $uses_edges + $governed_edges + $blocked_edges)
+      nodes: ($unit_nodes + $cap_nodes + $policy_nodes + $actor_nodes + $profile_nodes),
+      edges: ($provides_edges + $requires_edges + $uses_edges + $governed_edges + $blocked_edges + $selects_edges)
     }
   '
 }
@@ -150,14 +158,37 @@ archon_emit_graph_dot() {
          "}\n"'
 }
 
-# profiles.json — populated by E05 from .agents/profiles/. Empty array until then.
+# Project a full profile JSON (nested TOML tables) into a compact registry record using the
+# exact field names the epic contract declares. Mirrors archon_unit_record.
+# Args: <full-json>
+archon_profile_record() {
+  jq -c '{
+    id, title, purpose,
+    rails: (.rails // null),
+    allowed_paths: (.scope.allowed_paths // []),
+    blocked_paths: (.scope.blocked_paths // []),
+    allowed_commands: (.commands.allowed_commands // []),
+    gated_commands: (.commands.gated_commands // []),
+    blocked_commands: (.commands.blocked_commands // []),
+    secret_access: (.policy.secret_access // false),
+    remote_write_policy: (.policy.remote_write_policy // "blocked"),
+    loads_external_skills: (.skills.loads_external // false),
+    required_validators: (.validators.required_validators // []),
+    output_compressor: (.output.compressor // null),
+    session_log_target: (.logs.session_log_target // null)
+  }' <<<"$1"
+}
+
+# profiles.json — populated by E05 from .agents/profiles/*.toml. Each profile is read by the
+# Archon TOML reader and flattened by archon_profile_record into a compact record.
 archon_emit_profiles() {
-  local arr='[]' f full
+  local arr='[]' f full rec
   if [ -d "$AGENTS_HOME/profiles" ]; then
     for f in "$AGENTS_HOME"/profiles/*.toml; do
       [ -e "$f" ] || continue
       full="$(archon_descriptor_json "$f")"
-      arr="$(jq -c --argjson p "$full" '. + [$p]' <<<"$arr")"
+      rec="$(archon_profile_record "$full")"
+      arr="$(jq -c --argjson p "$rec" '. + [$p]' <<<"$arr")"
     done
   fi
   printf '{\n  "generated_at": "%s",\n  "profiles": [%s]\n}\n' \

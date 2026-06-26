@@ -10,8 +10,11 @@ the source of truth for detailed commands and architecture.
 - **Run from the workspace root** unless a package/app README says otherwise.
 - **Native manifests stay authoritative.** Archon describes meaning, routing, and policy; it
   never replaces `Cargo.toml`, `package.json`, `mise.toml`, or lockfiles.
-- **Stay within the rails.** Agents run with `DUST_AGENT=1`: read-only commands are allowed;
-  installs, secret reads, and dotfile edits are blocked. See [docs/agent-rails.md](docs/agent-rails.md).
+- **Stay within the rails.** Agents run under a profile (`Workstreams/.agents/profiles/`); the
+  profile's `rails` selects the Archon policy that bounds scope, commands, and secrets. The
+  default `workspace-dev` profile runs with `DUST_AGENT=1`: read-only commands are allowed;
+  installs, secret reads, and dotfile edits are blocked. See
+  [docs/agent-configs.md](docs/agent-configs.md) and [docs/agent-rails.md](docs/agent-rails.md).
 
 ## What agents may / may not do
 
@@ -41,11 +44,20 @@ Gates and the policy that enforces them live at
 - **`apps/*`** — each app owns its ports, env, and build/serve commands; do not run them
   without explicit permission.
 
+## Profile
+
+This workspace's default agent profile is **`workspace-dev`**
+([`Workstreams/.agents/profiles/workspace-dev.toml`](../../../../.agents/profiles/workspace-dev.toml)):
+edit repo code, run `moon` tasks, stage commits locally (no push), no secret reads. The profile —
+not this file — is the source of truth for scope and command rules; see
+[docs/agent-configs.md](docs/agent-configs.md).
+
 ## Skills
 
 Agent skills are third-party code. Scan with
 [SkillSpector](https://github.com/nvidia/skillspector) before trusting a skill, the same way
-you would review a dependency. Optional AI enhancements are catalogued in
+you would review a dependency — an unscanned skill does not load, and skill-loading profiles
+carry `skillspector_scan` in `required_validators`. Optional AI enhancements are catalogued in
 [docs/tool-catalog.md](docs/tool-catalog.md).
 
 ## Learned User Preferences
@@ -55,6 +67,9 @@ you would review a dependency. Optional AI enhancements are catalogued in
   provenance may keep bin refs).
 - In user-facing wfos docs, replace epic IDs (E01, E02, etc.) with wfos-native terms (secrets
   module, dust bootstrap, archon, etc.).
+- Suggested Workstreams layout paths in docs, descriptors, and shell defaults are conventions
+  only; document override points (`DUST_HOME`, mount points), never imply one canonical filesystem
+  layout.
 
 ## Learned Workspace Facts
 
@@ -70,3 +85,9 @@ you would review a dependency. Optional AI enhancements are catalogued in
   `moon run dust:validate-secrets`.
 - Substrate gate: `packages/dust/bin/validate-substrate.sh` (manifest derivation, doctor JSON,
   env, RTK, replaceability matrix); `moon run dust:gen-check`, `moon run dust:validate-substrate`.
+- Archon generated registry (`packages/archon/registry/*.json`, `graph.dot`) is gitignored;
+  session records and `registry/QUERIES.md` stay tracked.
+- `Workstreams/.agents/` is the operator navigation layer; Archon sync writes gitignored
+  `tools/local-toolkit.yml`; Archon remains the routing authority.
+- `no-agent-git-push` is Archon policy metadata (push/release intent); runtime blocking of
+  `git push`/`gh` is deferred to Kraken, same boundary as direct secret CLI on `PATH`.

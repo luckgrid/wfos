@@ -18,7 +18,16 @@
           "id": { "type": "string" },
           "kind": {
             "type": "string",
-            "enum": ["native-substrate", "workspace", "package", "app", "capability", "policy", "actor"]
+            "enum": [
+              "native-substrate",
+              "workspace",
+              "package",
+              "app",
+              "capability",
+              "policy",
+              "actor",
+              "profile"
+            ]
           }
         }
       }
@@ -33,7 +42,16 @@
           "from": { "type": "string" },
           "rel": {
             "type": "string",
-            "enum": ["provides", "requires", "uses", "governed-by", "blocked-by", "packaged-by", "runs-on"]
+            "enum": [
+              "provides",
+              "requires",
+              "uses",
+              "governed-by",
+              "blocked-by",
+              "packaged-by",
+              "runs-on",
+              "selects"
+            ]
           },
           "to": { "type": "string" }
         }

@@ -1,0 +1,86 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "wfos/archon/schemas/profile.schema.json",
+  "title": "Archon agent profile",
+  "description": "A shared agent operating profile authored under Workstreams/.agents/profiles/*.toml: one declaration of scope, policy, gates, and logs consumed by every agent app (Claude, Cursor, Zed, Factory, OpenCode, CLI). Archon policies remain the enforcement authority; a profile selects a policy via `rails` and scopes it. Canon: lg_wfos_lvl_0_agent_rails.md §13. Indexed (flattened) into registry/profiles.json by `archon sync`.",
+  "type": "object",
+  "required": ["id", "purpose"],
+  "additionalProperties": true,
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+    "title": { "type": "string" },
+    "purpose": { "type": "string" },
+    "rails": {
+      "type": "string",
+      "description": "The Archon policy id this profile selects and runs under (the enforcement authority)."
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "allowed_paths": { "type": "array", "items": { "type": "string" } },
+        "blocked_paths": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "commands": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "allowed_commands": { "type": "array", "items": { "type": "string" } },
+        "gated_commands": { "type": "array", "items": { "type": "string" } },
+        "blocked_commands": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "secret_access": { "type": "boolean" },
+        "remote_write_policy": {
+          "type": "string",
+          "enum": ["blocked", "local-only", "elevated"]
+        }
+      }
+    },
+    "skills": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "loads_external": {
+          "type": "boolean",
+          "description": "Whether this profile may load external (third-party) agent skills. When true, required_validators MUST include skillspector_scan (enforced by archon validate) — an unscanned skill is treated like an unreviewed dependency and does not load."
+        }
+      }
+    },
+    "validators": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "required_validators": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "Known validator vocabulary: skillspector_scan (mandatory for any profile that loads external skills — an unscanned skill does not load), markdown_links, frontmatter, git_diff_review, format, typecheck, tests."
+          }
+        }
+      }
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "compressor": {
+          "type": "string",
+          "description": "Output compressor for this profile. `rtk` wires RTK transparent command rewriting; omit or `none` to opt out (swappable)."
+        }
+      }
+    },
+    "logs": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "session_log_target": { "type": "string" }
+      }
+    }
+  }
+}

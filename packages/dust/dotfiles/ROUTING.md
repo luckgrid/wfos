@@ -51,10 +51,13 @@ flowchart TD
 4. **App configs consume shared profile data.** Each app config is rendered by chezmoi from the same
    `.chezmoidata` profile data, so the `agent-safe`/`headless-dev` profiles narrow every app at once.
 
-## Pattern (future per-app templates)
+## Pattern (per-app templates)
 
-Per-app config templates are owned by the metadata plane / agent-config layer. The pattern each
-will follow — consuming shared profile data instead of forking policy — looks like:
+Per-app config templates are owned by the metadata plane / agent-config layer. Each consumes
+shared profile data instead of forking policy. The first landed instance is the **Claude Code RTK
+hook**, [`dot_claude/settings.json.tmpl`](dot_claude/settings.json.tmpl) (+ `dot_claude/RTK-HOOK.md.tmpl`):
+it renders the transparent command-rewrite hook only when the active profile enables `rtk`, so a
+profile opts out with a single flag. The pattern, for any app:
 
 ```gotmpl
 {{/* dot_config/zed/settings.json.tmpl — consumes shared profile data, holds no policy */}}

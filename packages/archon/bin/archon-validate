@@ -103,6 +103,72 @@ _validate_policies() {
   [ "$count" -gt 0 ] && archon_info "validated $count policy/policies"
 }
 
+_validate_profiles() {
+  local schema="$ARCHON_SCHEMAS/profile.schema.json"
+  [ -f "$schema" ] || archon_die "missing schema: $schema"
+  local dir="$AGENTS_HOME/profiles"
+  [ -d "$dir" ] || { archon_warn "no .agents/profiles directory"; return 0; }
+  local required count=0
+  required="$(jq -r '.required[]' "$schema")"
+  local rwp_enum
+  rwp_enum="$(jq -r '.properties.policy.properties.remote_write_policy.enum[]' "$schema")"
+
+  archon_info "profiles (vs schemas/profile.schema.json)"
+  local f full id req pr_fail rwp sa
+  for f in "$dir"/*.toml; do
+    [ -e "$f" ] || continue
+    count=$((count + 1))
+    full="$(archon_descriptor_json "$f")"
+    id="$(jq -r '.id // "?"' <<<"$full")"
+    pr_fail=0
+
+    for req in $required; do
+      jq -e --arg k "$req" 'has($k)' <<<"$full" >/dev/null \
+        || { archon_err "profile $id: missing required '$req'"; pr_fail=1; }
+    done
+
+    # id must match the schema pattern (^[a-z0-9][a-z0-9._-]*$)
+    if ! jq -e '.id | test("^[a-z0-9][a-z0-9._-]*$")' <<<"$full" >/dev/null 2>&1; then
+      archon_err "profile $id: id does not match schema pattern"
+      pr_fail=1
+    fi
+
+    # scope.allowed_paths must be a non-empty array
+    jq -e '(.scope.allowed_paths // []) | type == "array" and length > 0' <<<"$full" >/dev/null \
+      || { archon_err "profile $id: scope.allowed_paths is required and must be a non-empty array"; pr_fail=1; }
+
+    # policy.remote_write_policy, when present, must be in the schema enum
+    rwp="$(jq -r '.policy.remote_write_policy // empty' <<<"$full")"
+    if [ -n "$rwp" ] && ! echo "$rwp_enum" | grep -qx "$rwp"; then
+      archon_err "profile $id: policy.remote_write_policy='$rwp' is not in the schema enum"
+      pr_fail=1
+    fi
+
+    # policy.secret_access, when present, must be boolean
+    sa="$(jq -r '.policy | has("secret_access")' <<<"$full" 2>/dev/null)"
+    if [ "$sa" = "true" ]; then
+      jq -e '.policy.secret_access | type == "boolean"' <<<"$full" >/dev/null \
+        || { archon_err "profile $id: policy.secret_access must be boolean"; pr_fail=1; }
+    fi
+
+    # SkillSpector gate (E05.S4): any profile that loads external skills MUST require a
+    # skillspector_scan. An unscanned skill is an unreviewed dependency and does not load.
+    if [ "$(jq -r '.skills.loads_external // false' <<<"$full")" = "true" ]; then
+      jq -e '(.validators.required_validators // []) | index("skillspector_scan")' <<<"$full" >/dev/null \
+        || { archon_err "profile $id: loads_external skills but required_validators is missing 'skillspector_scan' (SkillSpector gate)"; pr_fail=1; }
+    fi
+
+    if [ "$pr_fail" -eq 0 ]; then
+      printf '  %sok%s  %-24s %s%s%s\n' "$_C_GREEN" "$_C_RESET" "$id" "$_C_DIM" "$f" "$_C_RESET"
+    else
+      fail=1
+    fi
+  done
+
+  [ "$count" -gt 0 ] || { archon_warn "no profiles found"; }
+  [ "$count" -gt 0 ] && archon_info "validated $count profile(s)"
+}
+
 _validate_graph() {
   local schema="$ARCHON_GRAPHS/edges.schema.json"
   local graph="$ARCHON_REGISTRY/graph.json"
@@ -160,6 +226,7 @@ _validate_graph() {
 main() {
   _validate_descriptors
   _validate_policies
+  _validate_profiles
   _validate_graph
   if [ "$fail" -eq 0 ]; then
     archon_ok "archon validate: PASS"

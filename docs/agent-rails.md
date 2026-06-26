@@ -77,12 +77,20 @@ manifest flags + doctor assertion; broader OS-level interception is deferred to 
 tools. Every tool call is checked against the same Archon policies — the MCP surface is a
 front door to the rails, not a way around them.
 
-## Skill security
+## Skill security (the SkillSpector gate)
 
-Agent skills are third-party code. Before a skill is trusted, scan it with
+Agent skills are third-party code. A skill is **not loaded until it has been scanned** with
 [NVIDIA SkillSpector](https://github.com/nvidia/skillspector), a security scanner that detects
-vulnerabilities and malicious patterns in agent skills. Treat an unscanned skill the same way
-you would treat an unreviewed dependency.
+vulnerabilities and malicious patterns in agent skills. An unscanned skill is treated exactly like
+an unreviewed dependency — it does not run.
+
+This is a **gate, not a convention**. Any agent profile that may load external skills declares
+`[skills] loads_external = true` and must list `skillspector_scan` in its `required_validators`
+(`Workstreams/.agents/profiles/*.toml`). `archon validate` enforces the pairing: a profile that
+loads skills without the `skillspector_scan` validator fails the gate. The `workspace-dev` and
+`agent-safe-maintenance` profiles carry it; `docs-only` sets `loads_external = false` and loads no
+skills. This is the trust prerequisite the on-demand skill registry (skills module) builds on:
+scans are cached in each skill's registry entry, and a changed skill re-scans before it can load.
 
 ## Agent interface (planned)
 
