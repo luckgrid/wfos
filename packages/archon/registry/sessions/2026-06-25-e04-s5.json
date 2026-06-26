@@ -1,0 +1,57 @@
+{
+  "session_id": "2026-06-25-e04-s5",
+  "epic": "E04",
+  "story": "S5",
+  "title": "Registry-as-context-cache POC",
+  "status": "done",
+  "started_at": "2026-06-26T00:00:00Z",
+  "ended_at": "2026-06-26T12:00:00Z",
+  "agent": "cursor/composer",
+  "profile": "workspace-dev",
+  "loaded_context": [
+    "Build/bin/STATE.md",
+    "Build/bin/SESSIONS.md (tail)",
+    "Build/bin/E04_metadata_plane_registries.md#s5",
+    "Build/bin/E04_PROGRESS_NOTES.md",
+    "packages/archon/registry/sessions/2026-06-25-e04-s4.json",
+    "packages/archon/registry/QUERIES.md"
+  ],
+  "changed_paths": [
+    "Build/bin/STATE.md",
+    "Build/bin/SESSIONS.md",
+    "Build/bin/E04_PROGRESS_NOTES.md",
+    "Build/bin/E04_metadata_plane_registries.md",
+    "Build/src/workspaces/wfos/docs/metadata-plane.md",
+    "Build/src/workspaces/wfos/docs/agent-rails.md",
+    "Build/src/workspaces/wfos/packages/archon/AGENTS.md",
+    "Build/src/workspaces/wfos/packages/archon/README.md",
+    "Build/src/workspaces/wfos/packages/archon/graphs/README.md",
+    "Build/src/workspaces/wfos/packages/archon/lib/registry.sh",
+    "Workstreams/.agents/README.md",
+    "Workstreams/.agents/.gitignore",
+    "Workstreams/.agents/profiles/README.md",
+    "Workstreams/.agents/tools/README.md",
+    "Workstreams/.agents/skills/README.md",
+    "Workstreams/.agents/graphs/README.md"
+  ],
+  "commands_run": [
+    "moon run dust:doctor",
+    "moon run archon:sync",
+    "moon run archon:validate",
+    "jq -r --arg kind workspace -f registry/queries/by-kind.jq registry/units.json",
+    "jq -r --arg layer application -f registry/queries/by-layer.jq registry/units.json",
+    "jq -r --arg cap proto -f registry/queries/requires.jq registry/units.json",
+    "jq -r --arg id dust -f registry/queries/depends-on.jq registry/units.json"
+  ],
+  "outcome": "E04.S5 closure — registry-as-context-cache POC verified end-to-end after S1–S4 audit fixes. Re-ran the epic §S5 checklist: wfos+ds descriptors present (S1); archon validate gate PASS (S1); units.json generated from colocated descriptors via archon sync (S2); Workstreams/.agents/ four subdirs + READMEs on disk and committed in Workstreams repo (S3); no-agent-git-push policy present (S4); token-cost POC proof consolidated in this session record. Audit pass also landed doc drift fixes (metadata-plane graphs implemented, graphs/README example corrected, agent-rails publish-rails section, AGENTS.md enforcement boundary), optional unit→uses→unit graph edges in archon_emit_graph, and wfos E04 S1–S4 commit (7c1936c).",
+  "validation": "S5 checklist — [x] wfos+ds descriptors (3 total incl. dust); [x] archon validate task (moon run archon:validate PASS: 3 descriptors + 2 policies + graph 14 nodes/11 edges); [x] units.json from colocated descriptors (archon sync: 3 units); [x] .agents/{profiles,tools,skills,graphs} + READMEs (5 READMEs on disk); [x] no-agent-git-push policy; [x] token-cost note (see token_note). Gates: dust:doctor → tools.json (44 tools); archon:sync → registry + local-toolkit.yml; archon:validate PASS. jq spot-checks: kind=workspace → ds,wfos; layer=application → ds,wfos; requires proto → wfos.",
+  "decisions": [
+    "S5 is verification + recording — checklist items were delivered across S1–S4; this session proves the POC end-to-end and closes the epic formally",
+    "token-cost POC: one wfos.descriptor.toml read (or one jq filter over units.json) replaces scanning moon.yml + packages/*/moon.yml + READMEs + .prototools to infer kind/layer/paths/entrypoints/capabilities/policy",
+    "no-agent-git-push remains Archon policy metadata at Level 0 — documented enforcement boundary matches secret-tools pattern until Kraken routes commands",
+    "uses edges added to graph emitter when requires∩provides across units (none today because capability namespaces do not overlap between units)"
+  ],
+  "next": "E05.S1 — agent profiles (populates .agents/profiles/ + profiles.json)",
+  "blockers": [],
+  "token_note": "POC proof: to act on wfos, an agent reads one descriptor or one filtered registry query (e.g. jq -f queries/by-kind.jq). Without the registry that is a dozen-file scan — root moon.yml, each packages/*/moon.yml, package READMEs, .prototools, and AGENTS.md — to infer the same kind/layer/paths/entrypoints/capabilities/policy the descriptor states directly. The registry is generated, compact, and gitignored; schemas/descriptors/policies stay tracked. One read vs N-file scan is the M1 token lever."
+}
