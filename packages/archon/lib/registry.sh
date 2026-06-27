@@ -49,17 +49,44 @@ archon_emit_policies() {
     "$(_archon_now)" "$(_archon_inline "$arr")"
 }
 
-# skills.json — populated by E06 from .agents/skills/. Emits any *.toml skill descriptors
-# present today (none yet → empty array).
+# Project a full skill JSON (nested TOML tables) into a compact registry record using the
+# exact field names the skills module contract declares.
+# Args: <full-json>
+archon_skill_record() {
+  jq -c '{
+    skill_id: .id,
+    source,
+    kind,
+    body_ref: (.body_ref // .id),
+    version: (.version // null),
+    supported_agent_apps: (.supported_agent_apps // []),
+    allowed_contexts: (.allowed_contexts // []),
+    inputs: (.inputs // {}),
+    outputs: (.outputs // {}),
+    touches: (.touches // []),
+    risks: (.risks // []),
+    validator: (.validator // null),
+    scan: {
+      status: (.scan.status // "unscanned"),
+      scanner: (.scan.scanner // null),
+      hash: (.scan.hash // ""),
+      scanned_at: (.scan.scanned_at // "")
+    }
+  }' <<<"$1"
+}
+
+# skills.json — curated skill records from .agents/skills/*.toml, flattened by archon_skill_record.
 archon_emit_skills() {
-  local arr='[]' f full
+  local arr='[]' f full rec
   if [ -d "$AGENTS_HOME/skills" ]; then
     for f in "$AGENTS_HOME"/skills/*.toml; do
       [ -e "$f" ] || continue
       full="$(archon_descriptor_json "$f")"
-      arr="$(jq -c --argjson s "$full" '. + [$s]' <<<"$arr")"
+      rec="$(archon_skill_record "$full")"
+      arr="$(jq -c --argjson s "$rec" '. + [$s]' <<<"$arr")"
     done
   fi
+  arr="$(jq -c 'sort_by(.skill_id)' <<<"$arr")"
   printf '{\n  "generated_at": "%s",\n  "skills": [%s]\n}\n' \
     "$(_archon_now)" "$(_archon_inline "$arr")"
 }
@@ -107,14 +134,20 @@ archon_emit_graph() {
   local units="$ARCHON_REGISTRY/units.json"
   local policies="$ARCHON_REGISTRY/policies.json"
   local profiles="$ARCHON_REGISTRY/profiles.json"
+  local skills="$ARCHON_REGISTRY/skills.json"
   [ -f "$units" ]   || { archon_warn "units.json absent — graph requires sync to run first"; return 1; }
   [ -f "$policies" ] || { archon_warn "policies.json absent — graph requires sync to run first"; return 1; }
   [ -f "$profiles" ] || printf '{"profiles":[]}' > "$profiles"
+  [ -f "$skills" ]   || printf '{"skills":[]}' > "$skills"
 
-  jq -n --arg ts "$(_archon_now)" --slurpfile U "$units" --slurpfile P "$policies" --slurpfile PR "$profiles" '
+  jq -n --arg ts "$(_archon_now)" \
+    --slurpfile U "$units" --slurpfile P "$policies" \
+    --slurpfile PR "$profiles" --slurpfile SK "$skills" '
     ($U[0].units)    as $units    |
     ($P[0].policies) as $policies |
     (($PR[0].profiles) // []) as $profiles |
+    (($SK[0].skills) // []) as $skills |
+    ($skills | map(.skill_id)) as $skill_ids |
     ($units | map(. as $u | (.provides // [])[] | {from: $u.id, rel: "provides", to: ("capability:" + .)}))
       as $provides_edges |
     ($units | map(. as $u | (.requires // [])[] | {from: $u.id, rel: "requires", to: ("capability:" + .)}))
@@ -136,6 +169,12 @@ archon_emit_graph() {
     ($profiles | map(. as $pr | select(($pr.rails // null) != null and ($policy_ids | index($pr.rails))) |
                {from: ("profile:" + $pr.id), rel: "selects", to: ("policy:" + $pr.rails)}))
       as $selects_edges |
+    ($skills | map({id: ("skill:" + .skill_id), kind: "skill"})) as $skill_nodes |
+    ($profiles | map(. as $pr |
+      ($pr.allowed_skill_ids // [])[] |
+      select(. as $sid | $skill_ids | index($sid)) |
+      {from: ("profile:" + $pr.id), rel: "can-invoke", to: ("skill:" + .)}))
+      as $can_invoke_edges |
     ($units | map({id: .id, kind: .kind})) as $unit_nodes |
     (($provides_edges + $requires_edges | map(.to) | unique) | map({id: ., kind: "capability"}))
       as $cap_nodes |
@@ -145,8 +184,8 @@ archon_emit_graph() {
     ($profiles | map({id: ("profile:" + .id), kind: "profile"})) as $profile_nodes |
     {
       generated_at: $ts,
-      nodes: ($unit_nodes + $cap_nodes + $policy_nodes + $actor_nodes + $profile_nodes),
-      edges: ($provides_edges + $requires_edges + $uses_edges + $governed_edges + $blocked_edges + $selects_edges)
+      nodes: ($unit_nodes + $cap_nodes + $policy_nodes + $actor_nodes + $profile_nodes + $skill_nodes),
+      edges: ($provides_edges + $requires_edges + $uses_edges + $governed_edges + $blocked_edges + $selects_edges + $can_invoke_edges)
     }
   '
 }
@@ -173,6 +212,7 @@ archon_profile_record() {
     secret_access: (.policy.secret_access // false),
     remote_write_policy: (.policy.remote_write_policy // "blocked"),
     loads_external_skills: (.skills.loads_external // false),
+    allowed_skill_ids: (.skills.allowed_skill_ids // []),
     required_validators: (.validators.required_validators // []),
     output_compressor: (.output.compressor // null),
     session_log_target: (.logs.session_log_target // null)

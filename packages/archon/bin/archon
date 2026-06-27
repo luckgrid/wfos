@@ -19,6 +19,7 @@ usage: archon <command>
 commands:
   validate   validate descriptors and policies against their JSON schemas (gate)
   sync       generate the registry (units/skills/profiles/policies + graph) from sources
+  skills     on-demand skill registry tools (resolve, scan, map — report-only)
   help       show this help
 
 These are wired as moon tasks: \`moon run archon:validate\`, \`moon run archon:sync\`.
@@ -30,6 +31,7 @@ main() {
   case "$cmd" in
     validate) exec "$_self/archon-validate" "$@" ;;
     sync)     exec "$_self/archon-sync" "$@" ;;
+    skills)   exec "$_self/archon-skills" "$@" ;;
     help|-h|--help) usage ;;
     *) archon_err "unknown command: $cmd"; echo; usage; exit 1 ;;
   esac

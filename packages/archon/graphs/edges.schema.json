@@ -26,7 +26,8 @@
               "capability",
               "policy",
               "actor",
-              "profile"
+              "profile",
+              "skill"
             ]
           }
         }
@@ -50,7 +51,8 @@
               "blocked-by",
               "packaged-by",
               "runs-on",
-              "selects"
+              "selects",
+              "can-invoke"
             ]
           },
           "to": { "type": "string" }

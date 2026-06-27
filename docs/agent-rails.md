@@ -89,8 +89,14 @@ This is a **gate, not a convention**. Any agent profile that may load external s
 (`Workstreams/.agents/profiles/*.toml`). `archon validate` enforces the pairing: a profile that
 loads skills without the `skillspector_scan` validator fails the gate. The `workspace-dev` and
 `agent-safe-maintenance` profiles carry it; `docs-only` sets `loads_external = false` and loads no
-skills. This is the trust prerequisite the on-demand skill registry (skills module) builds on:
-scans are cached in each skill's registry entry, and a changed skill re-scans before it can load.
+skills.
+
+The **skills module** adds a per-skill scan record on every curated registry entry. Any skill
+listed in a profile's `[skills] allowed_skill_ids` must have `scan.status == "passed"` and a
+non-stale `scan.hash == version` or validation fails — a changed skill body invalidates the
+cached scan and must be re-scanned (`archon skills scan <id>`) before it can load. Catalogued
+skills not in `allowed_skill_ids` warn only. Together, the profile flag and per-skill scan mean
+an unscanned or stale skill does not load. See [agent-skills.md](agent-skills.md).
 
 ## Agent interface (planned)
 

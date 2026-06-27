@@ -64,6 +64,8 @@ Pins live in [`.prototools`](.prototools); graph and tasks in [`.moon/`](.moon/)
 | [native-substrate](docs/native-substrate.md) | Native substrate — tools, modules, config |
 | [metadata-plane](docs/metadata-plane.md) | Metadata plane — descriptors, registry, schemas, policies |
 | [runtime-controller](docs/runtime-controller.md) · [package-translator](docs/package-translator.md) · [portable-runtime](docs/portable-runtime.md) | Planned products |
+| [agent-configs](docs/agent-configs.md) | Shared agent profiles and lean AGENTS.md pattern |
+| [agent-skills](docs/agent-skills.md) | On-demand skill registry, templates, load logging |
 | [agent-rails](docs/agent-rails.md) | Agent rails, gates, MCP, skill scanning |
 | [apps](docs/apps.md) | Docs + marketing sites |
 | [tool-catalog](docs/tool-catalog.md) | Grouped tools, libraries, skills, crates |

@@ -1,0 +1,43 @@
+{
+  "session_id": "2026-06-26-e06-s2",
+  "epic": "E06",
+  "story": "S2",
+  "title": "On-demand / deferred loading",
+  "status": "done",
+  "started_at": "2026-06-26T10:00:00Z",
+  "ended_at": "2026-06-26T12:00:00Z",
+  "agent": "cursor/auto",
+  "profile": "workspace-dev",
+  "loaded_context": [
+    "Build/bin/STATE.md",
+    "Build/bin/2026-06-28-wfos-e06-skills-and-commands-sprint.md#e06s2",
+    "packages/archon/registry/sessions/2026-06-26-e06-s1.json"
+  ],
+  "changed_paths": [
+    "Workstreams/.agents/profiles/workspace-dev.toml",
+    "Workstreams/.agents/profiles/agent-safe-maintenance.toml",
+    "Build/src/workspaces/wfos/packages/archon/schemas/profile.schema.json",
+    "Build/src/workspaces/wfos/packages/archon/lib/registry.sh",
+    "Build/src/workspaces/wfos/packages/archon/bin/archon-skills",
+    "Build/src/workspaces/wfos/packages/archon/bin/archon",
+    "Build/src/workspaces/wfos/packages/archon/bin/archon-validate",
+    "Build/src/workspaces/wfos/packages/archon/graphs/edges.schema.json",
+    "Build/src/workspaces/wfos/packages/archon/moon.yml"
+  ],
+  "commands_run": [
+    "moon run archon:sync",
+    "moon run archon:validate",
+    "packages/archon/bin/archon skills resolve improve --caller workspace-dev",
+    "packages/archon/bin/archon skills map",
+    "jq '.edges[]|select(.rel==\"can-invoke\")' packages/archon/registry/graph.json"
+  ],
+  "outcome": "On-demand loading wired. Profiles declare [skills] allowed_skill_ids for workspace-dev and agent-safe-maintenance (review, improve, qmd, ponytail). profile.schema.json + archon_profile_record carry allowed_skill_ids. New bin/archon-skills with resolve/map; archon dispatches skills subcommand. resolve prints body path and appends load-log JSONL. Graph extended: skill nodes + profile -can-invoke-> skill edges. moon run archon:skills-map task added.",
+  "validation": "archon skills resolve improve prints SKILLS_HOME body path + load-log line. Graph shows 8 can-invoke edges (4 skills × 2 profiles). allowed_skill_ids cross-ref enforced in validate. moon run archon:validate PASS.",
+  "decisions": [
+    "Load logs append to registry/sessions/skill-loads.jsonl (sanctioned session-log dir)",
+    "Runtime fetch-on-call interception deferred to Kraken — same boundary as E05 git-push"
+  ],
+  "next": "E06.S3 — templatize common I/O",
+  "blockers": [],
+  "token_note": "No session starts with a skill catalog in initial prompt — profile declares invocable IDs only; body resolves on call."
+}

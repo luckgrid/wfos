@@ -21,3 +21,9 @@ tasks:
     args: ["sync"]
     options:
       cache: false
+
+  skills-map:
+    command: "bin/archon"
+    args: ["skills", "map"]
+    options:
+      cache: false

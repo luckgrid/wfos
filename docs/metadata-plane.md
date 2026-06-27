@@ -30,6 +30,7 @@ Packages      define Hypercube-managed deliverable interfaces (planned)
 | `schemas/unit.schema.json` | schema | contract for unit descriptors (id, kind, paths, capabilities, policy) |
 | `schemas/policy.schema.json` | schema | contract for policies (agent-rails + command styles) |
 | `schemas/profile.schema.json` | schema | contract for agent operating profiles (scope, commands, validators; authored under `Workstreams/.agents/profiles/`) |
+| `schemas/skill.schema.json` | schema | contract for curated skill/template/pattern records (authored under `Workstreams/.agents/skills/`) |
 | `schemas/dust.tools.schema.json` | schema | contract for the generated tools registry |
 | `policies/dust.agent.policy.toml` | policy | Dust agent rails (allow/block, gates) |
 | `policies/no-agent-git-push.policy.toml` | policy | agents never push or publish (human-only) |
@@ -47,10 +48,13 @@ sync` reads it and the descriptors/policies to emit the rest of the registry.
 `archon sync` walks descriptors (colocated beside units first; `descriptors/` is a central
 override), policies, and **agent operating profiles** (`Workstreams/.agents/profiles/*.toml`),
 and emits the registry as compact JSON. It also derives the project graph (`graph.json` +
-`graph.dot`) from unit `capabilities`, policy `applies_to` edges, and profile `selects` edges.
+`graph.dot`) from unit `capabilities`, policy `applies_to` edges, profile `selects` edges, and
+profile `can-invoke` skill edges.
 `archon validate` is the gate: it checks every descriptor, policy, **agent operating profile**
 (`Workstreams/.agents/profiles/*.toml` vs `schemas/profile.schema.json`, including the
-SkillSpector gate), and the graph against its schema, reading the required keys and enums from
+SkillSpector gate and `allowed_skill_ids` cross-ref), **curated skill records**
+(`Workstreams/.agents/skills/*.toml` vs `schemas/skill.schema.json`, including the loadable-skill
+scan gate), and the graph against its schema, reading the required keys and enums from
 the schema itself so the schema stays the single source of truth. Both run on bash + `awk` + `jq`
 (no new dependencies) and are agent-safe.
 

@@ -1,0 +1,33 @@
+{
+  "session_id": "2026-06-26-e06-s4",
+  "epic": "E06",
+  "story": "S4",
+  "title": "Fabric patterns",
+  "status": "done",
+  "started_at": "2026-06-26T14:00:00Z",
+  "ended_at": "2026-06-26T16:00:00Z",
+  "agent": "cursor/auto",
+  "profile": "workspace-dev",
+  "loaded_context": [
+    "Build/bin/2026-06-28-wfos-e06-skills-and-commands-sprint.md#e06s4",
+    "packages/archon/registry/sessions/2026-06-26-e06-s3.json",
+    "Build/src/workspaces/wfos/docs/tool-catalog.md"
+  ],
+  "changed_paths": [
+    "Workstreams/.agents/skills/summarize.fabric.toml",
+    "Workstreams/.agents/skills/extract-wisdom.fabric.toml",
+    "Build/src/workspaces/wfos/docs/agent-skills.md"
+  ],
+  "commands_run": [
+    "moon run archon:validate",
+    "packages/archon/bin/archon skills resolve summarize"
+  ],
+  "outcome": "Catalogued two Fabric patterns (summarize, extract_wisdom) as kind=pattern source=fabric records with scan.status=unscanned. Not in any profile allowed_skill_ids. resolve refuses absent bodies with install-Fabric message. validate warns on unscanned patterns without failing.",
+  "validation": "moon run archon:validate PASS; patterns catalogued; resolve summarize exits non-zero with clear message when body absent.",
+  "decisions": [
+    "Fabric optional per tool-catalog; pattern bodies deferred to install time"
+  ],
+  "next": "E06.S5 — skill security",
+  "blockers": [],
+  "token_note": "Reusable Fabric patterns avoid re-deriving prompts on demand — medium token lever."
+}

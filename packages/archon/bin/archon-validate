@@ -130,6 +130,146 @@ _selfcheck_skillspector_gate() {
   fi
 }
 
+# Collect skill ids from .agents/skills/*.toml (one id per line).
+_archon_skill_ids_from_sources() {
+  local f id
+  for f in "$AGENTS_HOME"/skills/*.toml; do
+    [ -e "$f" ] || continue
+    id="$(jq -r '.id // empty' <<<"$(archon_descriptor_json "$f")")"
+    [ -n "$id" ] && printf '%s\n' "$id"
+  done
+}
+
+# Args: <skill-id> <profile-id> — loadable skills must have passed, non-stale scan.
+_skill_loadable_scan_ok() {
+  local sid="$1" profile="$2" f full
+  for f in "$AGENTS_HOME"/skills/*.toml; do
+    [ -e "$f" ] || continue
+    full="$(archon_descriptor_json "$f")"
+    [ "$(jq -r '.id' <<<"$full")" = "$sid" ] || continue
+    if jq -e '
+      (.scan.status // "unscanned") == "passed"
+      and (.scan.hash // "") != ""
+      and (.scan.hash == (.version // ""))
+    ' <<<"$full" >/dev/null; then
+      return 0
+    fi
+    archon_err "profile $profile: loadable skill '$sid' has no passing scan or stale scan.hash != version — re-scan required"
+    return 1
+  done
+  archon_err "profile $profile: loadable skill '$sid' not found in registry"
+  return 1
+}
+
+_selfcheck_skill_scan_gate() {
+  archon_info "skill scan gate (selfcheck)"
+  local bad='{"id":"_scan_bad","version":"abc","scan":{"status":"unscanned","hash":""}}'
+  local good='{"id":"_scan_good","version":"abc","scan":{"status":"passed","hash":"abc"}}'
+  if jq -e '
+    (.scan.status // "unscanned") == "passed"
+    and (.scan.hash // "") != ""
+    and (.scan.hash == (.version // ""))
+  ' <<<"$bad" >/dev/null; then
+    archon_err "skill scan selfcheck: negative fixture should fail"
+    fail=1
+  else
+    printf '  %sok%s  negative scan fixture rejected\n' "$_C_GREEN" "$_C_RESET"
+  fi
+  if jq -e '
+    (.scan.status // "unscanned") == "passed"
+    and (.scan.hash // "") != ""
+    and (.scan.hash == (.version // ""))
+  ' <<<"$good" >/dev/null; then
+    printf '  %sok%s  positive scan fixture accepted\n' "$_C_GREEN" "$_C_RESET"
+  else
+    archon_err "skill scan selfcheck: positive fixture should pass"
+    fail=1
+  fi
+}
+
+# ponytail: frontmatter check is a single --- delimiter pair at file start.
+_skill_frontmatter_ok() {
+  local f="$1"
+  [ -f "$f" ] || return 1
+  awk 'BEGIN { found=0; ok=0 }
+       NR==1 && /^---$/ { found=1; next }
+       found && /^---$/ { ok=1; exit }
+       END { exit ok ? 0 : 1 }' "$f"
+}
+
+_validate_skills() {
+  local schema="$ARCHON_SCHEMAS/skill.schema.json"
+  [ -f "$schema" ] || archon_die "missing schema: $schema"
+  local dir="$AGENTS_HOME/skills"
+  [ -d "$dir" ] || { archon_warn "no .agents/skills directory"; return 0; }
+  local required count=0
+  required="$(jq -r '.required[]' "$schema")"
+  local kind_enum source_enum
+  kind_enum="$(jq -r '.properties.kind.enum[]' "$schema")"
+  source_enum="$(jq -r '.properties.source.enum[]' "$schema")"
+
+  archon_info "skills (vs schemas/skill.schema.json)"
+  local f full id req sk_fail kind source touches risks body_ref body_path
+  for f in "$dir"/*.toml; do
+    [ -e "$f" ] || continue
+    count=$((count + 1))
+    full="$(archon_descriptor_json "$f")"
+    id="$(jq -r '.id // "?"' <<<"$full")"
+    sk_fail=0
+
+    for req in $required; do
+      jq -e --arg k "$req" 'has($k)' <<<"$full" >/dev/null \
+        || { archon_err "skill $id: missing required '$req'"; sk_fail=1; }
+    done
+
+    if ! jq -e '.id | test("^[a-z0-9][a-z0-9._-]*$")' <<<"$full" >/dev/null 2>&1; then
+      archon_err "skill $id: id does not match schema pattern"
+      sk_fail=1
+    fi
+
+    kind="$(jq -r '.kind // empty' <<<"$full")"
+    source="$(jq -r '.source // empty' <<<"$full")"
+    echo "$kind_enum" | grep -qx "$kind" \
+      || { archon_err "skill $id: kind='$kind' is not in the schema enum"; sk_fail=1; }
+    echo "$source_enum" | grep -qx "$source" \
+      || { archon_err "skill $id: source='$source' is not in the schema enum"; sk_fail=1; }
+
+    touches="$(jq -r '(.touches // []) | length' <<<"$full")"
+    risks="$(jq -r '(.risks // []) | length' <<<"$full")"
+    if [ "$touches" -gt 0 ] && [ "$risks" -eq 0 ]; then
+      archon_err "skill $id: touches is non-empty but risks is empty"
+      sk_fail=1
+    fi
+
+    kind="$(jq -r '.kind // "skill"' <<<"$full")"
+    body_ref="$(jq -r '.body_ref // .id' <<<"$full")"
+    if [ "$kind" = "template" ]; then
+      jq -e '.validator // empty | length > 0' <<<"$full" >/dev/null \
+        || { archon_err "skill $id: kind=template requires a non-empty validator"; sk_fail=1; }
+      body_path="$AGENTS_HOME/skills/$body_ref"
+      [ -f "$body_path" ] \
+        || { archon_err "skill $id: template body missing at $body_path"; sk_fail=1; }
+      _skill_frontmatter_ok "$body_path" \
+        || { archon_err "skill $id: template body missing valid frontmatter"; sk_fail=1; }
+    fi
+
+    if [ "$kind" = "pattern" ]; then
+      scan_status="$(jq -r '.scan.status // "unscanned"' <<<"$full")"
+      [ "$scan_status" = "unscanned" ] \
+        && archon_warn "skill $id: pattern catalogued but unscanned (not loadable until scanned)"
+    fi
+
+    if [ "$sk_fail" -eq 0 ]; then
+      printf '  %sok%s  %-24s %s%s%s\n' "$_C_GREEN" "$_C_RESET" "$id" "$_C_DIM" "$f" "$_C_RESET"
+    else
+      fail=1
+    fi
+  done
+
+  [ "$count" -gt 0 ] || { archon_warn "no skill records found"; }
+  [ "$count" -gt 0 ] && archon_info "validated $count skill record(s)"
+}
+
 _validate_profiles() {
   local schema="$ARCHON_SCHEMAS/profile.schema.json"
   [ -f "$schema" ] || archon_die "missing schema: $schema"
@@ -184,6 +324,19 @@ _validate_profiles() {
       archon_err "profile $id: loads_external skills but required_validators is missing 'skillspector_scan' (SkillSpector gate)"
       pr_fail=1
     fi
+
+    # Cross-ref allowed_skill_ids against the curated skill registry (E06.S2).
+    local sid skill_ids
+    skill_ids="$(_archon_skill_ids_from_sources)"
+    for sid in $(jq -r '.skills.allowed_skill_ids // [] | .[]' <<<"$full" 2>/dev/null); do
+      echo "$skill_ids" | grep -qx "$sid" \
+        || { archon_err "profile $id: allowed_skill_ids references unknown skill '$sid'"; pr_fail=1; }
+    done
+
+    # Loadable-skill scan gate (E06.S5): listed skills need a passing, non-stale scan.
+    for sid in $(jq -r '.skills.allowed_skill_ids // [] | .[]' <<<"$full" 2>/dev/null); do
+      _skill_loadable_scan_ok "$sid" "$id" || pr_fail=1
+    done
 
     if [ "$pr_fail" -eq 0 ]; then
       printf '  %sok%s  %-24s %s%s%s\n' "$_C_GREEN" "$_C_RESET" "$id" "$_C_DIM" "$f" "$_C_RESET"
@@ -254,7 +407,9 @@ main() {
   _validate_descriptors
   _validate_policies
   _validate_profiles
+  _validate_skills
   _selfcheck_skillspector_gate
+  _selfcheck_skill_scan_gate
   _validate_graph
   if [ "$fail" -eq 0 ]; then
     archon_ok "archon validate: PASS"

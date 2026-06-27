@@ -20,6 +20,7 @@ This folder is the self-contained reference for the workspace. Start with
 | [package-translator.md](package-translator.md) | Package translator (`hqb`) — intent → packages (planned) |
 | [portable-runtime.md](portable-runtime.md) | Portable runtime — WASM/WASI components (planned) |
 | [agent-configs.md](agent-configs.md) | Shared agent profiles, app-integration pattern, lean AGENTS.md |
+| [agent-skills.md](agent-skills.md) | On-demand skill registry, templates, Fabric patterns, load logging |
 | [agent-rails.md](agent-rails.md) | Agent rails, gates, MCP exposure, skill scanning |
 | [apps.md](apps.md) | Docs site + marketing site (Zola) |
 | [tool-catalog.md](tool-catalog.md) | Grouped catalog of tools, libraries, skills, and crates |

@@ -49,6 +49,11 @@
         "loads_external": {
           "type": "boolean",
           "description": "Whether this profile may load external (third-party) agent skills. When true, required_validators MUST include skillspector_scan (enforced by archon validate) — an unscanned skill is treated like an unreviewed dependency and does not load."
+        },
+        "allowed_skill_ids": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Skill IDs this profile may invoke on demand. Bodies resolve at invocation only — never pre-loaded in agent context."
         }
       }
     },
