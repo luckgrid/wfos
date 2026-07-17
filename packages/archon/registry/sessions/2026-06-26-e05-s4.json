@@ -1,11 +1,11 @@
 {
-  "session_id": "2026-06-27-e05-s4",
+  "session_id": "2026-06-26-e05-s4",
   "epic": "E05",
   "story": "S4",
   "title": "SkillSpector gate",
   "status": "done",
-  "started_at": "2026-06-27T07:00:00Z",
-  "ended_at": "2026-06-27T09:00:00Z",
+  "started_at": "2026-06-26T07:00:00Z",
+  "ended_at": "2026-06-26T09:00:00Z",
   "agent": "zed/claude-opus",
   "profile": "workspace-dev",
   "loaded_context": [
@@ -14,7 +14,7 @@
     "Build/bin/E05_agent_configs_profiles.md#s4",
     "Build/bin/2026-06-27-wfos-e05-agent-configs-profiles-sprint.md",
     "Plan/bin/wfos/lg_wfos_lvl_0_agent_rails.md",
-    "packages/archon/registry/sessions/2026-06-27-e05-s3.json",
+    "packages/archon/registry/sessions/2026-06-26-e05-s3.json",
     "Build/src/workspaces/wfos/docs/agent-rails.md"
   ],
   "changed_paths": [

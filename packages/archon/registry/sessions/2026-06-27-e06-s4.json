@@ -1,16 +1,16 @@
 {
-  "session_id": "2026-06-26-e06-s4",
+  "session_id": "2026-06-27-e06-s4",
   "epic": "E06",
   "story": "S4",
   "title": "Fabric patterns",
   "status": "done",
-  "started_at": "2026-06-26T14:00:00Z",
-  "ended_at": "2026-06-26T16:00:00Z",
+  "started_at": "2026-06-27T14:00:00Z",
+  "ended_at": "2026-06-27T16:00:00Z",
   "agent": "cursor/auto",
   "profile": "workspace-dev",
   "loaded_context": [
     "Build/bin/2026-06-28-wfos-e06-skills-and-commands-sprint.md#e06s4",
-    "packages/archon/registry/sessions/2026-06-26-e06-s3.json",
+    "packages/archon/registry/sessions/2026-06-27-e06-s3.json",
     "Build/src/workspaces/wfos/docs/tool-catalog.md"
   ],
   "changed_paths": [

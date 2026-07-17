@@ -1,11 +1,11 @@
 {
-  "session_id": "2026-06-27-e05-s3",
+  "session_id": "2026-06-26-e05-s3",
   "epic": "E05",
   "story": "S3",
   "title": "RTK hook config",
   "status": "done",
-  "started_at": "2026-06-27T05:00:00Z",
-  "ended_at": "2026-06-27T07:00:00Z",
+  "started_at": "2026-06-26T05:00:00Z",
+  "ended_at": "2026-06-26T07:00:00Z",
   "agent": "zed/claude-opus",
   "profile": "workspace-dev",
   "loaded_context": [
@@ -13,7 +13,7 @@
     "Build/bin/SESSIONS.md (tail)",
     "Build/bin/E05_agent_configs_profiles.md#s3",
     "Build/bin/2026-06-27-wfos-e05-agent-configs-profiles-sprint.md",
-    "packages/archon/registry/sessions/2026-06-27-e05-s2.json",
+    "packages/archon/registry/sessions/2026-06-26-e05-s2.json",
     "packages/dust/dotfiles/dot_config/zsh/rtk.zsh.tmpl",
     "packages/dust/dotfiles/.chezmoidata/profiles.toml",
     "~/.factory/RTK.md (reference)"

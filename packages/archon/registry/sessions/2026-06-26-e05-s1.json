@@ -1,11 +1,11 @@
 {
-  "session_id": "2026-06-27-e05-s1",
+  "session_id": "2026-06-26-e05-s1",
   "epic": "E05",
   "story": "S1",
   "title": "Shared profile contract",
   "status": "done",
-  "started_at": "2026-06-27T00:00:00Z",
-  "ended_at": "2026-06-27T03:00:00Z",
+  "started_at": "2026-06-26T00:00:00Z",
+  "ended_at": "2026-06-26T03:00:00Z",
   "agent": "zed/claude-opus",
   "profile": "workspace-dev",
   "loaded_context": [
