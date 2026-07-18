@@ -1,0 +1,33 @@
+{
+  "session_id": "2026-07-18-e07-s5",
+  "epic": "E07",
+  "story": "S5",
+  "title": "Agent git rails",
+  "status": "done",
+  "started_at": "2026-07-18T02:45:00Z",
+  "ended_at": "2026-07-18T03:15:00Z",
+  "agent": "factory/droid-opus",
+  "profile": "workspace-dev",
+  "loaded_context": [
+    "Build/bin/2026-07-17-wfos-e07-git-hygiene-workspaces-sprint.md#e07s5",
+    "Plan/bin/wfos/lg_wfos_lvl_0_agent_rails.md",
+    "packages/archon/registry/sessions/2026-07-18-e07-s4.json"
+  ],
+  "changed_paths": [
+    "Build/src/workspaces/wfos/packages/archon/policies/agent-git.policy.toml",
+    "Build/src/workspaces/wfos/docs/agent-rails.md"
+  ],
+  "commands_run": [
+    "moon run archon:sync",
+    "moon run archon:validate"
+  ],
+  "outcome": "policies/agent-git.policy.toml declares the three git tiers (allow: status/diff/log/branch --show-current/worktree list; gate: commit/pull/checkout -b; block: push/push --force/reset --hard/clean + delete untracked) plus [remote] writes = elevated. Superset of no-agent-git-push (kept as the publish-specific statement). docs/agent-rails.md gains the allow/gate/block section. Graph derives agent -blocked-by-> policy:agent-git via the existing applies_to=agent derivation.",
+  "validation": "moon run archon:validate PASS; policy validates against policy.schema.json; graph 27 nodes/23 edges with edge agent -blocked-by-> policy:agent-git present.",
+  "decisions": [
+    "push/reset --hard/clean blocked by default; remote writes require elevated policy + human approval",
+    "runtime command interception deferred to Kraken — same boundary as no-agent-git-push and secret CLIs on PATH"
+  ],
+  "next": "E07.S6 — worktree isolation",
+  "blockers": [],
+  "token_note": "enabling — safety prerequisite for agent git workflows, expressed as one policy + one graph edge"
+}

@@ -22,6 +22,7 @@ This folder is the self-contained reference for the workspace. Start with
 | [agent-configs.md](agent-configs.md) | Shared agent profiles, app-integration pattern, lean AGENTS.md |
 | [agent-skills.md](agent-skills.md) | On-demand skill registry, templates, Fabric patterns, load logging |
 | [agent-rails.md](agent-rails.md) | Agent rails, gates, MCP exposure, skill scanning |
+| [git-hygiene.md](git-hygiene.md) | Repo-local hooks, gitleaks gate, conventional commits |
 | [apps.md](apps.md) | Docs site + marketing site (Zola) |
 | [tool-catalog.md](tool-catalog.md) | Grouped catalog of tools, libraries, skills, and crates |
 | [workflow-apps.md](workflow-apps.md) | Core native workflow apps — notes, writing, AI engine, sessions |

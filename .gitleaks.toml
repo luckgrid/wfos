@@ -1,0 +1,18 @@
+# WfOS gitleaks baseline. Extends the built-in ruleset and adds a low-noise allowlist for
+# generated registry output and session logs. Used by the pre-commit `gitleaks` hook
+# (gitleaks protect --staged) and the report-only `archon secrets-scan` routine.
+title = "wfos gitleaks baseline"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "generated + non-secret paths"
+paths = [
+  '''packages/archon/registry/.*\.json$''',
+  '''packages/archon/registry/.*\.dot$''',
+  '''packages/archon/registry/SCAN\.md$''',
+  '''packages/archon/registry/sessions/.*\.jsonl$''',
+  '''.*\.example$''',
+  '''.*\.sample$''',
+]

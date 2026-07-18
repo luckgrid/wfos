@@ -1,0 +1,39 @@
+{
+  "session_id": "2026-07-18-e07-s4",
+  "epic": "E07",
+  "story": "S4",
+  "title": "Read-only polyrepo scan report",
+  "status": "done",
+  "started_at": "2026-07-18T01:45:00Z",
+  "ended_at": "2026-07-18T02:45:00Z",
+  "agent": "factory/droid-opus",
+  "profile": "workspace-dev",
+  "loaded_context": [
+    "Build/bin/2026-07-17-wfos-e07-git-hygiene-workspaces-sprint.md#e07s4",
+    "Plan/bin/wfos/lg_wfos_lvl_0_persistence_sync.md",
+    "packages/archon/registry/sessions/2026-07-18-e07-s3.json"
+  ],
+  "changed_paths": [
+    "Build/src/workspaces/wfos/packages/archon/schemas/scan.schema.json",
+    "Build/src/workspaces/wfos/packages/archon/lib/registry.sh",
+    "Build/src/workspaces/wfos/packages/archon/bin/archon-scan",
+    "Build/src/workspaces/wfos/packages/archon/bin/archon",
+    "Build/src/workspaces/wfos/packages/archon/bin/archon-validate",
+    "Build/src/workspaces/wfos/packages/archon/moon.yml",
+    "Build/src/workspaces/wfos/.gitignore"
+  ],
+  "commands_run": [
+    "shellcheck -e SC1091 packages/archon/bin/archon-scan packages/archon/bin/archon",
+    "moon run archon:scan",
+    "moon run archon:validate"
+  ],
+  "outcome": "Read-only polyrepo scan report: scan.schema.json (draft-07) + archon_emit_scan (lib/registry.sh) + bin/archon-scan writing registry/scan.json + registry/SCAN.md, dispatched via archon scan + moon archon:scan. Per workspace: path, kind, git_root, remote_set, default_branch, active_branch, worktree_status (state/changed/worktrees), native_manifests (descriptor ∪ detected), lint_check_commands, agent_scope_rules (per-profile in_scope/blocked, WS_ROOT-basename prefix normalized). _validate_scan added to the gate; SCAN.md gitignored. All state from read-only git -C <dir>; no writes outside registry/, no remote ops.",
+  "validation": "moon run archon:scan produced one report over all 6 Build/src/workspaces/* repos (3 clean, 3 dirty); wfos resolves in_scope for all 3 profiles, unrelated repos empty. moon run archon:validate PASS including scan.json (6 workspaces) valid.",
+  "decisions": [
+    "scan report is a generated, gitignored registry cache (scan.json + SCAN.md); the schema is tracked",
+    "profile scope globs normalized by stripping the WS_ROOT basename prefix before matching scan paths"
+  ],
+  "next": "E07.S5 — agent git rails",
+  "blockers": [],
+  "token_note": "one ~5.5KB scan.json / ~950B SCAN.md replaces per-repo status+remote+branch reads across 6 repos — one file answers workspace state"
+}

@@ -27,3 +27,15 @@ tasks:
     args: ["skills", "map"]
     options:
       cache: false
+
+  scan:
+    command: "bin/archon"
+    args: ["scan"]
+    options:
+      cache: false
+
+  secrets-scan:
+    command: "bin/archon"
+    args: ["secrets-scan", "detect"]
+    options:
+      cache: false

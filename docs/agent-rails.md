@@ -42,6 +42,41 @@ At Level 0 this is **policy metadata**, not runtime enforcement in Dust: an agen
 boundary as secret tools above. Treat the policy as authoritative intent for agent behavior; OS-level
 interception is deferred to Kraken.
 
+## Git command rails (allow / gate / block)
+
+The [`agent-git`](../packages/archon/policies/agent-git.policy.toml) policy declares the
+authoritative tiers for agent git usage:
+
+| Tier | Commands | Meaning |
+|------|----------|---------|
+| **allow** | `git status`, `git diff`, `git log`, `git branch --show-current`, `git worktree list` | inspection — always safe |
+| **gate** | `git commit`, `git pull`, `git checkout -b` | human-initiated or elevated; never autonomous |
+| **block** | `git push`, `git push --force`, `git reset --hard`, `git clean`, deleting untracked files | destructive or publishing — blocked by default |
+
+Remote writes require **elevated policy plus human approval** (`[remote] writes = "elevated"`).
+`agent-git` is the superset git policy; `no-agent-git-push` remains the publish-specific statement,
+and both appear in the project graph as `agent → blocked-by → policy`. As with the publish rails,
+this is authoritative **intent** and graph metadata at Level 0; OS-level interception of
+`git push`/`reset --hard`/`clean` is deferred to the Kraken command router — the same boundary as
+the secret tools below.
+
+## Worktree isolation
+
+Scoped agents default to a **local branch or worktree**, never the main worktree — isolation
+reduces the context surface to the scoped branch and keeps agent work off shared state. Each agent
+profile declares an `[isolation]` field (`Workstreams/.agents/profiles/*.toml`):
+
+| Profile | `mode` | `jj` |
+|---------|--------|------|
+| `workspace-dev` | `worktree` | `opt-in` |
+| `agent-safe-maintenance` | `worktree` | `opt-in` |
+| `docs-only` | `branch` | `opt-in` |
+
+`mode` ∈ `worktree | branch | main` (the `main` worktree is reserved for elevated profiles).
+[jj](https://jj-vcs.github.io/jj/) (Jujutsu) is installed and available for change-oriented
+workflows, but it is **opt-in** per profile, never the default — the default isolation is a git
+worktree or branch.
+
 ## The secret-read hard block
 
 The `no_secret_read` gate is enforced, not advisory. Any code path that would invoke a

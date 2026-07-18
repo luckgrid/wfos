@@ -10,12 +10,17 @@ and keeps each `AGENTS.md` lean.
 A profile is one declaration consumed by every app. Profiles live at
 [`Workstreams/.agents/profiles/`](../../../../../.agents/profiles/README.md) as tracked TOML; each
 declares scope (allowed/blocked paths), command allow/gate/block lists, secret access, a
-remote-write policy, required validators, an output compressor, and a session-log target. Apps
-consume the shared intent through their own (chezmoi-rendered) config syntax — they never become a
-second policy source of truth.
+remote-write policy, an `[isolation]` field (worktree/branch scope + jj opt-in), required
+validators, an output compressor, and a session-log target. Apps consume the shared intent through
+their own (chezmoi-rendered) config syntax — they never become a second policy source of truth.
 
 [Archon](metadata-plane.md) policies remain the enforcement authority. A profile *selects* a
-policy through its `rails` field and *scopes* it. `archon validate` checks every profile against
+policy through its `rails` field and *scopes* it. The cross-cutting
+[`agent-git`](../packages/archon/policies/agent-git.policy.toml) policy (`applies_to = "agent"`)
+governs git allow/gate/block via the graph; profiles keep `dust.agent` / `no-agent-git-push` as
+`rails` and must not contradict `agent-git` in `[commands]`. Scoped agents declare
+`[isolation] mode` as `worktree` or `branch` (not `main`) with `jj = "opt-in"` — see
+[agent-rails.md](agent-rails.md#worktree-isolation). `archon validate` checks every profile against
 `schemas/profile.schema.json`; `archon sync` flattens them into `registry/profiles.json` and draws
 `profile → selects → policy` edges in the project graph.
 

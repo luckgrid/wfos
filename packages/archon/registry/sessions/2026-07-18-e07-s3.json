@@ -1,0 +1,34 @@
+{
+  "session_id": "2026-07-18-e07-s3",
+  "epic": "E07",
+  "story": "S3",
+  "title": "Conventional commits",
+  "status": "done",
+  "started_at": "2026-07-18T01:15:00Z",
+  "ended_at": "2026-07-18T01:45:00Z",
+  "agent": "factory/droid-opus",
+  "profile": "workspace-dev",
+  "loaded_context": [
+    "Build/bin/2026-07-17-wfos-e07-git-hygiene-workspaces-sprint.md#e07s3",
+    "packages/archon/registry/sessions/2026-07-18-e07-s2.json"
+  ],
+  "changed_paths": [
+    "Build/src/workspaces/wfos/packages/archon/hooks/commit-msg",
+    "Build/src/workspaces/wfos/.pre-commit-config.yaml",
+    "Build/src/workspaces/wfos/docs/git-hygiene.md"
+  ],
+  "commands_run": [
+    "shellcheck -e SC1091 packages/archon/hooks/commit-msg",
+    "packages/archon/hooks/commit-msg <conforming-fixture>",
+    "packages/archon/hooks/commit-msg <non-conforming-fixture>",
+    "pre-commit validate-config .pre-commit-config.yaml"
+  ],
+  "outcome": "Lightweight conventional-commit convention adopted (feat|fix|docs|chore|refactor|test). Dependency-free bash commit-msg hook (packages/archon/hooks/commit-msg, regex, no commitlint/cog/czg) wired into the pre-commit config at the commit-msg stage; merge/revert/fixup subjects pass through. docs/git-hygiene.md records the grammar + the lightweight-vs-enforced decision.",
+  "validation": "commit-msg hook accepts a conforming subject (exit 0) and rejects a non-conforming one with a helpful message (exit 1). shellcheck clean; validate-config passes.",
+  "decisions": [
+    "lightweight now; commitlint/cog/czg deferred until history-based automation (changelog/release notes) needs it — none installed, installs human-gated"
+  ],
+  "next": "E07.S4 — polyrepo scan report",
+  "blockers": [],
+  "token_note": "structured history is cheaper to summarize; git log --oneline stays RTK-compressible with grammar-consistent subjects"
+}

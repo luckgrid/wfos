@@ -1,0 +1,34 @@
+{
+  "session_id": "2026-07-18-e07-s1",
+  "epic": "E07",
+  "story": "S1",
+  "title": "Hook baseline",
+  "status": "done",
+  "started_at": "2026-07-18T00:00:00Z",
+  "ended_at": "2026-07-18T00:40:00Z",
+  "agent": "factory/droid-opus",
+  "profile": "workspace-dev",
+  "loaded_context": [
+    "Build/bin/2026-07-17-wfos-e07-git-hygiene-workspaces-sprint.md#e07s1",
+    "Build/bin/STATE.md",
+    "packages/archon/registry/sessions/2026-06-27-e06-s5.json"
+  ],
+  "changed_paths": [
+    "Build/src/workspaces/wfos/.pre-commit-config.yaml",
+    "Build/src/workspaces/wfos/docs/git-hygiene.md",
+    "Build/src/workspaces/wfos/docs/README.md"
+  ],
+  "commands_run": [
+    "pre-commit validate-config .pre-commit-config.yaml"
+  ],
+  "outcome": "Repo-local pre-commit baseline authored: pre-commit-hooks (trailing-whitespace, end-of-file-fixer, check-added-large-files, check-merge-conflict, detect-private-key), local hooks for installed tools (gitleaks, shellcheck, biome check), pinned repo hooks for shfmt + markdownlint. docs/git-hygiene.md documents the baseline, per-repo adoption (pre-commit install is a human step), and the lefthook decision. Doc matrix row added.",
+  "validation": "pre-commit validate-config .pre-commit-config.yaml exits 0.",
+  "decisions": [
+    "pre-commit first (installed); lefthook deferred, revisit only on hook latency",
+    "hooks are per-repo, never global",
+    "local hooks use installed binaries (no network); pinned repos build isolated envs at human install time"
+  ],
+  "next": "E07.S2 — gitleaks gate",
+  "blockers": [],
+  "token_note": "clean, parseable diffs compress better; config validated read-only without installing hooks"
+}

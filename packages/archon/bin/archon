@@ -17,10 +17,12 @@ archon — metadata-plane tasks (build-time; no runtime CLI)
 usage: archon <command>
 
 commands:
-  validate   validate descriptors and policies against their JSON schemas (gate)
-  sync       generate the registry (units/skills/profiles/policies + graph) from sources
-  skills     on-demand skill registry tools (resolve, scan, map — report-only)
-  help       show this help
+  validate      validate descriptors and policies against their JSON schemas (gate)
+  sync          generate the registry (units/skills/profiles/policies + graph) from sources
+  scan          read-only polyrepo scan report (scan.json + SCAN.md) — report-only
+  skills        on-demand skill registry tools (resolve, scan, map — report-only)
+  secrets-scan  report-only secret scan (gitleaks) — detect | staged | dir <path>
+  help          show this help
 
 These are wired as moon tasks: \`moon run archon:validate\`, \`moon run archon:sync\`.
 EOF
@@ -29,9 +31,11 @@ EOF
 main() {
   local cmd="${1:-help}"; shift || true
   case "$cmd" in
-    validate) exec "$_self/archon-validate" "$@" ;;
-    sync)     exec "$_self/archon-sync" "$@" ;;
-    skills)   exec "$_self/archon-skills" "$@" ;;
+    validate)     exec "$_self/archon-validate" "$@" ;;
+    sync)         exec "$_self/archon-sync" "$@" ;;
+    scan)         exec "$_self/archon-scan" "$@" ;;
+    skills)       exec "$_self/archon-skills" "$@" ;;
+    secrets-scan) exec "$_self/archon-gitleaks" "$@" ;;
     help|-h|--help) usage ;;
     *) archon_err "unknown command: $cmd"; echo; usage; exit 1 ;;
   esac

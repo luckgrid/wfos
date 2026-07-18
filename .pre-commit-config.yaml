@@ -1,0 +1,54 @@
+# WfOS git-hygiene hooks — repo-local, per-repo (never global).
+# Reference config for docs/config repos. Local hooks use installed binaries (no network);
+# pinned repo hooks build isolated envs at human `pre-commit install` time.
+# See docs/git-hygiene.md. Install (human step): `pre-commit install`.
+minimum_pre_commit_version: "4.0.0"
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-added-large-files
+        args: ["--maxkb=1024"]
+      - id: check-merge-conflict
+      - id: detect-private-key
+
+  - repo: local
+    hooks:
+      - id: gitleaks
+        name: gitleaks (block staged secrets)
+        entry: gitleaks git --staged --redact --config .gitleaks.toml
+        language: system
+        pass_filenames: false
+
+      - id: shellcheck
+        name: shellcheck
+        entry: shellcheck
+        language: system
+        types: [shell]
+
+      - id: biome-check
+        name: biome check
+        entry: biome check --no-errors-on-unmatched
+        language: system
+        types_or: [javascript, jsx, ts, tsx, json]
+
+      - id: conventional-commit
+        name: conventional commit message
+        entry: packages/archon/hooks/commit-msg
+        language: system
+        stages: [commit-msg]
+
+  - repo: https://github.com/scop/pre-commit-shfmt
+    rev: v3.10.0-2
+    hooks:
+      - id: shfmt
+        args: ["-i", "2", "-ci"]
+
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.44.0
+    hooks:
+      - id: markdownlint
+        args: ["--disable", "MD013", "MD033", "MD041"]

@@ -42,6 +42,23 @@
         }
       }
     },
+    "isolation": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Where a scoped agent runs. Agents default to local branch/worktree scope (agent-rails §13.4); the main worktree is reserved. jj is opt-in for change-oriented workflows, never the default.",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["worktree", "branch", "main"],
+          "description": "worktree = run in a dedicated git worktree; branch = a scoped branch off the working repo; main = the main worktree (elevated profiles only)."
+        },
+        "jj": {
+          "type": "string",
+          "enum": ["opt-in", "default", "off"],
+          "description": "jj (Jujutsu) availability for this profile. opt-in is the sanctioned value; default/off reserved."
+        }
+      }
+    },
     "skills": {
       "type": "object",
       "additionalProperties": true,

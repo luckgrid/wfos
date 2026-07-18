@@ -277,8 +277,9 @@ _validate_profiles() {
   [ -d "$dir" ] || { archon_warn "no .agents/profiles directory"; return 0; }
   local required count=0
   required="$(jq -r '.required[]' "$schema")"
-  local rwp_enum
+  local rwp_enum iso_enum
   rwp_enum="$(jq -r '.properties.policy.properties.remote_write_policy.enum[]' "$schema")"
+  iso_enum="$(jq -r '.properties.isolation.properties.mode.enum[]' "$schema")"
 
   archon_info "profiles (vs schemas/profile.schema.json)"
   local f full id req pr_fail rwp sa
@@ -308,6 +309,14 @@ _validate_profiles() {
     rwp="$(jq -r '.policy.remote_write_policy // empty' <<<"$full")"
     if [ -n "$rwp" ] && ! echo "$rwp_enum" | grep -qx "$rwp"; then
       archon_err "profile $id: policy.remote_write_policy='$rwp' is not in the schema enum"
+      pr_fail=1
+    fi
+
+    # isolation.mode, when present, must be in the schema enum (worktree|branch|main)
+    local iso
+    iso="$(jq -r '.isolation.mode // empty' <<<"$full")"
+    if [ -n "$iso" ] && ! echo "$iso_enum" | grep -qx "$iso"; then
+      archon_err "profile $id: isolation.mode='$iso' is not in the schema enum"
       pr_fail=1
     fi
 
@@ -347,6 +356,41 @@ _validate_profiles() {
 
   [ "$count" -gt 0 ] || { archon_warn "no profiles found"; }
   [ "$count" -gt 0 ] && archon_info "validated $count profile(s)"
+}
+
+_validate_scan() {
+  local schema="$ARCHON_SCHEMAS/scan.schema.json"
+  local scan="$ARCHON_REGISTRY/scan.json"
+  [ -f "$schema" ] || archon_die "missing schema: $schema"
+  [ -f "$scan" ]   || { archon_warn "scan.json absent — run 'moon run archon:scan' first"; return 0; }
+
+  archon_info "scan report (vs schemas/scan.schema.json)"
+  local sfail=0 req
+  for req in $(jq -r '.required[]' "$schema"); do
+    jq -e --arg k "$req" 'has($k)' "$scan" >/dev/null \
+      || { archon_err "scan: missing required '$req'"; sfail=1; }
+  done
+
+  # each workspace entry must carry the required workspace keys
+  local wreq
+  wreq="$(jq -r '.properties.workspaces.items.required[]' "$schema")"
+  local missing
+  for req in $wreq; do
+    missing="$(jq -r --arg k "$req" '[.workspaces[] | select(has($k) | not) | .path] | length' "$scan")"
+    [ "$missing" = "0" ] || { archon_err "scan: $missing workspace(s) missing '$req'"; sfail=1; }
+  done
+
+  # worktree_status.state must be clean|dirty
+  local badstate
+  badstate="$(jq -r '[.workspaces[] | select((.worktree_status.state // "") | test("^(clean|dirty)$") | not)] | length' "$scan")"
+  [ "$badstate" = "0" ] || { archon_err "scan: $badstate workspace(s) with invalid worktree_status.state"; sfail=1; }
+
+  if [ "$sfail" -eq 0 ]; then
+    printf '  %sok%s  scan.json (%s workspaces) — report valid\n' \
+      "$_C_GREEN" "$_C_RESET" "$(jq -r '.summary.total' "$scan")"
+  else
+    fail=1
+  fi
 }
 
 _validate_graph() {
@@ -410,6 +454,7 @@ main() {
   _validate_skills
   _selfcheck_skillspector_gate
   _selfcheck_skill_scan_gate
+  _validate_scan
   _validate_graph
   if [ "$fail" -eq 0 ]; then
     archon_ok "archon validate: PASS"

@@ -91,6 +91,85 @@ archon_emit_skills() {
     "$(_archon_now)" "$(_archon_inline "$arr")"
 }
 
+# scan.json — read-only polyrepo scan report over Build/src/workspaces. One report replaces N
+# per-repo `git status` reads. Every field comes from read-only `git -C <dir>` plus the already
+# generated units.json (kind/manifests) and profiles.json (agent scope rules). No writes, no
+# remote operations. See schemas/scan.schema.json.
+archon_emit_scan() {
+  local units="$ARCHON_REGISTRY/units.json"
+  local profiles="$ARCHON_REGISTRY/profiles.json"
+  local units_json profiles_json
+  units_json="$( [ -f "$units" ] && cat "$units" || echo '{"units":[]}' )"
+  profiles_json="$( [ -f "$profiles" ] && cat "$profiles" || echo '{"profiles":[]}' )"
+
+  local arr='[]' d rel git_root active def remotes porc changed wt manifests f
+  for d in "$WORKSPACES_DIR"/*/; do
+    d="${d%/}"
+    [ -d "$d/.git" ] || continue
+    rel="${d#"$WS_ROOT"/}"
+    git_root="$(git -C "$d" rev-parse --show-toplevel 2>/dev/null || echo "")"
+    active="$(git -C "$d" branch --show-current 2>/dev/null || echo "")"
+    def="$(git -C "$d" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##' || echo "")"
+    remotes="$(git -C "$d" remote 2>/dev/null | jq -R 'select(length>0)' | jq -sc .)"
+    [ -n "$remotes" ] || remotes='[]'
+    porc="$(git -C "$d" status --porcelain 2>/dev/null || true)"
+    changed="$(printf '%s' "$porc" | grep -c . || true)"; changed="${changed//[^0-9]/}"; changed="${changed:-0}"
+    wt="$(git -C "$d" worktree list --porcelain 2>/dev/null | grep -c '^worktree ' || true)"; wt="${wt//[^0-9]/}"; wt="${wt:-1}"
+
+    # Native manifests: detect the common roots present in the workspace root.
+    manifests='[]'
+    for f in package.json Cargo.toml go.mod pyproject.toml moon.yml .prototools deno.json; do
+      [ -f "$d/$f" ] && manifests="$(jq -c --arg m "$f" '. + [$m]' <<<"$manifests")"
+    done
+
+    arr="$(jq -c \
+      --arg path "$rel" --arg git_root "$git_root" --arg active "$active" --arg def "$def" \
+      --arg wsname "$(basename "$WS_ROOT")" \
+      --argjson remotes "$remotes" --argjson changed "${changed:-0}" --argjson wt "${wt:-1}" \
+      --argjson manifests "$manifests" \
+      --argjson units "$units_json" --argjson profiles "$profiles_json" '
+      ($units.units // []) as $U |
+      ($profiles.profiles // []) as $P |
+      ($U | map(select(.path == $path)) | .[0]) as $unit |
+      . + [{
+        path: $path,
+        kind: ($unit.kind // "workspace"),
+        git_root: $git_root,
+        remote_set: $remotes,
+        default_branch: (if $def == "" then null else $def end),
+        active_branch: (if $active == "" then null else $active end),
+        worktree_status: {
+          state: (if $changed == 0 then "clean" else "dirty" end),
+          changed: $changed,
+          worktrees: $wt
+        },
+        native_manifests: (($unit.native_manifests // []) + $manifests | unique),
+        lint_check_commands: (($unit.entrypoints // {}) | to_entries | map(.value | tostring)),
+        agent_scope_rules: [
+          $P[] | . as $pr |
+          (($pr.allowed_paths // []) | map(sub("^" + $wsname + "/"; "") | sub("/\\*+$"; "")) |
+            any(. as $g | ($path | startswith($g)) or ($g | startswith($path)))) as $inscope |
+          (($pr.blocked_paths // []) | map(sub("^" + $wsname + "/"; "") | sub("/\\*+$"; "")) |
+            any(. as $g | ($path | startswith($g)))) as $blocked |
+          {profile: $pr.id, in_scope: $inscope, blocked: $blocked}
+        ]
+      }]' <<<"$arr")"
+  done
+
+  arr="$(jq -c 'sort_by(.path)' <<<"$arr")"
+  local total clean dirty
+  total="$(jq 'length' <<<"$arr")"
+  clean="$(jq '[.[] | select(.worktree_status.state == "clean")] | length' <<<"$arr")"
+  dirty="$(jq '[.[] | select(.worktree_status.state == "dirty")] | length' <<<"$arr")"
+  jq -n --arg ts "$(_archon_now)" --arg root "$WORKSPACES_DIR" \
+    --argjson total "$total" --argjson clean "$clean" --argjson dirty "$dirty" \
+    --argjson ws "$arr" '{
+      generated_at: $ts, root: $root,
+      summary: {total: $total, clean: $clean, dirty: $dirty},
+      workspaces: $ws
+    }'
+}
+
 # local-toolkit.yml — the .agents/ navigation view of the toolkit, derived from the Dust
 # manifest + tools.json. Each tool gets one mutually-exclusive status:
 #   present   = installed on this host
@@ -211,6 +290,8 @@ archon_profile_record() {
     blocked_commands: (.commands.blocked_commands // []),
     secret_access: (.policy.secret_access // false),
     remote_write_policy: (.policy.remote_write_policy // "blocked"),
+    isolation_mode: (.isolation.mode // "main"),
+    isolation_jj: (.isolation.jj // "off"),
     loads_external_skills: (.skills.loads_external // false),
     allowed_skill_ids: (.skills.allowed_skill_ids // []),
     required_validators: (.validators.required_validators // []),

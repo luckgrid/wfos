@@ -1,0 +1,35 @@
+{
+  "session_id": "2026-07-18-e07-s2",
+  "epic": "E07",
+  "story": "S2",
+  "title": "gitleaks gate",
+  "status": "done",
+  "started_at": "2026-07-18T00:40:00Z",
+  "ended_at": "2026-07-18T01:15:00Z",
+  "agent": "factory/droid-opus",
+  "profile": "workspace-dev",
+  "loaded_context": [
+    "Build/bin/2026-07-17-wfos-e07-git-hygiene-workspaces-sprint.md#e07s2",
+    "packages/archon/registry/sessions/2026-07-18-e07-s1.json"
+  ],
+  "changed_paths": [
+    "Build/src/workspaces/wfos/.gitleaks.toml",
+    "Build/src/workspaces/wfos/.pre-commit-config.yaml",
+    "Build/src/workspaces/wfos/packages/archon/bin/archon-gitleaks",
+    "Build/src/workspaces/wfos/packages/archon/bin/archon",
+    "Build/src/workspaces/wfos/packages/archon/moon.yml"
+  ],
+  "commands_run": [
+    "shellcheck -e SC1091 packages/archon/bin/archon-gitleaks",
+    "archon secrets-scan dir <temp-fixture>"
+  ],
+  "outcome": "gitleaks wired as a local pre-commit hook (gitleaks git --staged, uses installed binary, no network) + .gitleaks.toml baseline (useDefault + low-noise allowlist for generated registry/session output). bin/archon-gitleaks report-only wrapper (detect | staged | dir <path>) dispatched via archon secrets-scan + moon archon:secrets-scan task. gitleaks 8.30 uses git/dir subcommands (not protect/detect) — adjusted accordingly.",
+  "validation": "Planted a fake GitHub PAT in a throwaway temp dir; archon secrets-scan dir <tmp> reported RuleID github-pat with File + Line (redacted) and exited 1. shellcheck clean.",
+  "decisions": [
+    "local gitleaks hook over the gitleaks-managed repo hook — uses installed binary, no clone/network",
+    "periodic whole-repo scan is a workflow-automation concern; the routine here is report-only"
+  ],
+  "next": "E07.S3 — conventional commits",
+  "blockers": [],
+  "token_note": "enabling — prevents the secret-in-context failure before it reaches a commit or an agent"
+}

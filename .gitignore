@@ -10,6 +10,7 @@
 # only, so registry/sessions/*.json remains tracked.)
 packages/archon/registry/*.json
 packages/archon/registry/*.dot
+packages/archon/registry/SCAN.md
 
 # Rust
 target/
