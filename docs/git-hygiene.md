@@ -32,9 +32,14 @@ perform):
 
 ```bash
 cp .pre-commit-config.yaml <other-repo>/    # reuse the baseline in a docs/config repo
-pre-commit install                          # wire the hooks (human step)
+pre-commit install                          # wire pre-commit + commit-msg (human step)
 pre-commit run --all-files                  # first full pass
 ```
+
+The reference config sets `default_install_hook_types: [pre-commit, commit-msg]` so a plain
+`pre-commit install` arms both the secret/lint gate and the conventional-commit `commit-msg`
+hook. Without that setting (or an explicit `pre-commit install --hook-type commit-msg`), only
+the `pre-commit` stage would install and commit subjects would go unchecked.
 
 Agents may **validate** the config without installing anything:
 
@@ -89,3 +94,19 @@ enforcer (`commitlint`, `cog`, or `czg`) is deferred until history-based automat
 (changelogs, release notes) needs it — none of those tools is installed, and installing them is
 human-gated. Keeping `git log --oneline` grammar-consistent already lets RTK compress history and
 lets agents parse it without a heavier toolchain.
+
+## Token cost (measured)
+
+Sample on this host (`rtk` vs raw `git`, ~chars/4 token estimate; also confirmed via
+`rtk gain -p`):
+
+| Command | Raw → RTK | Approx. savings |
+|---------|-----------|-----------------|
+| `git status` | ~38 → ~14 tok | ~63% |
+| `git log --oneline -30` | ~303 → ~270 tok | ~11% |
+| `git log -3 -p` | ~27k → ~200 tok | ~99% |
+
+Grammar-consistent conventional subjects keep `git log --oneline` RTK-compressible; deeper
+history with patches is where RTK's gain is largest. The polyrepo scan report is a separate
+win: one `registry/SCAN.md` (~1KB) replaces six per-repo `git status` reads (~1.1KB of status
+text alone, plus remotes/branches/manifests the statuses never carry) — `moon run archon:scan`.

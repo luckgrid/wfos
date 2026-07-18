@@ -30,5 +30,5 @@
   ],
   "next": "E07.S4 — polyrepo scan report",
   "blockers": [],
-  "token_note": "structured history is cheaper to summarize; git log --oneline stays RTK-compressible with grammar-consistent subjects"
+  "token_note": "measured rtk gain on this host: git status ~63% (38→14 tok), git log --oneline -30 ~11% (303→270 tok), git log -3 -p ~99% (27k→200 tok). Grammar-consistent conventional subjects keep oneline history RTK-compressible; see docs/git-hygiene.md#token-cost-measured"
 }

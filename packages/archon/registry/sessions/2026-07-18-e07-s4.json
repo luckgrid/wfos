@@ -35,5 +35,5 @@
   ],
   "next": "E07.S5 — agent git rails",
   "blockers": [],
-  "token_note": "one ~5.5KB scan.json / ~950B SCAN.md replaces per-repo status+remote+branch reads across 6 repos — one file answers workspace state"
+  "token_note": "one ~5.5KB scan.json / ~950B SCAN.md replaces per-repo status+remote+branch reads across 6 repos — measured: six raw git status outputs sum ~1.1KB of status text alone; SCAN.md packs status plus remotes/branches/manifests. Complements measured rtk gain on git status/log (docs/git-hygiene.md#token-cost-measured)"
 }

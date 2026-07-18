@@ -22,7 +22,7 @@ the source of truth for detailed commands and architecture.
 |---------------------|----------------------|
 | `dust doctor`, `dust list`, `dust gen`, `dust env` | `dust bootstrap`, brew/mise installs |
 | `moon run dust:doctor`, `moon run dust:gen-check`, `moon run dust:validate-substrate`, `moon query …` | reading secrets (`pass`/`age`/`sops`) |
-| `moon run archon:validate`, `moon run archon:sync` (generate/validate the registry) | editing `~/.zshrc` or `~/.config` symlinks |
+| `moon run archon:validate`, `moon run archon:sync`, `moon run archon:scan`, `moon run archon:secrets-scan` | editing `~/.zshrc` or `~/.config` symlinks |
 | read descriptors, schemas, policies, registry | starting servers / `zola serve` / long-running dev tasks |
 | read/edit files in this repo | (other mutations require a human) |
 
@@ -89,5 +89,10 @@ carry `skillspector_scan` in `required_validators`. Optional AI enhancements are
   session records and `registry/QUERIES.md` stay tracked.
 - `Workstreams/.agents/` is the operator navigation layer; Archon sync writes gitignored
   `tools/local-toolkit.yml`; Archon remains the routing authority.
-- `no-agent-git-push` is Archon policy metadata (push/release intent); runtime blocking of
-  `git push`/`gh` is deferred to Kraken, same boundary as direct secret CLI on `PATH`.
+- `no-agent-git-push` is Archon policy metadata (publish intent); `agent-git` is the cross-cutting
+  git allow/gate/block policy (`applies_to = "agent"`). Profiles keep `dust.agent` /
+  `no-agent-git-push` as `rails` and must not contradict `agent-git` in `[commands]`. Runtime
+  blocking of `git push`/`reset --hard`/`clean`/`gh` is deferred to Kraken, same boundary as
+  direct secret CLI on `PATH`. See [docs/agent-rails.md](docs/agent-rails.md).
+- Scoped profiles declare `[isolation]` (`worktree`/`branch`, `jj = "opt-in"`); isolation is
+  declarative intent today — agents are not forcibly moved off the main worktree by Archon.

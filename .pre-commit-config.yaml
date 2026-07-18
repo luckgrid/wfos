@@ -1,8 +1,10 @@
 # WfOS git-hygiene hooks — repo-local, per-repo (never global).
 # Reference config for docs/config repos. Local hooks use installed binaries (no network);
 # pinned repo hooks build isolated envs at human `pre-commit install` time.
-# See docs/git-hygiene.md. Install (human step): `pre-commit install`.
+# See docs/git-hygiene.md. Install (human step): `pre-commit install` (wires pre-commit +
+# commit-msg via default_install_hook_types below).
 minimum_pre_commit_version: "4.0.0"
+default_install_hook_types: [pre-commit, commit-msg]
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
