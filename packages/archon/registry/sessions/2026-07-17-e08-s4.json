@@ -1,5 +1,5 @@
 {
-  "session_id": "2026-07-18-e08-s4",
+  "session_id": "2026-07-17-e08-s4",
   "epic": "E08",
   "story": "S4",
   "title": "Archive classification and promotion",
@@ -11,8 +11,8 @@
   "loaded_context": [
     "Build/bin/2026-07-17-wfos-e08-bin-archive-lifecycle-sprint.md#e08s4",
     "Plan/bin/wfos/lg_wfos_lvl_0_persistence_sync.md",
-    "packages/archon/registry/sessions/2026-07-18-e08-s3.json",
-    "packages/archon/registry/sessions/2026-07-18-e08-s2.json"
+    "packages/archon/registry/sessions/2026-07-17-e08-s3.json",
+    "packages/archon/registry/sessions/2026-07-17-e08-s2.json"
   ],
   "changed_paths": [
     "Build/src/workspaces/wfos/packages/archon/schemas/manifest.schema.json",
@@ -24,12 +24,12 @@
     "moon run archon:validate"
   ],
   "outcome": "Archive taxonomy documented in docs/bin-archive.md (superseded/imported/retired/reference/duplicate/stale + promotion routes). manifest.schema.json already carries optional archive_reason enum + promoted_to. Tracked archived fixture demonstrates the contract without a live move. _selfcheck_manifest_archive_reason accepts stale+promoted_to and rejects invalid reasons. Cleanup plans (S3) already emit planned archive_reason/promoted_to; no draft-state mutation.",
-  "validation": "archon:validate PASS — both fixtures + archive_reason selfcheck (accept/reject).",
+  "validation": "archon:validate PASS \u2014 both fixtures + archive_reason selfcheck (accept/reject).",
   "decisions": [
     "taxonomy is documented and schema-validated; promotion is not automated at draft gateway",
-    "canon ref: lg_wfos_lvl_0_persistence_sync.md §20–20.1 (not the stale epic lg_workstream_sync.md)"
+    "canon ref: lg_wfos_lvl_0_persistence_sync.md \u00a720\u201320.1 (not the stale epic lg_workstream_sync.md)"
   ],
-  "next": "E08.S5 — agent no-delete rail",
+  "next": "E08.S5 \u2014 agent no-delete rail",
   "blockers": [],
   "token_note": "one archive_reason/promoted_to label answers why-is-this-here without reading full history"
 }

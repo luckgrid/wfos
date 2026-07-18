@@ -1,5 +1,5 @@
 {
-  "session_id": "2026-07-18-e07-s6",
+  "session_id": "2026-07-17-e07-s6",
   "epic": "E07",
   "story": "S6",
   "title": "jj / worktree isolation rails",
@@ -11,7 +11,7 @@
   "loaded_context": [
     "Build/bin/2026-07-17-wfos-e07-git-hygiene-workspaces-sprint.md#e07s6",
     "Plan/bin/wfos/lg_wfos_lvl_0_agent_rails.md",
-    "packages/archon/registry/sessions/2026-07-18-e07-s5.json"
+    "packages/archon/registry/sessions/2026-07-17-e07-s5.json"
   ],
   "changed_paths": [
     "Build/src/workspaces/wfos/packages/archon/schemas/profile.schema.json",
@@ -33,7 +33,7 @@
     "default isolation is a git worktree/branch, never the main worktree",
     "jj is opt-in per profile, never the default"
   ],
-  "next": "E08.S1 — bin archive lifecycle",
+  "next": "E08.S1 \u2014 bin archive lifecycle",
   "blockers": [],
   "token_note": "isolation reduces the context surface to the scoped branch; expressed as one profile field, no per-session prose"
 }

@@ -12,7 +12,7 @@
     "Build/bin/STATE.md",
     "Build/bin/SESSIONS.md (tail)",
     "Build/bin/E05_agent_configs_profiles.md#s2",
-    "Build/bin/2026-06-27-wfos-e05-agent-configs-profiles-sprint.md",
+    "Build/bin/2026-06-26-wfos-e05-agent-configs-profiles-sprint.md",
     "packages/archon/registry/sessions/2026-06-26-e05-s1.json",
     "Build/src/workspaces/wfos/AGENTS.md"
   ],
@@ -29,15 +29,15 @@
     "moon run archon:validate",
     "wc -l AGENTS.md Workstreams/AGENTS.md"
   ],
-  "outcome": "Lean AGENTS.md pattern formalized. New copy-ready template .agents/profiles/AGENTS.template.md (core rules, may/may-not table, key paths, profile pointer, skills note — a pointer not a manual). New lean cross-workstream root Workstreams/AGENTS.md (36 lines): first reads (profiles, navigation layer, STATE), the shared-profile rules (S5), boundaries, and a per-workspace pointer to the template + the wfos reference. New docs/agent-configs.md documents the shared-profile model, the S5 app-integration diagram + rules, the lean AGENTS.md rule (detail lives in README/docs, no app prose duplicates profile intent), and the routing-contract wiring. wfos AGENTS.md gained a lean Profile section (default workspace-dev profile is the source of truth for scope/commands) and the rails rule now points at agent-configs.md; the Skills note now states an unscanned skill does not load and skill-loading profiles carry skillspector_scan. docs/README.md reference matrix lists agent-configs.md.",
-  "validation": "moon run archon:validate PASS (regression — 3 descriptors + 2 policies + 3 profiles + graph 17/14). Lean check: root Workstreams/AGENTS.md 36 lines; template 49 lines; wfos AGENTS.md stays a directive pointer (no command/architecture manual, no profile-intent duplication).",
+  "outcome": "Lean AGENTS.md pattern formalized. New copy-ready template .agents/profiles/AGENTS.template.md (core rules, may/may-not table, key paths, profile pointer, skills note \u2014 a pointer not a manual). New lean cross-workstream root Workstreams/AGENTS.md (36 lines): first reads (profiles, navigation layer, STATE), the shared-profile rules (S5), boundaries, and a per-workspace pointer to the template + the wfos reference. New docs/agent-configs.md documents the shared-profile model, the S5 app-integration diagram + rules, the lean AGENTS.md rule (detail lives in README/docs, no app prose duplicates profile intent), and the routing-contract wiring. wfos AGENTS.md gained a lean Profile section (default workspace-dev profile is the source of truth for scope/commands) and the rails rule now points at agent-configs.md; the Skills note now states an unscanned skill does not load and skill-loading profiles carry skillspector_scan. docs/README.md reference matrix lists agent-configs.md.",
+  "validation": "moon run archon:validate PASS (regression \u2014 3 descriptors + 2 policies + 3 profiles + graph 17/14). Lean check: root Workstreams/AGENTS.md 36 lines; template 49 lines; wfos AGENTS.md stays a directive pointer (no command/architecture manual, no profile-intent duplication).",
   "decisions": [
-    "AGENTS.md is a pointer, not a manual — template enforces the shape; the root file is the cross-workstream lean entry",
+    "AGENTS.md is a pointer, not a manual \u2014 template enforces the shape; the root file is the cross-workstream lean entry",
     "Profile intent (scope, command allow/block, secrets) is declared once in .agents/profiles/*.toml and referenced from AGENTS.md, never restated per app or per AGENTS.md",
     "S5 app-integration diagram + rules live in docs/agent-configs.md (workspace doc) and the root AGENTS.md, keyed to the routing contract from E01.S4",
     "wfos AGENTS.md remains the reference instance the epic cites; its Learned-Preferences/Facts memory sections are kept (directive memory, not a manual)"
   ],
-  "next": "E05.S3 — RTK hook config (profile output compressor + templated Claude Code hook via chezmoi)",
+  "next": "E05.S3 \u2014 RTK hook config (profile output compressor + templated Claude Code hook via chezmoi)",
   "blockers": [],
   "token_note": "A lean AGENTS.md loads cheaply and defers detail to README/docs read on demand; the root pointer (36 lines) plus one profile reference replaces re-reading per-app prose. Shared profile + lean AGENTS.md vs per-app prose sprawl."
 }

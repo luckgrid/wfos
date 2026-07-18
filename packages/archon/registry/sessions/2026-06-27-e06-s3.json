@@ -9,7 +9,7 @@
   "agent": "cursor/auto",
   "profile": "workspace-dev",
   "loaded_context": [
-    "Build/bin/2026-06-28-wfos-e06-skills-and-commands-sprint.md#e06s3",
+    "Build/bin/2026-06-27-wfos-e06-skills-and-commands-sprint.md#e06s3",
     "packages/archon/registry/sessions/2026-06-27-e06-s2.json"
   ],
   "changed_paths": [
@@ -30,7 +30,7 @@
   "decisions": [
     "POC scope: 3 templates only; RD/PRD/TRD/ARD/SOP family extends same pattern per agent-skills.md"
   ],
-  "next": "E06.S4 — Fabric patterns",
+  "next": "E06.S4 \u2014 Fabric patterns",
   "blockers": [],
-  "token_note": "Agent sends template parameters, not a re-derived prompt — medium token lever."
+  "token_note": "Agent sends template parameters, not a re-derived prompt \u2014 medium token lever."
 }

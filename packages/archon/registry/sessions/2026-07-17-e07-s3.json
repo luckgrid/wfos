@@ -1,5 +1,5 @@
 {
-  "session_id": "2026-07-18-e07-s3",
+  "session_id": "2026-07-17-e07-s3",
   "epic": "E07",
   "story": "S3",
   "title": "Conventional commits",
@@ -10,7 +10,7 @@
   "profile": "workspace-dev",
   "loaded_context": [
     "Build/bin/2026-07-17-wfos-e07-git-hygiene-workspaces-sprint.md#e07s3",
-    "packages/archon/registry/sessions/2026-07-18-e07-s2.json"
+    "packages/archon/registry/sessions/2026-07-17-e07-s2.json"
   ],
   "changed_paths": [
     "Build/src/workspaces/wfos/packages/archon/hooks/commit-msg",
@@ -26,9 +26,9 @@
   "outcome": "Lightweight conventional-commit convention adopted (feat|fix|docs|chore|refactor|test). Dependency-free bash commit-msg hook (packages/archon/hooks/commit-msg, regex, no commitlint/cog/czg) wired into the pre-commit config at the commit-msg stage; merge/revert/fixup subjects pass through. docs/git-hygiene.md records the grammar + the lightweight-vs-enforced decision.",
   "validation": "commit-msg hook accepts a conforming subject (exit 0) and rejects a non-conforming one with a helpful message (exit 1). shellcheck clean; validate-config passes.",
   "decisions": [
-    "lightweight now; commitlint/cog/czg deferred until history-based automation (changelog/release notes) needs it — none installed, installs human-gated"
+    "lightweight now; commitlint/cog/czg deferred until history-based automation (changelog/release notes) needs it \u2014 none installed, installs human-gated"
   ],
-  "next": "E07.S4 — polyrepo scan report",
+  "next": "E07.S4 \u2014 polyrepo scan report",
   "blockers": [],
-  "token_note": "measured rtk gain on this host: git status ~63% (38→14 tok), git log --oneline -30 ~11% (303→270 tok), git log -3 -p ~99% (27k→200 tok). Grammar-consistent conventional subjects keep oneline history RTK-compressible; see docs/git-hygiene.md#token-cost-measured"
+  "token_note": "measured rtk gain on this host: git status ~63% (38\u219214 tok), git log --oneline -30 ~11% (303\u2192270 tok), git log -3 -p ~99% (27k\u2192200 tok). Grammar-consistent conventional subjects keep oneline history RTK-compressible; see docs/git-hygiene.md#token-cost-measured"
 }

@@ -1,5 +1,5 @@
 {
-  "session_id": "2026-06-24-e03-s4",
+  "session_id": "2026-06-23-e03-s4",
   "epic": "E03",
   "story": "S4",
   "title": "RTK as recommended-default output compressor",
@@ -37,7 +37,7 @@
     "chezmoi execute-template --source dotfiles --override-data {profile} < dot_config/zsh/rtk.zsh.tmpl",
     "shellcheck --severity=warning config/shell/rtk.zsh"
   ],
-  "outcome": "RTK wired as the recommended-default, swappable output compressor. Manifest gained an `agent` module (rtk default=true brew=rtk; qmd default=false detect-only, complementary retrieval — not a swap); Brewfile regenerated (+`# agent`/`brew \"rtk\"`); `agent` added to the descriptor modules. Routing lives in config/shell/rtk.zsh: a no-op unless rtk is installed AND DUST_RTK=1, activates only when rtk exposes a `gain` subcommand (rules out reachingforthejack/rtk), and conservatively wraps only read-only/high-output subcommands (git status|diff|log|show|branch|blame, grep/rg) — mutating/interactive commands run raw, `command <tool>` is the escape hatch. dust.zsh sources it unless DUST_RTK_MANAGED=1; the chezmoi fragment dot_config/zsh/rtk.zsh.tmpl sets DUST_RTK from profile data (`rtk` flag), exports DUST_RTK_MANAGED=1, and sources the same layer. profiles.toml `rtk=true` for all four classes (explicitly incl. local-macos-full + agent-safe per the epic). Docs updated (tool-catalog RTK -> recommended-default + legend; native-substrate agent row + 'Output compression (RTK)' subsection; README modules line + RTK note).",
+  "outcome": "RTK wired as the recommended-default, swappable output compressor. Manifest gained an `agent` module (rtk default=true brew=rtk; qmd default=false detect-only, complementary retrieval \u2014 not a swap); Brewfile regenerated (+`# agent`/`brew \"rtk\"`); `agent` added to the descriptor modules. Routing lives in config/shell/rtk.zsh: a no-op unless rtk is installed AND DUST_RTK=1, activates only when rtk exposes a `gain` subcommand (rules out reachingforthejack/rtk), and conservatively wraps only read-only/high-output subcommands (git status|diff|log|show|branch|blame, grep/rg) \u2014 mutating/interactive commands run raw, `command <tool>` is the escape hatch. dust.zsh sources it unless DUST_RTK_MANAGED=1; the chezmoi fragment dot_config/zsh/rtk.zsh.tmpl sets DUST_RTK from profile data (`rtk` flag), exports DUST_RTK_MANAGED=1, and sources the same layer. profiles.toml `rtk=true` for all four classes (explicitly incl. local-macos-full + agent-safe per the epic). Docs updated (tool-catalog RTK -> recommended-default + legend; native-substrate agent row + 'Output compression (RTK)' subsection; README modules line + RTK note).",
   "validation": "GATE: `dust gen brewfile --check` PASS (rtk included). RTK identity verified (which rtk=/opt/homebrew/bin/rtk, rtk 0.42.4, gain present -> no Rust-Type-Kit collision). rtk.zsh sources clean: DUST_RTK=1 defines git/grep functions (DUST_RTK_ACTIVE=1); DUST_RTK=0 leaves raw binaries. dotfiles validate.sh PASS (rtk.zsh.tmpl balanced + 12 chezmoi renders incl. rtk template added to the loop). rtk.zsh.tmpl renders DUST_RTK=1 for local-macos-full/agent-safe/headless-dev. shellcheck CLEAN.",
   "rtk_gain_baseline": {
     "recorded_at": "2026-06-24",
@@ -49,12 +49,12 @@
     "savings_pct": 44.8
   },
   "decisions": [
-    "rtk and qmd are NOT mutual alternatives (compression vs retrieval are different roles); rtk alternatives left empty — its swappability is the DUST_RTK toggle + profile `rtk` flag, documented, not a sibling tool",
+    "rtk and qmd are NOT mutual alternatives (compression vs retrieval are different roles); rtk alternatives left empty \u2014 its swappability is the DUST_RTK toggle + profile `rtk` flag, documented, not a sibling tool",
     "routing wraps only read-only/high-output subcommands via case-guards so interactive/mutating commands are never shadowed; full transparent rewriting stays the Claude Code hook's job",
     "agent module appended at manifest end to keep the Brewfile diff minimal and gen --check stable across stories",
     "rtk gain baseline recorded in this session record + native-substrate.md (the registry tools.json is host-specific/gitignored, so the tracked record is the durable home)"
   ],
-  "next": "E03.S5 — replaceability matrix",
+  "next": "E03.S5 \u2014 replaceability matrix",
   "blockers": [],
   "token_note": "loaded 1 story block + RTK.md + STATE/ledger tail; baseline shows 44.8% output savings already (the headline M0 lever now wired as default)"
 }

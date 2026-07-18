@@ -1,5 +1,5 @@
 {
-  "session_id": "2026-07-18-e08-s1",
+  "session_id": "2026-07-17-e08-s1",
   "epic": "E08",
   "story": "S1",
   "title": "Report-only bin inventory",
@@ -10,8 +10,8 @@
   "profile": "workspace-dev",
   "loaded_context": [
     "Build/bin/2026-07-17-wfos-e08-bin-archive-lifecycle-sprint.md#e08s1",
-    "packages/archon/registry/sessions/2026-07-18-e07-s5.json",
-    "packages/archon/registry/sessions/2026-07-18-e07-s6.json"
+    "packages/archon/registry/sessions/2026-07-17-e07-s5.json",
+    "packages/archon/registry/sessions/2026-07-17-e07-s6.json"
   ],
   "changed_paths": [
     "Build/src/workspaces/wfos/packages/archon/lib/registry.sh",
@@ -34,7 +34,7 @@
     "inventory root is WS_ROOT/*/bin/<workflow>/ (namespace bins), not Build/src/workspaces package bins",
     "size via du -sk (portable); fd preferred with find fallback; no dua dependency"
   ],
-  "next": "E08.S2 — manifest schema",
+  "next": "E08.S2 \u2014 manifest schema",
   "blockers": [],
   "token_note": "one inventory read replaces N du/ls/stat explorations across namespace bin/ trees"
 }

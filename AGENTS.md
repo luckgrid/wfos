@@ -89,8 +89,9 @@ carry `skillspector_scan` in `required_validators`. Optional AI enhancements are
   env, RTK, replaceability matrix); `moon run dust:gen-check`, `moon run dust:validate-substrate`.
 - Archon generated registry (`packages/archon/registry/*.json`, `graph.dot`, `BIN-INVENTORY.md`)
   is gitignored; session records and `registry/QUERIES.md` stay tracked.
-- Session records are `packages/archon/registry/sessions/YYYY-MM-DD-eNN-sN.json`; the date prefix
-  must follow chronological work order (fix filenames if epic order and dates diverge).
+- Session records are `packages/archon/registry/sessions/YYYY-MM-DD-eNN-sN.json`; filename dates
+  follow the local implementation/completion date established by nested-repo history, not a
+  planned session date, document creation date, or the next UTC calendar day.
 - `Workstreams/.agents/` is the operator navigation layer; Archon sync writes gitignored
   `tools/local-toolkit.yml`; Archon remains the routing authority.
 - `no-agent-git-push` is Archon policy metadata (publish intent); `agent-git` is the cross-cutting

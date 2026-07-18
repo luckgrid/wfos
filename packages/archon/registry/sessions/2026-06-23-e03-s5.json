@@ -1,5 +1,5 @@
 {
-  "session_id": "2026-06-24-e03-s5",
+  "session_id": "2026-06-23-e03-s5",
   "epic": "E03",
   "story": "S5",
   "title": "Replaceability matrix",
@@ -31,12 +31,12 @@
   "outcome": "Replaceability matrix implemented as a pure projection of the manifest (no duplicated data). New lib helper dust_role_matrix derives, for each swappable role (a module-default tool with a non-empty alternatives list), the ACTIVE member = installed default, else first installed alternative, else the missing default. `dust list --matrix` prints the matrix; `dust doctor` prints a 'replaceability' section and emits a roles[] array in the registry JSON (schema extended, optional). On this host all 6 roles (git, nav, session, secrets, tools, js) resolve to their installed default. External alternative ids (asdf, npm, yarn) are reported as informational notes by validate-substrate. Docs: native-substrate.md gained a 'Replaceability matrix' section.",
   "validation": "GATE bin/validate-substrate.sh PASS 6/6 (manifest 44 tools; brewfile --check clean; doctor --json valid + rail enforced; env resolved + --json + --shell; agent module + rtk guards; matrix resolves active per role). `moon run dust:gen-check dust:validate-substrate` both PASS. Regression: dust doctor exit 0 (rail ENFORCED), validate-secrets PASS, validate-dotfiles PASS, validate.sh PASS. shellcheck --severity=warning CLEAN.",
   "decisions": [
-    "matrix is a projection over (default, alternatives) per tool — no [[module]] duplication, so it cannot drift from the tool data",
+    "matrix is a projection over (default, alternatives) per tool \u2014 no [[module]] duplication, so it cannot drift from the tool data",
     "a swappable role is anchored on the module-default tool that carries alternatives (avoids double-listing when an alt lists back); rust/agent/etc. with no alternatives are not roles",
     "external alternatives (asdf/npm/yarn) are warned-not-failed so the matrix stays honest about runtimes that live outside the manifest"
   ],
-  "next": "E04.S1 — metadata plane / registries",
+  "next": "E04.S1 \u2014 metadata plane / registries",
   "blockers": [],
   "epic_status": "E03 COMPLETE: S1-S5 done. Manifest is the derivation source (dust gen brewfile|mise; --check gate); doctor --json + missing-defaults recap; dust env resolved/--shell/--json; bootstrap human-only (exit 13); RTK wired as recommended-default swappable compressor (agent module, rtk.zsh routing, profile rtk flag, rtk gain baseline 44.8%); replaceability matrix reported by doctor + dust list --matrix. Gate dust:validate-substrate 6/6 PASS. DEFERRED (human): S3 `dust bootstrap` install -> 0 missing defaults.",
-  "token_note": "loaded 1 story block + 1 canon ref (§8.2) + STATE/ledger tail; matrix/roles are compact structured reads for the runtime controller (Kraken) to route on"
+  "token_note": "loaded 1 story block + 1 canon ref (\u00a78.2) + STATE/ledger tail; matrix/roles are compact structured reads for the runtime controller (Kraken) to route on"
 }

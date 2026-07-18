@@ -1,8 +1,8 @@
 {
-  "session_id": "2026-06-24-e03-s1",
+  "session_id": "2026-06-23-e03-s1",
   "epic": "E03",
   "story": "S1",
-  "title": "Manifest → Brewfile + mise derivation",
+  "title": "Manifest \u2192 Brewfile + mise derivation",
   "status": "done",
   "started_at": "2026-06-24T00:00:00Z",
   "ended_at": "2026-06-24T00:00:00Z",
@@ -38,7 +38,7 @@
     "mise generator stays informational/commented (no --check) because runtime versions are mise/proto's job, not the manifest's, per the native-substrate canon",
     "validate-substrate.sh authored once as the cumulative E03 gate rather than per-story validators; only its brewfile section is expected to pass at S1"
   ],
-  "next": "E03.S2 — doctor --json, dust env redesign, bootstrap hardening",
+  "next": "E03.S2 \u2014 doctor --json, dust env redesign, bootstrap hardening",
   "blockers": [],
   "token_note": "loaded 1 story block + 1 canon ref + STATE/ledger tail; generators print compact stdout (no install logs); --check is one-line PASS/FAIL"
 }

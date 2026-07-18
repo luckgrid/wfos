@@ -1,5 +1,5 @@
 {
-  "session_id": "2026-07-18-e07-s1",
+  "session_id": "2026-07-17-e07-s1",
   "epic": "E07",
   "story": "S1",
   "title": "Hook baseline",
@@ -28,7 +28,7 @@
     "hooks are per-repo, never global",
     "local hooks use installed binaries (no network); pinned repos build isolated envs at human install time"
   ],
-  "next": "E07.S2 — gitleaks gate",
+  "next": "E07.S2 \u2014 gitleaks gate",
   "blockers": [],
   "token_note": "clean, parseable diffs compress better; config validated read-only without installing hooks"
 }
