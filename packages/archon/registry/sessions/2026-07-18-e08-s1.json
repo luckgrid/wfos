@@ -1,0 +1,40 @@
+{
+  "session_id": "2026-07-18-e08-s1",
+  "epic": "E08",
+  "story": "S1",
+  "title": "Report-only bin inventory",
+  "status": "done",
+  "started_at": "2026-07-18T03:00:00Z",
+  "ended_at": "2026-07-18T03:05:00Z",
+  "agent": "cursor/composer",
+  "profile": "workspace-dev",
+  "loaded_context": [
+    "Build/bin/2026-07-17-wfos-e08-bin-archive-lifecycle-sprint.md#e08s1",
+    "packages/archon/registry/sessions/2026-07-18-e07-s5.json",
+    "packages/archon/registry/sessions/2026-07-18-e07-s6.json"
+  ],
+  "changed_paths": [
+    "Build/src/workspaces/wfos/packages/archon/lib/registry.sh",
+    "Build/src/workspaces/wfos/packages/archon/bin/archon-bin-report",
+    "Build/src/workspaces/wfos/packages/archon/bin/archon",
+    "Build/src/workspaces/wfos/packages/archon/bin/archon-validate",
+    "Build/src/workspaces/wfos/packages/archon/moon.yml",
+    "Build/src/workspaces/wfos/.gitignore",
+    "Build/src/workspaces/wfos/docs/bin-archive.md",
+    "Build/src/workspaces/wfos/docs/README.md"
+  ],
+  "commands_run": [
+    "moon run archon:bin-report",
+    "moon run archon:validate",
+    "shellcheck -e SC1091 packages/archon/bin/archon packages/archon/bin/archon-bin-report packages/archon/lib/registry.sh"
+  ],
+  "outcome": "archon_emit_bin_inventory walks WS_ROOT/*/bin/<workflow>/ (du -sk, fd/find file count, oldest/newest age days, recursive manifest presence/count). bin/archon-bin-report + archon bin-report dispatch + moon archon:bin-report emit registry/bin-inventory.json + BIN-INVENTORY.md (gitignored). _validate_bin_inventory soft structural check. docs/bin-archive.md + docs/README.md matrix row. 4 Plan/bin workflow dirs inventoried; read-only (no bin/ writes).",
+  "validation": "moon run archon:bin-report produced 4 workflows / 0 with manifest; archon:validate PASS including bin inventory structural check; no bin/ files newer than inventory after run.",
+  "decisions": [
+    "inventory root is WS_ROOT/*/bin/<workflow>/ (namespace bins), not Build/src/workspaces package bins",
+    "size via du -sk (portable); fd preferred with find fallback; no dua dependency"
+  ],
+  "next": "E08.S2 — manifest schema",
+  "blockers": [],
+  "token_note": "one inventory read replaces N du/ls/stat explorations across namespace bin/ trees"
+}

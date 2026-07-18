@@ -1,0 +1,38 @@
+{
+  "session_id": "2026-07-18-e08-s2",
+  "epic": "E08",
+  "story": "S2",
+  "title": "Manifest schema",
+  "status": "done",
+  "started_at": "2026-07-18T03:05:00Z",
+  "ended_at": "2026-07-18T03:10:00Z",
+  "agent": "cursor/composer",
+  "profile": "workspace-dev",
+  "loaded_context": [
+    "Build/bin/2026-07-17-wfos-e08-bin-archive-lifecycle-sprint.md#e08s2",
+    "packages/archon/registry/sessions/2026-07-18-e08-s1.json",
+    "packages/archon/registry/sessions/2026-07-18-e07-s6.json"
+  ],
+  "changed_paths": [
+    "Build/src/workspaces/wfos/packages/archon/schemas/manifest.schema.json",
+    "Build/src/workspaces/wfos/packages/archon/registry/fixtures/example-manifest.json",
+    "Build/src/workspaces/wfos/packages/archon/lib/registry.sh",
+    "Build/src/workspaces/wfos/packages/archon/bin/archon-sync",
+    "Build/src/workspaces/wfos/packages/archon/bin/archon-scan",
+    "Build/src/workspaces/wfos/packages/archon/bin/archon-validate"
+  ],
+  "commands_run": [
+    "moon run archon:sync",
+    "moon run archon:scan",
+    "moon run archon:validate"
+  ],
+  "outcome": "manifest.schema.json (draft-07) with required id/workflow/source/created_at/tool/outputs/retention; retention pattern accepts review-before-delete|permanent|session-exports|auto-archive-after:<N>d. Fixture registry/fixtures/example-manifest.json tracked. archon_emit_manifest helper; sync and scan write registry/manifest.json beside generated outputs. _validate_manifest + retention selfcheck (accepts 30d, rejects literal NNd, rejects missing retention).",
+  "validation": "archon:sync and archon:scan each write a valid manifest; archon:validate PASS (fixture + generated + retention selfcheck).",
+  "decisions": [
+    "auto-archive-after:NNd is a parameterized pattern (e.g. auto-archive-after:30d), not the literal string",
+    "day-one writers are archon sync/scan only; other bin writers advisory"
+  ],
+  "next": "E08.S3 — dry-run cleanup",
+  "blockers": [],
+  "token_note": "one manifest read answers what-is-this / can-I-delete-it without inspecting output files"
+}

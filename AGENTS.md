@@ -70,6 +70,8 @@ carry `skillspector_scan` in `required_validators`. Optional AI enhancements are
 - Suggested Workstreams layout paths in docs, descriptors, and shell defaults are conventions
   only; document override points (`DUST_HOME`, mount points), never imply one canonical filesystem
   layout.
+- When verifying epic or story completion, compare the repo to Build/bin specs and
+  `packages/archon/registry/sessions`; consult Plan/bin only for extra context.
 
 ## Learned Workspace Facts
 
@@ -85,8 +87,10 @@ carry `skillspector_scan` in `required_validators`. Optional AI enhancements are
   `moon run dust:validate-secrets`.
 - Substrate gate: `packages/dust/bin/validate-substrate.sh` (manifest derivation, doctor JSON,
   env, RTK, replaceability matrix); `moon run dust:gen-check`, `moon run dust:validate-substrate`.
-- Archon generated registry (`packages/archon/registry/*.json`, `graph.dot`) is gitignored;
-  session records and `registry/QUERIES.md` stay tracked.
+- Archon generated registry (`packages/archon/registry/*.json`, `graph.dot`, `BIN-INVENTORY.md`)
+  is gitignored; session records and `registry/QUERIES.md` stay tracked.
+- Session records are `packages/archon/registry/sessions/YYYY-MM-DD-eNN-sN.json`; the date prefix
+  must follow chronological work order (fix filenames if epic order and dates diverge).
 - `Workstreams/.agents/` is the operator navigation layer; Archon sync writes gitignored
   `tools/local-toolkit.yml`; Archon remains the routing authority.
 - `no-agent-git-push` is Archon policy metadata (publish intent); `agent-git` is the cross-cutting
@@ -96,3 +100,6 @@ carry `skillspector_scan` in `required_validators`. Optional AI enhancements are
   direct secret CLI on `PATH`. See [docs/agent-rails.md](docs/agent-rails.md).
 - Scoped profiles declare `[isolation]` (`worktree`/`branch`, `jj = "opt-in"`); isolation is
   declarative intent today — agents are not forcibly moved off the main worktree by Archon.
+- Bin archive lifecycle: `moon run archon:bin-report` / `archon:bin-cleanup`; profiles select
+  `agent-bin` via `rails_bin`; `archive`/`delete-approved` refuse under `DUST_AGENT=1` — real FS
+  mutation deferred to Kraken. See [docs/bin-archive.md](docs/bin-archive.md).

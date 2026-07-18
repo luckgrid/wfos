@@ -1,0 +1,12 @@
+{
+  "id": "example-run",
+  "workflow": "pdf-md",
+  "source": "Brand/lib/pdf/example.pdf",
+  "created_at": "20260620-153000",
+  "tool": "pymupdf4llm",
+  "tool_version": null,
+  "outputs": ["output.md"],
+  "approved_to": null,
+  "retention": "review-before-delete",
+  "notes": "Tracked fixture for manifest.schema.json — not a live run."
+}

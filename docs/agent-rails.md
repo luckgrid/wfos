@@ -60,6 +60,23 @@ this is authoritative **intent** and graph metadata at Level 0; OS-level interce
 `git push`/`reset --hard`/`clean` is deferred to the Kraken command router — the same boundary as
 the secret tools below.
 
+## Bin/archive mutation rails
+
+The [`agent-bin`](../packages/archon/policies/agent-bin.policy.toml) policy declares the tiers for
+bin and lib mutation. It is orthogonal to `agent-git`. Profiles keep their primary `rails` and
+select `agent-bin` via an optional `rails_bin` field.
+
+| Tier | Commands | Meaning |
+|------|----------|---------|
+| **allow** | `archon bin-report`, `archon bin-cleanup --mode report-only`, `du`, `fd`, `stat` | inventory — always safe |
+| **gate** | `archon bin-cleanup --mode dry-run` | read-only plan; log intent |
+| **block** | `archon bin-cleanup --mode archive`, `… delete-approved`, `rm`, `mv`, `git clean` on `bin/`/`lib/` | mutation — human-only |
+
+Belt-and-suspenders: `archon-bin-cleanup` refuses `archive`/`delete-approved` when `DUST_AGENT=1`,
+and at the draft gateway those modes validate arguments then refuse without calling `rm`/`mv`.
+Runtime interception of bare `rm`/`mv` on `PATH` is deferred to Kraken — the same boundary as
+git and secret rails. See [bin-archive.md](bin-archive.md).
+
 ## Worktree isolation
 
 Scoped agents default to a **local branch or worktree**, never the main worktree — isolation

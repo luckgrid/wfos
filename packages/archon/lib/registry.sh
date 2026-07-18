@@ -247,7 +247,11 @@ archon_emit_graph() {
     ([$policies[].id] | unique) as $policy_ids |
     ($profiles | map(. as $pr | select(($pr.rails // null) != null and ($policy_ids | index($pr.rails))) |
                {from: ("profile:" + $pr.id), rel: "selects", to: ("policy:" + $pr.rails)}))
-      as $selects_edges |
+      as $selects_rails_edges |
+    ($profiles | map(. as $pr | select(($pr.rails_bin // null) != null and ($policy_ids | index($pr.rails_bin))) |
+               {from: ("profile:" + $pr.id), rel: "selects", to: ("policy:" + $pr.rails_bin)}))
+      as $selects_bin_edges |
+    ($selects_rails_edges + $selects_bin_edges) as $selects_edges |
     ($skills | map({id: ("skill:" + .skill_id), kind: "skill"})) as $skill_nodes |
     ($profiles | map(. as $pr |
       ($pr.allowed_skill_ids // [])[] |
@@ -283,6 +287,7 @@ archon_profile_record() {
   jq -c '{
     id, title, purpose,
     rails: (.rails // null),
+    rails_bin: (.rails_bin // null),
     allowed_paths: (.scope.allowed_paths // []),
     blocked_paths: (.scope.blocked_paths // []),
     allowed_commands: (.commands.allowed_commands // []),
@@ -314,4 +319,187 @@ archon_emit_profiles() {
   fi
   printf '{\n  "generated_at": "%s",\n  "profiles": [%s]\n}\n' \
     "$(_archon_now)" "$(_archon_inline "$arr")"
+}
+
+# Count files under a directory (fd preferred; find fallback).
+# Args: <dir>
+_archon_count_files() {
+  local dir="$1" n
+  if command -v fd >/dev/null 2>&1; then
+    n="$(fd --type f --hidden --no-ignore . "$dir" 2>/dev/null | wc -l | tr -d ' ')"
+  else
+    # ponytail: find fallback when fd is absent; same count semantics
+    n="$(find "$dir" -type f 2>/dev/null | wc -l | tr -d ' ')"
+  fi
+  printf '%s\n' "${n:-0}"
+}
+
+# Count manifest.json files under a directory (recursive).
+# Args: <dir>
+_archon_count_manifests() {
+  local dir="$1" n
+  if command -v fd >/dev/null 2>&1; then
+    n="$(fd --type f --hidden --no-ignore '^manifest\.json$' "$dir" 2>/dev/null | wc -l | tr -d ' ')"
+  else
+    n="$(find "$dir" -type f -name 'manifest.json' 2>/dev/null | wc -l | tr -d ' ')"
+  fi
+  printf '%s\n' "${n:-0}"
+}
+
+# Age in whole days of oldest and newest files under <dir>. Prints "oldest newest"
+# (empty strings when the tree has no files). Uses portable stat.
+# Args: <dir>
+_archon_file_age_days() {
+  local dir="$1" now oldest newest mtime age
+  now="$(date +%s)"
+  oldest=""
+  newest=""
+  # Collect mtimes: prefer fd paths, fall back to find.
+  local paths
+  if command -v fd >/dev/null 2>&1; then
+    paths="$(fd --type f --hidden --no-ignore . "$dir" 2>/dev/null || true)"
+  else
+    paths="$(find "$dir" -type f 2>/dev/null || true)"
+  fi
+  [ -n "$paths" ] || { printf ' \n'; return 0; }
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    # BSD/macOS: -f %m; GNU: -c %Y
+    mtime="$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f" 2>/dev/null || echo "")"
+    [ -n "$mtime" ] || continue
+    age=$(( (now - mtime) / 86400 ))
+    [ "$age" -lt 0 ] && age=0
+    if [ -z "$oldest" ] || [ "$age" -gt "$oldest" ]; then oldest="$age"; fi
+    if [ -z "$newest" ] || [ "$age" -lt "$newest" ]; then newest="$age"; fi
+  done <<<"$paths"
+  printf '%s %s\n' "$oldest" "$newest"
+}
+
+# Human-readable size from bytes (KiB/MiB/GiB).
+# Args: <bytes>
+_archon_human_size() {
+  local b="$1"
+  if [ "$b" -ge 1073741824 ]; then
+    awk -v b="$b" 'BEGIN { printf "%.1fGiB", b/1073741824 }'
+  elif [ "$b" -ge 1048576 ]; then
+    awk -v b="$b" 'BEGIN { printf "%.1fMiB", b/1048576 }'
+  elif [ "$b" -ge 1024 ]; then
+    awk -v b="$b" 'BEGIN { printf "%.1fKiB", b/1024 }'
+  else
+    printf '%sB' "$b"
+  fi
+}
+
+# bin-inventory.json — read-only inventory of Workstreams/*/bin/<workflow>/ directories.
+# One report replaces N du/ls/stat explorations. Writes nothing under bin/.
+archon_emit_bin_inventory() {
+  local arr='[]' ns_bin workflow rel size_k size_bytes file_count manifest_count
+  local oldest newest ages present
+  for ns_bin in "$WS_ROOT"/*/bin; do
+    [ -d "$ns_bin" ] || continue
+    for workflow in "$ns_bin"/*/; do
+      [ -d "$workflow" ] || continue
+      workflow="${workflow%/}"
+      # Skip hidden dirs
+      case "$(basename "$workflow")" in .*) continue ;; esac
+      rel="${workflow#"$WS_ROOT"/}"
+      size_k="$(du -sk "$workflow" 2>/dev/null | awk '{print $1}')"
+      size_k="${size_k:-0}"
+      size_bytes=$(( size_k * 1024 ))
+      file_count="$(_archon_count_files "$workflow")"
+      manifest_count="$(_archon_count_manifests "$workflow")"
+      ages="$(_archon_file_age_days "$workflow")"
+      oldest="${ages%% *}"
+      newest="${ages#* }"
+      [ "$newest" = "$ages" ] && newest=""
+      if [ "$manifest_count" -gt 0 ]; then present=true; else present=false; fi
+
+      arr="$(jq -c \
+        --arg path "$rel" \
+        --argjson size "$size_bytes" \
+        --argjson files "$file_count" \
+        --argjson mc "$manifest_count" \
+        --argjson present "$present" \
+        --arg oldest "$oldest" \
+        --arg newest "$newest" '
+        . + [{
+          path: $path,
+          size_bytes: $size,
+          file_count: $files,
+          oldest_file_age_days: (if $oldest == "" then null else ($oldest | tonumber) end),
+          newest_file_age_days: (if $newest == "" then null else ($newest | tonumber) end),
+          manifest_present: $present,
+          manifest_count: $mc
+        }]' <<<"$arr")"
+    done
+  done
+
+  arr="$(jq -c 'sort_by(.path)' <<<"$arr")"
+  local total with_manifest
+  total="$(jq 'length' <<<"$arr")"
+  with_manifest="$(jq '[.[] | select(.manifest_present == true)] | length' <<<"$arr")"
+  jq -n --arg ts "$(_archon_now)" --arg root "$WS_ROOT" \
+    --argjson total "$total" --argjson with_manifest "$with_manifest" \
+    --argjson entries "$arr" '{
+      generated_at: $ts,
+      root: $root,
+      summary: { total: $total, with_manifest: $with_manifest },
+      workflows: $entries
+    }'
+}
+
+# Emit a run manifest (stdout). Required args via named parameters:
+#   --id --workflow --source --tool --retention
+# Optional: --approved-to (default null), --created-at (default now compact),
+#           --tool-version, --notes
+# Outputs: remaining positional args (at least one required).
+archon_emit_manifest() {
+  local id="" workflow="" source="" tool="" retention="" approved_to=""
+  local created_at="" tool_version="" notes=""
+  local -a outputs=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --id) id="$2"; shift 2 ;;
+      --workflow) workflow="$2"; shift 2 ;;
+      --source) source="$2"; shift 2 ;;
+      --tool) tool="$2"; shift 2 ;;
+      --retention) retention="$2"; shift 2 ;;
+      --approved-to) approved_to="$2"; shift 2 ;;
+      --created-at) created_at="$2"; shift 2 ;;
+      --tool-version) tool_version="$2"; shift 2 ;;
+      --notes) notes="$2"; shift 2 ;;
+      --) shift; outputs+=("$@"); break ;;
+      -*) archon_die "archon_emit_manifest: unknown flag $1" ;;
+      *) outputs+=("$1"); shift ;;
+    esac
+  done
+  [ -n "$id" ] && [ -n "$workflow" ] && [ -n "$tool" ] && [ -n "$retention" ] \
+    || archon_die "archon_emit_manifest: --id --workflow --tool --retention required"
+  [ "${#outputs[@]}" -gt 0 ] || archon_die "archon_emit_manifest: at least one output required"
+  [ -n "$created_at" ] || created_at="$(date -u +%Y%m%d-%H%M%S)"
+
+  local outs_json
+  outs_json="$(printf '%s\n' "${outputs[@]}" | jq -R . | jq -sc .)"
+  jq -n \
+    --arg id "$id" \
+    --arg workflow "$workflow" \
+    --arg source "$source" \
+    --arg created_at "$created_at" \
+    --arg tool "$tool" \
+    --arg retention "$retention" \
+    --arg approved_to "$approved_to" \
+    --arg tool_version "$tool_version" \
+    --arg notes "$notes" \
+    --argjson outputs "$outs_json" '{
+      id: $id,
+      workflow: $workflow,
+      source: $source,
+      created_at: $created_at,
+      tool: $tool,
+      outputs: $outputs,
+      approved_to: (if $approved_to == "" then null else $approved_to end),
+      retention: $retention
+    }
+    + (if $tool_version == "" then {} else {tool_version: $tool_version} end)
+    + (if $notes == "" then {} else {notes: $notes} end)'
 }

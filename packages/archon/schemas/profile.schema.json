@@ -14,6 +14,10 @@
       "type": "string",
       "description": "The Archon policy id this profile selects and runs under (the enforcement authority)."
     },
+    "rails_bin": {
+      "type": "string",
+      "description": "Optional secondary Archon policy id for bin/archive mutation rails (e.g. agent-bin). Preserves the primary rails string while selecting an additional policy."
+    },
     "scope": {
       "type": "object",
       "additionalProperties": true,

@@ -34,6 +34,18 @@ tasks:
     options:
       cache: false
 
+  bin-report:
+    command: "bin/archon"
+    args: ["bin-report"]
+    options:
+      cache: false
+
+  bin-cleanup:
+    command: "bin/archon"
+    args: ["bin-cleanup"]
+    options:
+      cache: false
+
   secrets-scan:
     command: "bin/archon"
     args: ["secrets-scan", "detect"]

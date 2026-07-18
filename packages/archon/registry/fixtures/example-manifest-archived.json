@@ -1,0 +1,13 @@
+{
+  "id": "example-archived-run",
+  "workflow": "pdf-md",
+  "source": "Brand/lib/pdf/example.pdf",
+  "created_at": "20260501-120000",
+  "tool": "pymupdf4llm",
+  "outputs": ["output.md"],
+  "approved_to": null,
+  "retention": "review-before-delete",
+  "archive_reason": "stale",
+  "promoted_to": "Plan/bin/archives/pdf-md/",
+  "notes": "Fixture demonstrating archive_reason + promoted_to — not a live move."
+}

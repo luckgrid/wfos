@@ -1,0 +1,40 @@
+{
+  "session_id": "2026-07-18-e08-s5",
+  "epic": "E08",
+  "story": "S5",
+  "title": "Agent no-delete rail",
+  "status": "done",
+  "started_at": "2026-07-18T03:22:00Z",
+  "ended_at": "2026-07-18T03:30:00Z",
+  "agent": "cursor/composer",
+  "profile": "workspace-dev",
+  "loaded_context": [
+    "Build/bin/2026-07-17-wfos-e08-bin-archive-lifecycle-sprint.md#e08s5",
+    "Plan/bin/wfos/lg_wfos_lvl_0_agent_rails.md",
+    "packages/archon/registry/sessions/2026-07-18-e08-s4.json",
+    "packages/archon/registry/sessions/2026-07-18-e08-s3.json"
+  ],
+  "changed_paths": [
+    "Build/src/workspaces/wfos/packages/archon/policies/agent-bin.policy.toml",
+    "Build/src/workspaces/wfos/packages/archon/schemas/profile.schema.json",
+    "Build/src/workspaces/wfos/packages/archon/lib/registry.sh",
+    "Workstreams/.agents/profiles/workspace-dev.toml",
+    "Workstreams/.agents/profiles/agent-safe-maintenance.toml",
+    "Workstreams/.agents/profiles/docs-only.toml",
+    "Build/src/workspaces/wfos/docs/agent-rails.md"
+  ],
+  "commands_run": [
+    "moon run archon:sync",
+    "moon run archon:validate",
+    "DUST_AGENT=1 packages/archon/bin/archon-bin-cleanup --mode delete-approved --scope Plan/bin/archives"
+  ],
+  "outcome": "policies/agent-bin.policy.toml declares allow/gate/block for bin-report/cleanup and rm/mv/git clean on bin/lib. Profiles keep primary rails and gain rails_bin=agent-bin. Graph: agent -blocked-by-> policy:agent-bin plus three profile -selects-> policy:agent-bin edges. docs/agent-rails.md documents the rail and Kraken deferral. E08 complete (S1–S5).",
+  "validation": "archon:sync → 4 policies, graph 28/27; validate PASS; agent -blocked-by-> policy:agent-bin present; 3 profile selects edges; DUST_AGENT=1 delete-approved refused.",
+  "decisions": [
+    "rails_bin optional secondary field — preserves primary rails string without breaking migration",
+    "runtime interception deferred to Kraken — same boundary as agent-git and secrets"
+  ],
+  "next": "H09 — draft sprint/spec (horizon epic; not session-ready)",
+  "blockers": [],
+  "token_note": "enabling — safety prerequisite as one policy + graph edges + script guard"
+}

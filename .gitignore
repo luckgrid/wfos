@@ -11,6 +11,7 @@
 packages/archon/registry/*.json
 packages/archon/registry/*.dot
 packages/archon/registry/SCAN.md
+packages/archon/registry/BIN-INVENTORY.md
 
 # Rust
 target/

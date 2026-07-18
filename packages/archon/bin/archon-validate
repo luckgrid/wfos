@@ -393,6 +393,161 @@ _validate_scan() {
   fi
 }
 
+# Soft structural check for the bin inventory (no dedicated schema — fields are
+# defined by archon_emit_bin_inventory). Warns if absent; validates shape when present.
+_validate_bin_inventory() {
+  local inv="$ARCHON_REGISTRY/bin-inventory.json"
+  [ -f "$inv" ] || { archon_warn "bin-inventory.json absent — run 'moon run archon:bin-report' first"; return 0; }
+
+  archon_info "bin inventory (structural)"
+  local ifail=0 req
+  for req in generated_at root summary workflows; do
+    jq -e --arg k "$req" 'has($k)' "$inv" >/dev/null \
+      || { archon_err "bin-inventory: missing required '$req'"; ifail=1; }
+  done
+
+  local missing
+  for req in path size_bytes file_count manifest_present manifest_count; do
+    missing="$(jq -r --arg k "$req" '[.workflows[] | select(has($k) | not) | .path] | length' "$inv")"
+    [ "$missing" = "0" ] || { archon_err "bin-inventory: $missing workflow(s) missing '$req'"; ifail=1; }
+  done
+
+  # oldest >= newest when both present (ages are days-since-mtime)
+  local badage
+  badage="$(jq -r '[.workflows[]
+    | select(.oldest_file_age_days != null and .newest_file_age_days != null)
+    | select(.oldest_file_age_days < .newest_file_age_days)] | length' "$inv")"
+  [ "$badage" = "0" ] || { archon_err "bin-inventory: $badage workflow(s) with oldest < newest age"; ifail=1; }
+
+  if [ "$ifail" -eq 0 ]; then
+    printf '  %sok%s  bin-inventory.json (%s workflows) — report valid\n' \
+      "$_C_GREEN" "$_C_RESET" "$(jq -r '.summary.total' "$inv")"
+  else
+    fail=1
+  fi
+}
+
+# Retention pattern from manifest.schema.json (concrete auto-archive-after:<N>d allowed).
+_manifest_retention_ok() {
+  jq -e '.retention | test("^(review-before-delete|permanent|session-exports|auto-archive-after:[0-9]+d)$")' <<<"$1" >/dev/null
+}
+
+_manifest_archive_reason_ok() {
+  local reason
+  reason="$(jq -r '.archive_reason // empty' <<<"$1")"
+  [ -z "$reason" ] && return 0
+  case "$reason" in
+    superseded|imported|retired|reference|duplicate|stale) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Validate one manifest JSON document against required keys + retention/archive enums.
+# Args: <label> <json>
+_check_manifest_doc() {
+  local label="$1" full="$2" schema="$ARCHON_SCHEMAS/manifest.schema.json"
+  local mfail=0 req
+  for req in $(jq -r '.required[]' "$schema"); do
+    jq -e --arg k "$req" 'has($k)' <<<"$full" >/dev/null \
+      || { archon_err "$label: missing required '$req'"; mfail=1; }
+  done
+  jq -e '(.outputs // []) | type == "array" and length > 0' <<<"$full" >/dev/null \
+    || { archon_err "$label: outputs must be a non-empty array"; mfail=1; }
+  _manifest_retention_ok "$full" \
+    || { archon_err "$label: retention='$(jq -r '.retention // empty' <<<"$full")' is not a valid retention value"; mfail=1; }
+  _manifest_archive_reason_ok "$full" \
+    || { archon_err "$label: archive_reason='$(jq -r '.archive_reason // empty' <<<"$full")' is not in the schema enum"; mfail=1; }
+  return "$mfail"
+}
+
+_selfcheck_manifest_retention() {
+  archon_info "manifest retention (selfcheck)"
+  local good_fixed='{"id":"g","workflow":"w","source":"s","created_at":"t","tool":"archon","outputs":["o"],"retention":"review-before-delete"}'
+  local good_auto='{"id":"g","workflow":"w","source":"s","created_at":"t","tool":"archon","outputs":["o"],"retention":"auto-archive-after:30d"}'
+  local bad_ret='{"id":"g","workflow":"w","source":"s","created_at":"t","tool":"archon","outputs":["o"],"retention":"auto-archive-after:NNd"}'
+  local bad_missing='{"id":"g","workflow":"w","source":"s","created_at":"t","tool":"archon","outputs":["o"]}'
+  if _manifest_retention_ok "$good_fixed" && _manifest_retention_ok "$good_auto"; then
+    printf '  %sok%s  retention fixed + auto-archive-after:30d accepted\n' "$_C_GREEN" "$_C_RESET"
+  else
+    archon_err "manifest retention selfcheck: valid retentions should pass"
+    fail=1
+  fi
+  if _manifest_retention_ok "$bad_ret"; then
+    archon_err "manifest retention selfcheck: literal NNd should fail"
+    fail=1
+  else
+    printf '  %sok%s  literal auto-archive-after:NNd rejected\n' "$_C_GREEN" "$_C_RESET"
+  fi
+  if _check_manifest_doc "_missing" "$bad_missing" 2>/dev/null; then
+    archon_err "manifest retention selfcheck: missing retention should fail"
+    fail=1
+  else
+    printf '  %sok%s  missing retention rejected\n' "$_C_GREEN" "$_C_RESET"
+  fi
+}
+
+_selfcheck_manifest_archive_reason() {
+  archon_info "manifest archive_reason (selfcheck)"
+  local good='{"id":"g","workflow":"w","source":"s","created_at":"t","tool":"archon","outputs":["o"],"retention":"review-before-delete","archive_reason":"stale","promoted_to":"Plan/bin/archives/x/"}'
+  local bad='{"id":"g","workflow":"w","source":"s","created_at":"t","tool":"archon","outputs":["o"],"retention":"review-before-delete","archive_reason":"yeeted"}'
+  local none='{"id":"g","workflow":"w","source":"s","created_at":"t","tool":"archon","outputs":["o"],"retention":"review-before-delete"}'
+  if _check_manifest_doc "_archive_good" "$good" && _manifest_archive_reason_ok "$none"; then
+    printf '  %sok%s  archive_reason=stale + promoted_to + absent reason accepted\n' "$_C_GREEN" "$_C_RESET"
+  else
+    archon_err "manifest archive_reason selfcheck: valid archive fields should pass"
+    fail=1
+  fi
+  if _check_manifest_doc "_archive_bad" "$bad" 2>/dev/null; then
+    archon_err "manifest archive_reason selfcheck: invalid reason should fail"
+    fail=1
+  else
+    printf '  %sok%s  invalid archive_reason rejected\n' "$_C_GREEN" "$_C_RESET"
+  fi
+}
+
+_validate_manifest() {
+  local schema="$ARCHON_SCHEMAS/manifest.schema.json"
+  local fixture="$ARCHON_REGISTRY/fixtures/example-manifest.json"
+  local generated="$ARCHON_REGISTRY/manifest.json"
+  [ -f "$schema" ] || archon_die "missing schema: $schema"
+
+  archon_info "manifests (vs schemas/manifest.schema.json)"
+  local mfail=0
+
+  if [ -f "$fixture" ]; then
+    if _check_manifest_doc "fixture" "$(cat "$fixture")"; then
+      printf '  %sok%s  fixtures/example-manifest.json\n' "$_C_GREEN" "$_C_RESET"
+    else
+      mfail=1
+    fi
+  else
+    archon_err "manifest fixture missing: $fixture"
+    mfail=1
+  fi
+
+  local archived_fixture="$ARCHON_REGISTRY/fixtures/example-manifest-archived.json"
+  if [ -f "$archived_fixture" ]; then
+    if _check_manifest_doc "archived-fixture" "$(cat "$archived_fixture")"; then
+      printf '  %sok%s  fixtures/example-manifest-archived.json\n' "$_C_GREEN" "$_C_RESET"
+    else
+      mfail=1
+    fi
+  fi
+
+  if [ -f "$generated" ]; then
+    if _check_manifest_doc "registry/manifest.json" "$(cat "$generated")"; then
+      printf '  %sok%s  registry/manifest.json (workflow=%s)\n' \
+        "$_C_GREEN" "$_C_RESET" "$(jq -r '.workflow' "$generated")"
+    else
+      mfail=1
+    fi
+  else
+    archon_warn "registry/manifest.json absent — run 'moon run archon:sync' (or scan) first"
+  fi
+
+  [ "$mfail" -eq 0 ] || fail=1
+}
+
 _validate_graph() {
   local schema="$ARCHON_GRAPHS/edges.schema.json"
   local graph="$ARCHON_REGISTRY/graph.json"
@@ -455,6 +610,10 @@ main() {
   _selfcheck_skillspector_gate
   _selfcheck_skill_scan_gate
   _validate_scan
+  _validate_bin_inventory
+  _validate_manifest
+  _selfcheck_manifest_retention
+  _selfcheck_manifest_archive_reason
   _validate_graph
   if [ "$fail" -eq 0 ]; then
     archon_ok "archon validate: PASS"
