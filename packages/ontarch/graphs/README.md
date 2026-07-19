@@ -45,7 +45,7 @@ jq -r '.edges[] | select(.rel=="requires" and .to=="capability:proto") | .from' 
 dot -Tsvg registry/graph.dot -o graph.svg
 ```
 
-A future runtime-controller (Cthulhu) `cth graph` (H09) consumes the same artifact.
+A future runtime-controller (Takogami) `takogami graph` (H09) consumes the same artifact.
 
 ## Related
 

@@ -1,6 +1,6 @@
 # Ontarch policy — agent bin/archive mutation rails (WfOS Level 0 §13.4).
 # Report-only inventory is agent-safe; cleanup mutation is human-only. Orthogonal to
-# agent-git (git command tiers). Runtime interception deferred to Cthulhu — same boundary
+# agent-git (git command tiers). Runtime interception deferred to Takogami — same boundary
 # as agent-git and secret CLIs on PATH. Script-level belt-and-suspenders: ontarch-bin-cleanup
 # refuses archive/delete-approved under PANOPLY_AGENT=1.
 id = "agent-bin"

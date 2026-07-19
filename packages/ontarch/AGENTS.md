@@ -24,7 +24,7 @@ them into `registry/profiles.json`. See [agent-configs.md](../../docs/agent-conf
 - **Policies define the rails you operate under.** `policies/panoply.agent.policy.toml` is enforced
   by the native-toolchain when `PANOPLY_AGENT=1` (mutating substrate commands exit non-zero). `policies/no-agent-git-push.policy.toml`
   is metadata-plane policy metadata for publish actions (push, release, merge) — authoritative intent and
-  graph edges today; runtime command blocking deferred to the runtime-controller (Cthulhu), same boundary as direct `pass`/`git`
+  graph edges today; runtime command blocking deferred to the runtime-controller (Takogami), same boundary as direct `pass`/`git`
   invocation on `PATH`.
 - **Keep contracts honest.** When adding metadata, follow the native-toolchain example: a descriptor for
   how a product connects, a schema for any generated artifact, a policy for its agent rails.

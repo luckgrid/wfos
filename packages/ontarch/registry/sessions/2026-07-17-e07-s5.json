@@ -25,7 +25,7 @@
   "validation": "moon run ontarch:validate PASS; policy validates against policy.schema.json; graph 27 nodes/23 edges with edge agent -blocked-by-> policy:agent-git present.",
   "decisions": [
     "push/reset --hard/clean blocked by default; remote writes require elevated policy + human approval",
-    "runtime command interception deferred to Cthulhu \u2014 same boundary as no-agent-git-push and secret CLIs on PATH"
+    "runtime command interception deferred to Takogami \u2014 same boundary as no-agent-git-push and secret CLIs on PATH"
   ],
   "next": "E07.S6 \u2014 worktree isolation",
   "blockers": [],

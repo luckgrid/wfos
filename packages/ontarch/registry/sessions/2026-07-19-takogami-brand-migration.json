@@ -1,0 +1,52 @@
+{
+  "session_id": "2026-07-19-takogami-brand-migration",
+  "epic": "MAINT",
+  "story": "takogami-brand-migration",
+  "title": "Adopt Takogami runtime-controller brand and takogami CLI (collision-resistant full-word executable)",
+  "status": "done",
+  "started_at": "2026-07-19T21:59:00Z",
+  "ended_at": "2026-07-19T22:30:00Z",
+  "agent": "cursor/composer",
+  "profile": "workspace-dev",
+  "loaded_context": [
+    "Plan/bin/wfos/lg_wfos_lvl_0_namespace_alignments.md",
+    "Build/bin/wfos/STATE.md",
+    "Build/bin/wfos/E09_runtime_controller.md",
+    "Build/src/workspaces/wfos/packages/takogami/README.md"
+  ],
+  "changed_paths": [
+    "Plan/bin/wfos/lg_wfos_lvl_0_namespace_alignments.md (v0.3 authority: brand lore/assessment, CLI decision, history Kraken→Takogami)",
+    "Plan/bin/{wfos/*, toolkit/*, archives/*, setup guides, session memory}.md",
+    "Workstreams/{AGENTS.md, README.md, .agents/graphs/README.md}",
+    "Build/bin/wfos/{E09–E12, deferred ledgers, roadmap, sprints, STATE, SESSIONS}.md",
+    "Build/src/workspaces/wfos/packages/cthulhu → packages/takogami (git mv)",
+    "Build/src/workspaces/wfos/{docs/*, AGENTS.md, README.md, .moon/toolchains.yml}",
+    "Build/src/workspaces/wfos/packages/{ontarch,polytope,wisp,takogami} READMEs/policies/graphs/session JSON"
+  ],
+  "commands_run": [
+    "git mv packages/cthulhu packages/takogami",
+    "content sweep Cthulhu/cthulhu/cth → Takogami/takogami/takogami across Plan, Build/bin, nested wfos",
+    "moon run panoply:doctor",
+    "moon run panoply:gen-check",
+    "moon run panoply:validate-substrate",
+    "moon run panoply:validate-dotfiles",
+    "moon run panoply:validate-secrets",
+    "moon run ontarch:sync",
+    "moon run ontarch:scan",
+    "moon run ontarch:validate",
+    "moon run ontarch:bin-report"
+  ],
+  "outcome": "Adopted Takogami as the provisional runtime-controller brand and takogami as the canonical public executable (no public short alias). Authority doc gained brand assessment, etymology, qualified WfOS Takogami guidance, formal legal-clearance note, and rejected-shorthand collision table (tako/tko/kmi/tgi/kami/tagi/tkg*). History rewritten per rewrite-all to Kraken→Takogami. Nested package dir renamed packages/takogami/; planned crate/Moon/env/XDG namespaces updated; E09–E12 and deferred ledgers swept. Stable archetypes unchanged: runtime-controller, runtime-integration, integrations/, Tendril vocabulary.",
+  "validation": "panoply:doctor/gen-check/validate-substrate/validate-dotfiles/validate-secrets PASS; ontarch:sync/scan/validate PASS (graph 28/27); ontarch:bin-report PASS. Residual rg for Cthulhu/cthulhu/CTHULHU/bare cth/packages/cthulhu CLEAN outside caches.",
+  "decisions": [
+    "Canonical CLI is the full product command takogami; no published short alias.",
+    "Rejected tako/tko/kmi/tgi/kami/tagi and related abbreviations for existing developer CLI/package/infrastructure collisions.",
+    "Rewrite-all historical prose and session JSON to Takogami rather than retaining an intermediate brand layer.",
+    "Keep archetype IDs, Tendril vocabulary, and integrations/ path stable across the brand change."
+  ],
+  "next": "E09.S1",
+  "blockers": [
+    "ontarch:secrets-scan detect mode still reports pre-existing age-secret-key in git history (commit a3a4978) — unchanged from prior maintenance session."
+  ],
+  "token_note": "One brand+CLI migration before E09.S1 avoids wiring the wrong executable and package ids into the first crate scaffolding."
+}

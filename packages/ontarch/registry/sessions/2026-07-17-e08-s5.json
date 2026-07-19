@@ -28,11 +28,11 @@
     "moon run ontarch:validate",
     "PANOPLY_AGENT=1 packages/ontarch/bin/ontarch-bin-cleanup --mode delete-approved --scope Plan/bin/archives"
   ],
-  "outcome": "policies/agent-bin.policy.toml declares allow/gate/block for bin-report/cleanup and rm/mv/git clean on bin/lib. Profiles keep primary rails and gain rails_bin=agent-bin. Graph: agent -blocked-by-> policy:agent-bin plus three profile -selects-> policy:agent-bin edges. docs/agent-rails.md documents the rail and Cthulhu deferral. E08 complete (S1\u2013S5).",
+  "outcome": "policies/agent-bin.policy.toml declares allow/gate/block for bin-report/cleanup and rm/mv/git clean on bin/lib. Profiles keep primary rails and gain rails_bin=agent-bin. Graph: agent -blocked-by-> policy:agent-bin plus three profile -selects-> policy:agent-bin edges. docs/agent-rails.md documents the rail and Takogami deferral. E08 complete (S1\u2013S5).",
   "validation": "ontarch:sync \u2192 4 policies, graph 28/27; validate PASS; agent -blocked-by-> policy:agent-bin present; 3 profile selects edges; PANOPLY_AGENT=1 delete-approved refused.",
   "decisions": [
     "rails_bin optional secondary field \u2014 preserves primary rails string without breaking migration",
-    "runtime interception deferred to Cthulhu \u2014 same boundary as agent-git and secrets"
+    "runtime interception deferred to Takogami \u2014 same boundary as agent-git and secrets"
   ],
   "next": "H09 \u2014 draft sprint/spec (horizon epic; not session-ready)",
   "blockers": [],

@@ -70,7 +70,7 @@ manifest, deleting `lib/` or `src/` material, deleting anything with `retention:
 
 At the current draft gateway, `archive` and `delete-approved` validate arguments and then
 refuse (no filesystem mutation). Agents under `PANOPLY_AGENT=1` are refused those modes
-outright. Real archive/delete execution is deferred to later automation (runtime-controller (Cthulhu) / H12).
+outright. Real archive/delete execution is deferred to later automation (runtime-controller (Takogami) / H12).
 
 ## Archive reasons and promotion
 
@@ -100,4 +100,4 @@ manifest records the destination when applicable:
 Report-only inventory is agent-safe. Cleanup mutation (`archive`, `delete-approved`) is
 human-only. The `agent-bin` metadata-plane (Ontarch) policy records allow/gate/block tiers for bin/archive
 commands; see [agent-rails.md](agent-rails.md). Runtime command interception is deferred to
-the runtime-controller (Cthulhu) — the same boundary as git and secret rails.
+the runtime-controller (Takogami) — the same boundary as git and secret rails.

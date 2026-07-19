@@ -1,7 +1,7 @@
 # Runtime architecture
 
 This is the engine blueprint that sits under the
-[runtime controller (Cthulhu)](runtime-controller.md): a high-performance, terminal-first
+[runtime controller (Takogami)](runtime-controller.md): a high-performance, terminal-first
 orchestrator driven by a unified CLI/TUI. It proxies native utilities, coordinates asynchronous
 data across simultaneous workstreams, isolates distinct tenant/brand execution profiles, and
 integrates AI augmentation natively.
@@ -17,7 +17,7 @@ data multiplexing, and AI state live in a long-running local daemon.
 
 ```mermaid
 flowchart LR
-  CLI[cth CLI/TUI] -->|cmd| D[Local daemon]
+  CLI[takogami CLI/TUI] -->|cmd| D[Local daemon]
   D --> PR[tokio::process pool]
   PR --> NT["native-toolchain\nPanoply"]
   D --> ORK[Orka DAG optional]
@@ -44,7 +44,7 @@ systems-level primitives, each mapped to a WfOS responsibility.
 |--------------|--------------|---------|
 | [Tokio](https://crates.io/crates/tokio) | Async event loop; non-blocking execution and signals | engine core |
 | [`tokio::process`](https://docs.rs/tokio/latest/tokio/process/) | Spawn native tools as async children; stream stdout/stderr without UI lag | native-toolchain proxying |
-| [starbase](https://crates.io/crates/starbase) | Application shell — lifecycle, sessions, diagnostics, reactive systems | runtime-controller (`cth`) |
+| [starbase](https://crates.io/crates/starbase) | Application shell — lifecycle, sessions, diagnostics, reactive systems | runtime-controller (`takogami`) |
 | [clap](https://crates.io/crates/clap) | Type-safe argument and command parsing inside the starbase app | runtime-controller commands |
 | [Ratatui](https://crates.io/crates/ratatui) | Immediate-mode multi-panel terminal UI | TUI phase |
 | [Serde](https://crates.io/crates/serde) | Parse profiles, brand maps, and pipeline configs | metadata-plane configs |
@@ -56,7 +56,7 @@ systems-level primitives, each mapped to a WfOS responsibility.
 
 - **starbase and clap are not alternatives.** starbase is the application shell (app
   lifecycle, sessions, diagnostics); clap is the parser it builds on. The runtime controller
-  (Cthulhu) is a starbase app with clap-derived commands.
+  (Takogami) is a starbase app with clap-derived commands.
 - **Config is TOML-first.** [Metadata-plane (Ontarch)](metadata-plane.md) descriptors, policies,
   and the tool manifest are TOML; the registry is JSON. Serde reads all of them — keep TOML as
   the default and reach for JSON/YAML only where a format is already imposed.

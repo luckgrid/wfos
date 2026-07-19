@@ -17,8 +17,8 @@ implementations in this workspace and their CLIs.
 
 | Archetype id | Purpose | Product | CLI |
 |--------------|---------|---------|-----|
-| `runtime-controller` | Discovery, routing, sessions, rails | Cthulhu | `cth` |
-| `package-translator` | High-level intent → packages, artifacts | Polytope | `cth package` |
+| `runtime-controller` | Discovery, routing, sessions, rails | Takogami | `takogami` |
+| `package-translator` | High-level intent → packages, artifacts | Polytope | `takogami package` |
 | `native-toolchain` | Native Unix/Rust tools and scripts | Panoply | `panoply` |
 | `portable-component-runtime` | WASM/WASI sandboxed components | Wisp | — |
 | `metadata-plane` | Descriptors, registry, schemas, policies | Ontarch | — |
@@ -29,7 +29,7 @@ collapse several archetypes behind one CLI — the archetype ids stay stable in 
 ### Future archetype — `agent-interface`
 
 Outside the current Level 0 package set, WfOS reserves the future archetype
-`agent-interface` for a scoped agent/daemon layer over the `runtime-controller` (Cthulhu)
+`agent-interface` for a scoped agent/daemon layer over the `runtime-controller` (Takogami)
 and `metadata-plane` (Ontarch). No product brand is adopted for it yet. See the Level 0
 namespace alignment §17 for the conceptual surface; do not treat it as a core package,
 CLI, or repository requirement today.
@@ -97,9 +97,9 @@ Brand); Brand assets must be **approved** before Build integrates them; Build ar
 carry shared context, feedback, and ops priorities — the agile inner loop inside the production
 container, while Control still sees a clean outer waterfall.
 
-The `runtime-controller` (Cthulhu, `cth`) is the design target for exposing these gates as
-routable commands via `cth workstream` (with profile aliases such as `cth plan`, `cth qa`, and
-`cth release`; Build-namespace entry is `cth workstream build` — top-level `cth build` stays
+The `runtime-controller` (Takogami, `takogami`) is the design target for exposing these gates as
+routable commands via `takogami workstream` (with profile aliases such as `takogami plan`, `takogami qa`, and
+`takogami release`; Build-namespace entry is `takogami workstream build` — top-level `takogami build` stays
 unit lifecycle). See [runtime-controller.md#workstream-routing](runtime-controller.md#workstream-routing).
 
 **Filesystem layout.** On a typical machine, Workstreams roots sit alongside each other under
@@ -112,12 +112,12 @@ set `PANOPLY_HOME` to your native-toolchain package path (see [setup.md](setup.m
 ```mermaid
 flowchart TD
   WS["Workstreams<br/>Plan · Brand · Build · Control"]
-  Dev[Developer / Agent] --> CTH["runtime-controller\nCthulhu · cth"]
-  CTH --> WS
-  CTH --> CX["metadata-plane\nOntarch"]
-  CTH --> PLT["package-translator\nPolytope · cth package"]
-  CTH --> PANOPLY["native-toolchain\nPanoply"]
-  CTH --> WSP["portable-component-runtime\nWisp"]
+  Dev[Developer / Agent] --> TKO["runtime-controller\nTakogami · takogami"]
+  TKO --> WS
+  TKO --> CX["metadata-plane\nOntarch"]
+  TKO --> PLT["package-translator\nPolytope · takogami package"]
+  TKO --> PANOPLY["native-toolchain\nPanoply"]
+  TKO --> WSP["portable-component-runtime\nWisp"]
   PLT --> CX
   PANOPLY --> CX
   WS --> CX

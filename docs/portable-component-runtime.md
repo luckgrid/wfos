@@ -48,8 +48,8 @@ runtime-controller controls when and how. metadata-plane defines what they may t
 ```
 
 The default runtime is [Wasmtime](https://wasmtime.dev/) (the native-toolchain `wisp` module),
-invoked by the [runtime controller (Cthulhu)](runtime-controller.md) as
-`cth portable run <component> --scope <path>`.
+invoked by the [runtime controller (Takogami)](runtime-controller.md) as
+`takogami portable run <component> --scope <path>`.
 
 ## Broader WASM landscape
 

@@ -38,9 +38,9 @@ remote (`git push`, `gh release create`, `gh pr merge`). The policy appears in t
 project graph (`agent → blocked-by → policy:no-agent-git-push`) and in agent guides.
 
 At Level 0 this is **policy metadata**, not runtime enforcement in the native-toolchain: an agent can still invoke
-`git push` or `gh` directly on `PATH` unless a future runtime-controller (Cthulhu) command router blocks it — the same
+`git push` or `gh` directly on `PATH` unless a future runtime-controller (Takogami) command router blocks it — the same
 boundary as secret tools above. Treat the policy as authoritative intent for agent behavior; OS-level
-interception is deferred to the runtime-controller (Cthulhu).
+interception is deferred to the runtime-controller (Takogami).
 
 ## Git command rails (allow / gate / block)
 
@@ -57,7 +57,7 @@ Remote writes require **elevated policy plus human approval** (`[remote] writes 
 `agent-git` is the superset git policy; `no-agent-git-push` remains the publish-specific statement,
 and both appear in the project graph as `agent → blocked-by → policy`. As with the publish rails,
 this is authoritative **intent** and graph metadata at Level 0; OS-level interception of
-`git push`/`reset --hard`/`clean` is deferred to the runtime-controller (Cthulhu) command router — the same boundary as
+`git push`/`reset --hard`/`clean` is deferred to the runtime-controller (Takogami) command router — the same boundary as
 the secret tools below.
 
 ## Bin/archive mutation rails
@@ -74,7 +74,7 @@ select `agent-bin` via an optional `rails_bin` field.
 
 Belt-and-suspenders: `ontarch-bin-cleanup` refuses `archive`/`delete-approved` when `PANOPLY_AGENT=1`,
 and at the draft gateway those modes validate arguments then refuse without calling `rm`/`mv`.
-Runtime interception of bare `rm`/`mv` on `PATH` is deferred to the runtime-controller (Cthulhu) — the same boundary as
+Runtime interception of bare `rm`/`mv` on `PATH` is deferred to the runtime-controller (Takogami) — the same boundary as
 git and secret rails. See [bin-archive.md](bin-archive.md).
 
 ## Worktree isolation
@@ -111,7 +111,7 @@ The guard applies to **native-toolchain-owned code paths** that would resolve a 
 `panoply doctor`, validators, and any future substrate command that shells out to a vault tool).
 Agents can still invoke `pass`/`age`/`sops` directly on `PATH` unless a shell wrapper or the
 planned runtime-controller command routing blocks them. Level 0 intentionally stops at policy +
-manifest flags + doctor assertion; broader OS-level interception is deferred to the runtime-controller (Cthulhu).
+manifest flags + doctor assertion; broader OS-level interception is deferred to the runtime-controller (Takogami).
 
 ## Conventions
 
@@ -124,7 +124,7 @@ manifest flags + doctor assertion; broader OS-level interception is deferred to 
 
 ## MCP exposure (planned)
 
-The [runtime-controller (Cthulhu)](runtime-controller.md) daemon can embed an MCP server (via
+The [runtime-controller (Takogami)](runtime-controller.md) daemon can embed an MCP server (via
 [`rmcp`](https://crates.io/crates/rmcp)) that exposes native commands as standardized LLM
 tools. Every tool call is checked against the same metadata-plane (Ontarch) policies — the MCP surface is a
 front door to the rails, not a way around them.

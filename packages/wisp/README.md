@@ -11,7 +11,7 @@ execution.
 - Targets WASI and the WebAssembly Component Model; default runtime is
   [Wasmtime](https://wasmtime.dev/) (the native-toolchain `wisp` module — distinct from this product).
 - Components declare capabilities (filesystem/network/secret scope); the runtime enforces them.
-- [package-translator (Polytope)](../polytope/README.md) packages components, [runtime-controller (Cthulhu)](../cthulhu/README.md) runs
-  them (`cth portable run …`), and [metadata-plane (Ontarch)](../ontarch/README.md) defines what they may touch.
+- [package-translator (Polytope)](../polytope/README.md) packages components, [runtime-controller (Takogami)](../takogami/README.md) runs
+  them (`takogami portable run …`), and [metadata-plane (Ontarch)](../ontarch/README.md) defines what they may touch.
 
 Design: [`../../docs/portable-component-runtime.md`](../../docs/portable-component-runtime.md).

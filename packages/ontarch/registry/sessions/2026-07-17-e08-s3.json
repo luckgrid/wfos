@@ -29,7 +29,7 @@
   "outcome": "ontarch-bin-cleanup implements four modes. report-only (default) and dry-run print plans with no action. archive/delete-approved validate args then refuse at draft gateway (never call rm/mv). delete-approved requires --scope; invalid/traversal scopes rejected; PANOPLY_AGENT=1 refused. Blocked: no-manifest, permanent, lib/src, approved_to mismatch. moon ontarch:bin-cleanup wired.",
   "validation": "report-only and dry-run exit 0; archive/delete-approved exit 1 with deferred message; agent + bad-scope refusals exit 1; ontarch:validate PASS; no bin/lib/src mutations.",
   "decisions": [
-    "draft gateway: archive/delete validate then refuse \u2014 real mutation deferred to H12/Cthulhu",
+    "draft gateway: archive/delete validate then refuse \u2014 real mutation deferred to H12/Takogami",
     "delete-approved requires both --scope under namespace bin/ and matching approved_to"
   ],
   "next": "E08.S4 \u2014 archive classification",

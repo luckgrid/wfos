@@ -95,7 +95,7 @@ can appear on disk only when filesystem expression is actually needed.
 
 - **`native-toolchain` (Panoply)** produces the registry (`panoply doctor`) and is governed by
   the agent policy here.
-- **`runtime-controller` (Cthulhu, `cth`)** and **`package-translator` (Polytope, `cth package`)**
+- **`runtime-controller` (Takogami, `takogami`)** and **`package-translator` (Polytope, `takogami package`)**
   will read and operate on metadata-plane data when implemented — discovery, routing, sessions,
   and package translation.
 - **Native manifests stay authoritative.** The metadata plane describes meaning, routing,

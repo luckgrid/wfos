@@ -98,10 +98,10 @@ carry `skillspector_scan` in `required_validators`. Optional AI enhancements are
   cross-cutting git allow/gate/block policy (`applies_to = "agent"`). Profiles keep `panoply.agent`
   / `no-agent-git-push` as `rails` and must not contradict `agent-git` in `[commands]`. Runtime
   blocking of `git push`/`reset --hard`/`clean`/`gh` is deferred to the runtime-controller
-  (Cthulhu), same boundary as direct secret CLI on `PATH`. See [docs/agent-rails.md](docs/agent-rails.md).
+  (Takogami), same boundary as direct secret CLI on `PATH`. See [docs/agent-rails.md](docs/agent-rails.md).
 - Scoped profiles declare `[isolation]` (`worktree`/`branch`, `jj = "opt-in"`); isolation is
   declarative intent today — agents are not forcibly moved off the main worktree by the
   metadata-plane.
 - Bin archive lifecycle: `moon run ontarch:bin-report` / `ontarch:bin-cleanup`; profiles select
   `agent-bin` via `rails_bin`; `archive`/`delete-approved` refuse under `PANOPLY_AGENT=1` — real FS
-  mutation deferred to the runtime-controller (Cthulhu). See [docs/bin-archive.md](docs/bin-archive.md).
+  mutation deferred to the runtime-controller (Takogami). See [docs/bin-archive.md](docs/bin-archive.md).

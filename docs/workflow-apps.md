@@ -235,7 +235,7 @@ Restore where you left off — windows, tabs, apps, and terminal context — acr
 | [Kilo Code](https://github.com/Kilo-Org/kilocode) | reference for context/session storage and knowledge transfer between sessions/agents | reference |
 
 Terminal sessions are already part of the native-toolchain [`session` module](native-toolchain.md#modules); GUI
-window/space restoration is handled by the apps above today and is a candidate for future runtime-controller (Cthulhu)
+window/space restoration is handled by the apps above today and is a candidate for future runtime-controller (Takogami)
 session management.
 
 ---

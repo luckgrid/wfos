@@ -1,6 +1,6 @@
-# Runtime controller — Cthulhu (planned)
+# Runtime controller — Takogami (planned)
 
-The `runtime-controller` (Cthulhu) is the runtime CLI and low-level control interface (`cth`).
+The `runtime-controller` (Takogami) is the runtime CLI and low-level control interface (`takogami`).
 It is the daily command surface that reaches into many tools, libraries, sessions, descriptors,
 policies, and agents. It is **not** the package manager (that is the
 [package translator (Polytope)](package-translator.md)) and **not** the tools themselves (that is
@@ -19,21 +19,21 @@ Manage sessions.               Apply rails and gates.  Expose system context.
 ## Command surface
 
 ```txt
-cth scan         discover local resources
-cth list         list units, tools, packages, or sessions
-cth info <unit>  show resolved metadata for a unit
-cth doctor       validate local machine readiness
-cth dev|build|check <unit>   route common workflow commands
-cth session      manage local work sessions and logs
-cth tools        detect and report local tools
-cth interfaces   validate descriptors, schemas, policies, registry entries
-cth portable <c> run or inspect portable WASM/WASI components (portable-component-runtime / Wisp)
-cth native <c>   inspect and execute host-native tooling (native-toolchain / Panoply)
-cth meta <c>     validate, graph, and query system metadata (metadata-plane / Ontarch)
-cth package …    hand off to the package translator (Polytope)
-cth workstream …   profile-agnostic Workstreams / gateway routing
-cth tendril <c>  list, inspect, attach, and invoke runtime integrations
-cth agent        run scoped agent rails and workflows
+takogami scan         discover local resources
+takogami list         list units, tools, packages, or sessions
+takogami info <unit>  show resolved metadata for a unit
+takogami doctor       validate local machine readiness
+takogami dev|build|check <unit>   route common workflow commands
+takogami session      manage local work sessions and logs
+takogami tools        detect and report local tools
+takogami interfaces   validate descriptors, schemas, policies, registry entries
+takogami portable <c> run or inspect portable WASM/WASI components (portable-component-runtime / Wisp)
+takogami native <c>   inspect and execute host-native tooling (native-toolchain / Panoply)
+takogami meta <c>     validate, graph, and query system metadata (metadata-plane / Ontarch)
+takogami package …    hand off to the package translator (Polytope)
+takogami workstream …   profile-agnostic Workstreams / gateway routing
+takogami tendril <c>  list, inspect, attach, and invoke runtime integrations
+takogami agent        run scoped agent rails and workflows
 ```
 
 Runtime integrations are runtime-controller-internal units (archetype `runtime-integration`, brand
@@ -41,39 +41,39 @@ vocabulary **Tendril**) living under the package's `src/integrations/` namespace
 separate integration package. See the Level 0 namespace alignment for the contract and
 substructure (`registry/`, `contracts/`, `adapters/`, `connectors/`, `bindings/`, `providers/`).
 
-Every command should be explainable: `cth <cmd> --explain` prints the unit, the descriptor
+Every command should be explainable: `takogami <cmd> --explain` prints the unit, the descriptor
 and native manifest it resolved, the runtime/package adapter, the native command, the session
 id, and the policies applied.
 
 ## Workstream routing
 
 The runtime controller routes into Workstreams namespaces and gateway metadata through a
-universal `cth workstream` surface. Profile shortcuts (`cth plan`, `cth brand`, `cth control`,
-plus `spec` / `qa` / `release` / `agent`) alias into it. Top-level `cth build|dev|check` remain
-unit-lifecycle verbs — Build-namespace entry is `cth workstream build`, not `cth build`.
+universal `takogami workstream` surface. Profile shortcuts (`takogami plan`, `takogami brand`, `takogami control`,
+plus `spec` / `qa` / `release` / `agent`) alias into it. Top-level `takogami build|dev|check` remain
+unit-lifecycle verbs — Build-namespace entry is `takogami workstream build`, not `takogami build`.
 
 ```txt
 # Universal (preferred)
-cth workstream plan …       Plan — Decisions (briefs, specs, strategy)
-cth workstream brand …      Brand — Expressions (design, content)
-cth workstream build …      Build — Implementations (code, wfos, ds)
-cth workstream control …    Control — Operations (records, sync)
+takogami workstream plan …       Plan — Decisions (briefs, specs, strategy)
+takogami workstream brand …      Brand — Expressions (design, content)
+takogami workstream build …      Build — Implementations (code, wfos, ds)
+takogami workstream control …    Control — Operations (records, sync)
 
 # Workstreams profile aliases
-cth plan …                → cth workstream plan …
-cth brand …               → cth workstream brand …
-cth control …             → cth workstream control …
-cth spec …                Plan filter (kind: spec)
-cth qa …                  Build QA gateway
-cth release …             Build + Control when enabled
+takogami plan …                → takogami workstream plan …
+takogami brand …               → takogami workstream brand …
+takogami control …             → takogami workstream control …
+takogami spec …                Plan filter (kind: spec)
+takogami qa …                  Build QA gateway
+takogami release …             Build + Control when enabled
 
 # Unit lifecycle (not namespace routing)
-cth build|dev|check <unit>
+takogami build|dev|check <unit>
 ```
 
 ```mermaid
 flowchart LR
-  K["runtime-controller\nCthulhu · cth"] --> WF[cth workstream]
+  K["runtime-controller\nTakogami · takogami"] --> WF[takogami workstream]
   WF --> PlanNs[Plan]
   subgraph Prod [Build and Brand — parallel production]
     direction TB
@@ -99,11 +99,11 @@ Canon: [architecture.md#workstreams-collection](architecture.md#workstreams-coll
 ```mermaid
 sequenceDiagram
   participant U as User
-  participant K as runtime-controller (Cthulhu)
+  participant K as runtime-controller (Takogami)
   participant C as metadata-plane (Ontarch)
   participant H as package-translator (Polytope)
   participant D as native-toolchain (Panoply)
-  U->>K: cth build <unit>
+  U->>K: takogami build <unit>
   K->>C: read descriptor + policy
   C-->>K: unit metadata
   K->>H: check package interface

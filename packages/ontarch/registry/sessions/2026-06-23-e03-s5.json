@@ -38,5 +38,5 @@
   "next": "E04.S1 \u2014 metadata plane / registries",
   "blockers": [],
   "epic_status": "E03 COMPLETE: S1-S5 done. Manifest is the derivation source (panoply gen brewfile|mise; --check gate); doctor --json + missing-defaults recap; panoply env resolved/--shell/--json; bootstrap human-only (exit 13); RTK wired as recommended-default swappable compressor (agent module, rtk.zsh routing, profile rtk flag, rtk gain baseline 44.8%); replaceability matrix reported by doctor + panoply list --matrix. Gate panoply:validate-substrate 6/6 PASS. DEFERRED (human): S3 `panoply bootstrap` install -> 0 missing defaults.",
-  "token_note": "loaded 1 story block + 1 canon ref (\u00a78.2) + STATE/ledger tail; matrix/roles are compact structured reads for the runtime controller (Cthulhu) to route on"
+  "token_note": "loaded 1 story block + 1 canon ref (\u00a78.2) + STATE/ledger tail; matrix/roles are compact structured reads for the runtime controller (Takogami) to route on"
 }

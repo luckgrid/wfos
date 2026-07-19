@@ -37,7 +37,7 @@ projects:
     ontarch: "packages/ontarch"
 ```
 
-As `packages/cthulhu`, `packages/polytope`, `packages/wisp`, and `apps/*` gain their own
+As `packages/takogami`, `packages/polytope`, `packages/wisp`, and `apps/*` gain their own
 `moon.yml`, add them here (or switch to `apps/*` / `packages/*` globs once every directory
 under those paths is a real project). Keeping it explicit avoids moon trying to treat a stub
 folder as a project before it has any config.
@@ -69,13 +69,13 @@ is intentionally not exposed as a task (it is human-only — see [agent-rails.md
 ## Rust workspace (deferred)
 
 There are no Rust crates yet, so there is no root `Cargo.toml`. The Cargo workspace lands
-with the first crate (the [runtime controller (Cthulhu)](runtime-controller.md)); at that point
-the root `Cargo.toml` lists `packages/cthulhu` as a member, and `.moon/toolchains.yml` already
+with the first crate (the [runtime controller (Takogami)](runtime-controller.md)); at that point
+the root `Cargo.toml` lists `packages/takogami` as a member, and `.moon/toolchains.yml` already
 has the rust toolchain enabled with `clippy` and `rustfmt`.
 
 ## How the runtime controller relates to moon
 
-The [runtime controller (Cthulhu)](runtime-controller.md) (`cth`) is the WfOS runtime controller,
+The [runtime controller (Takogami)](runtime-controller.md) (`takogami`) is the WfOS runtime controller,
 not a replacement for moon. moon is the project-graph and task backend; the runtime controller
 routes higher-level workflow commands to moon's task graph (a compat backend) and to
 [native-toolchain (Panoply)](native-toolchain.md) tools, recording sessions and applying policy

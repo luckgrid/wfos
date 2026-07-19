@@ -2,7 +2,7 @@
   "session_id": "2026-07-18-namespace-migration",
   "epic": "MAINT",
   "story": "namespace-alignment",
-  "title": "WfOS Level 0 namespace migration (kraken→cthulhu, hypercube→polytope, dust→panoply, ether→wisp, archon→ontarch)",
+  "title": "WfOS Level 0 namespace migration (kraken→takogami, hypercube→polytope, dust→panoply, ether→wisp, archon→ontarch)",
   "status": "done",
   "started_at": "2026-07-18T17:30:00Z",
   "ended_at": "2026-07-18T19:45:00Z",
@@ -16,13 +16,13 @@
     "packages/ontarch/registry/sessions/2026-07-17-e08-s5.json"
   ],
   "changed_paths": [
-    "Build/src/workspaces/wfos/packages/{dust→panoply, archon→ontarch, kraken→cthulhu, hypercube→polytope, ether→wisp}/",
+    "Build/src/workspaces/wfos/packages/{dust→panoply, archon→ontarch, kraken→takogami, hypercube→polytope, ether→wisp}/",
     "Build/src/workspaces/wfos/packages/panoply/bin/{dust→panoply}*",
     "Build/src/workspaces/wfos/packages/ontarch/bin/{archon→ontarch}*",
     "Build/src/workspaces/wfos/packages/ontarch/{descriptors,policies,schemas}/{dust→panoply}.*",
     "Build/src/workspaces/wfos/docs/{native-substrate→native-toolchain, portable-runtime→portable-component-runtime}.md",
     "Build/src/workspaces/wfos/{wfos.descriptor.toml, .moon/workspace.yml, moon.yml, .gitignore, .gitleaks.toml, .pre-commit-config.yaml, AGENTS.md, README.md}",
-    "Build/src/workspaces/wfos/docs/*.md (19 docs, content sweep + semantic fixes for cth portable/meta/native/tendril commands)",
+    "Build/src/workspaces/wfos/docs/*.md (19 docs, content sweep + semantic fixes for takogami portable/meta/native/tendril commands)",
     "Build/src/workspaces/wfos/packages/ontarch/registry/sessions/*.json (30+ historical records, content rewritten to new names)",
     "Workstreams/AGENTS.md",
     "Workstreams/.agents/{README, profiles/*.toml, profiles/README, graphs/README, tools/README, skills/README}",
@@ -46,14 +46,14 @@
     "moon run ontarch:bin-report",
     "moon run ontarch:secrets-scan (detect mode — pre-existing historical finding, not introduced by this migration)"
   ],
-  "outcome": "Applied the Level 0 namespace alignment v0.2 everywhere. Package dirs renamed in the nested wfos repo via git mv: dust→panoply, archon→ontarch, kraken→cthulhu, hypercube→polytope, ether→wisp. Renamed all bin scripts (panoply-*, ontarch-*), config/shell/panoply.zsh, manifest/panoply.tools.toml, descriptors/policies/schemas (dust→panoply). Env vars swept DUST_*→PANOPLY_*, ARCHON_*→ONTARCH_*. Moon project ids + tasks renamed (panoply:*, ontarch:*). Archetype IDs updated native-substrate→native-toolchain, portable-runtime→portable-component-runtime. All 19 wfos docs rewritten with alignment §4/§9 semantics: cth portable/native/meta/tendril/package command surface, integrations/ namespace inside cthulhu (no tendril package), Tendril brand vocabulary. All 30+ historical session JSONs in ontarch/registry/sessions/ had content rewritten to new names (filenames preserved). Workstreams root AGENTS.md + .agents/{profiles,READMEs,graphs,tools} swept to new policy paths (packages/ontarch/policies/panoply.agent.policy.toml) and PANOPLY_AGENT env flag. Build/bin specs renamed (E03_native_toolchain, H09_runtime_controller_cthulhu, H11_portable_component_runtime_translator, H12_workflow_automation, 2026-06-23-epic-3-native-toolchain-panoply-sprint) and all content swept; H12 Mindflow brand stripped (retired per §18), Casper noted as conceptual/planned per §17. Plan/bin renames (lg_wfos_lvl_0_native_toolchain, lg_wfos_lvl_0_portable_component_runtime) and lg_wfos_prod_mindflow archived with retirement note; all Plan/bin content swept with archetype-first wording at Plan level. Mis-sweep fixed: external 'dust' du-CLI references in panoply manifest + tool-catalog + native-toolchain doc + E03 sprint restored to 'external dust' (was wrongly swept to 'panoply').",
+  "outcome": "Applied the Level 0 namespace alignment v0.2 everywhere. Package dirs renamed in the nested wfos repo via git mv: dust→panoply, archon→ontarch, kraken→takogami, hypercube→polytope, ether→wisp. Renamed all bin scripts (panoply-*, ontarch-*), config/shell/panoply.zsh, manifest/panoply.tools.toml, descriptors/policies/schemas (dust→panoply). Env vars swept DUST_*→PANOPLY_*, ARCHON_*→ONTARCH_*. Moon project ids + tasks renamed (panoply:*, ontarch:*). Archetype IDs updated native-substrate→native-toolchain, portable-runtime→portable-component-runtime. All 19 wfos docs rewritten with alignment §4/§9 semantics: takogami portable/native/meta/tendril/package command surface, integrations/ namespace inside takogami (no tendril package), Tendril brand vocabulary. All 30+ historical session JSONs in ontarch/registry/sessions/ had content rewritten to new names (filenames preserved). Workstreams root AGENTS.md + .agents/{profiles,READMEs,graphs,tools} swept to new policy paths (packages/ontarch/policies/panoply.agent.policy.toml) and PANOPLY_AGENT env flag. Build/bin specs renamed (E03_native_toolchain, H09_runtime_controller_takogami, H11_portable_component_runtime_translator, H12_workflow_automation, 2026-06-23-epic-3-native-toolchain-panoply-sprint) and all content swept; H12 Mindflow brand stripped (retired per §18), Casper noted as conceptual/planned per §17. Plan/bin renames (lg_wfos_lvl_0_native_toolchain, lg_wfos_lvl_0_portable_component_runtime) and lg_wfos_prod_mindflow archived with retirement note; all Plan/bin content swept with archetype-first wording at Plan level. Mis-sweep fixed: external 'dust' du-CLI references in panoply manifest + tool-catalog + native-toolchain doc + E03 sprint restored to 'external dust' (was wrongly swept to 'panoply').",
   "validation": "wfos repo gates after rename: panoply:doctor PASS (44 tools, secrets rail ENFORCED under PANOPLY_AGENT=1); panoply:gen-check PASS; panoply:validate-substrate PASS; panoply:validate-dotfiles PASS; panoply:validate-secrets PASS; ontarch:sync OK (4 policies, local-toolkit.yml 44 tools); ontarch:scan OK; ontarch:validate PASS (graph 28 nodes / 27 edges — all endpoints resolve, restored to pre-migration count after .agents profile rails swept to panoply.agent); ontarch:bin-report PASS. ontarch:secrets-scan detect mode FAILS on a pre-existing historical finding (age-secret-key in packages/dust/secrets/README.md at commit a3a4978, 2026-06-24; the key was redacted in HEAD but persists in git history) — NOT introduced by this migration; staged pre-commit hook (gitleaks git --staged) unaffected. Final rg sweep: no stray kraken|hypercube|dust|ether|archon|native-substrate|portable-runtime|krk|hqb|DUST_|ARCHON_ references remain outside the alignment doc's own alias/history tables, Plan/bin/archives/, and legitimate English words (together/whether/SoftEther).",
   "decisions": [
     "Full rename (option a) per user approval: git mv package dirs + moon project ids + env vars + scripts + policies + descriptors, not just docs.",
     "Historical session JSONs rewritten to new names (filenames preserved) per user approval — alias tables in the alignment doc carry the migration record instead.",
     "Mindflow brand fully retired per alignment §18: H12 renamed to H12_workflow_automation, lg_wfos_prod_mindflow.md archived with header note, process described as 'planning-capture' / 'capture→spec→promote loop' going forward.",
     "Casper kept as conceptual/planned per alignment §17 — all refs already say 'planned'; no rename needed.",
-    "Tendril is Cthulhu-internal vocabulary only — no packages/tendril/ dir created; cthulhu README + runtime-controller doc note the integrations/ namespace and Tendril brand relationship.",
+    "Tendril is Takogami-internal vocabulary only — no packages/tendril/ dir created; takogami README + runtime-controller doc note the integrations/ namespace and Tendril brand relationship.",
     "External 'dust' du-CLI references (panoply manifest, tool-catalog, native-toolchain doc, E03 sprint) manually restored after the mechanical sweep wrongly renamed them to 'panoply' — the clash note now reads 'chosen over the external dust CLI, which clashed with the former native-toolchain brand'.",
     "Session id uses a descriptive form (2026-07-18-namespace-migration) rather than eNN-sN since this is cross-cutting maintenance, not a numbered epic story."
   ],

@@ -3,7 +3,7 @@
 # safe; committing/pulling/branching are gated (human-initiated or elevated); pushing, history
 # rewrites, and destructive cleanups are blocked by default. Remote writes require elevated
 # policy plus human approval. Superset of no-agent-git-push (which stays the publish-specific
-# statement). Runtime interception is deferred to Cthulhu, same boundary as no-agent-git-push.
+# statement). Runtime interception is deferred to Takogami, same boundary as no-agent-git-push.
 id = "agent-git"
 applies_to = "agent"
 version = "0.1.0"

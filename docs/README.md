@@ -16,8 +16,8 @@ This folder is the self-contained reference for the workspace. Start with
 | [monorepo.md](monorepo.md) | moon project graph + proto toolchains, tasks, conventions |
 | [native-toolchain.md](native-toolchain.md) | Native toolchain — Unix/Rust tools, modules, config templates |
 | [metadata-plane.md](metadata-plane.md) | Metadata plane — descriptors, registry, schemas, policies |
-| [runtime-controller.md](runtime-controller.md) | Runtime controller (`cth`) — discovery, routing, sessions (planned) |
-| [package-translator.md](package-translator.md) | Package translator (`cth package`) — intent → packages (planned) |
+| [runtime-controller.md](runtime-controller.md) | Runtime controller (`takogami`) — discovery, routing, sessions (planned) |
+| [package-translator.md](package-translator.md) | Package translator (`takogami package`) — intent → packages (planned) |
 | [portable-component-runtime.md](portable-component-runtime.md) | Portable component runtime — WASM/WASI components (planned) |
 | [agent-configs.md](agent-configs.md) | Shared agent profiles, app-integration pattern, lean AGENTS.md |
 | [agent-skills.md](agent-skills.md) | On-demand skill registry, templates, Fabric patterns, load logging |
@@ -34,11 +34,11 @@ This folder is the self-contained reference for the workspace. Start with
 
 | Archetype | Product | CLI | Role |
 |-----------|---------|-----|------|
-| runtime-controller | Cthulhu | `cth` | Discovery, routing, sessions, agent rails |
-| package-translator | Polytope | `cth package` | Intent → packages and artifacts |
+| runtime-controller | Takogami | `takogami` | Discovery, routing, sessions, agent rails |
+| package-translator | Polytope | `takogami package` | Intent → packages and artifacts |
 | native-toolchain | Panoply | `panoply` | Local Unix/Rust tool execution |
-| portable-component-runtime | Wisp | `cth portable` (planned) | WASM/WASI sandboxed components |
-| metadata-plane | Ontarch | — (build tasks; later `cth meta`) | Descriptors, registry, schemas, policies |
+| portable-component-runtime | Wisp | `takogami portable` (planned) | WASM/WASI sandboxed components |
+| metadata-plane | Ontarch | — (build tasks; later `takogami meta`) | Descriptors, registry, schemas, policies |
 
 Archetypes are stable roles; products are the implementations shipped here. Any product is
 swappable — the archetype id is what other layers depend on.
@@ -46,5 +46,5 @@ swappable — the archetype id is what other layers depend on.
 ## Status
 
 Implemented today: **`native-toolchain` (Panoply)** and **`metadata-plane` (Ontarch)**.
-Planned: **`runtime-controller` (Cthulhu)**, **`package-translator` (Polytope)**,
+Planned: **`runtime-controller` (Takogami)**, **`package-translator` (Polytope)**,
 **`portable-component-runtime` (Wisp)**. See each guide for scope and roadmap.

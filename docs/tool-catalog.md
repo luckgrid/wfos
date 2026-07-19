@@ -62,14 +62,14 @@ small, composable, dotfile-friendly.
 |------|--------|------|
 | [proto](https://moonrepo.dev/proto) | core | pins and installs workspace toolchains (`.prototools`) |
 | [moon](https://moonrepo.dev/moon) | core | project graph, task running, caching |
-| [starbase](https://github.com/moonrepo/starbase) | planned | Rust framework for the runtime-controller (Cthulhu) CLI |
+| [starbase](https://github.com/moonrepo/starbase) | planned | Rust framework for the runtime-controller (Takogami) CLI |
 | [mise](https://mise.jdx.dev/) | core | runtime/version manager (native-toolchain default) |
 
 See [monorepo.md](monorepo.md).
 
 ## Runtime engine — Rust crates
 
-The engine under the [runtime-controller (Cthulhu)](runtime-controller.md); see [runtime-architecture.md](runtime-architecture.md).
+The engine under the [runtime-controller (Takogami)](runtime-controller.md); see [runtime-architecture.md](runtime-architecture.md).
 
 | Crate / spec | Status | Role |
 |--------------|--------|------|

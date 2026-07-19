@@ -57,7 +57,7 @@ moon run ontarch:skills-map                             # same as map
 Load logs append to `packages/ontarch/registry/sessions/skill-loads.jsonl` with
 `{skill_id, ts, caller, body_ref, scan_status}`.
 
-Runtime fetch-on-call interception is deferred to the runtime-controller (Cthulhu) — same boundary as git-push blocking
+Runtime fetch-on-call interception is deferred to the runtime-controller (Takogami) — same boundary as git-push blocking
 in [agent-rails.md](agent-rails.md).
 
 ## Templates

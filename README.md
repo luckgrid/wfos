@@ -13,11 +13,11 @@ Full documentation lives in [`docs/`](docs/README.md). Start with
 
 | Archetype | Product | CLI | Role | Status |
 |-----------|---------|-----|------|--------|
-| native-toolchain | Panoply | `panoply` (later `cth native`) | Local Unix/Rust tool execution | implemented |
-| metadata-plane | Ontarch | build tasks (`ontarch:*`; later `cth meta`) | Descriptors, registry, schemas, policies | implemented |
-| runtime-controller | Cthulhu | `cth` | Discovery, routing, sessions, rails, integrations (`runtime-integration` / Tendril) | planned |
-| package-translator | Polytope | `cth package` | Intent → packages and artifacts | planned |
-| portable-component-runtime | Wisp | `cth portable` (planned) | WASM/WASI sandboxed components | planned |
+| native-toolchain | Panoply | `panoply` (later `takogami native`) | Local Unix/Rust tool execution | implemented |
+| metadata-plane | Ontarch | build tasks (`ontarch:*`; later `takogami meta`) | Descriptors, registry, schemas, policies | implemented |
+| runtime-controller | Takogami | `takogami` | Discovery, routing, sessions, rails, integrations (`runtime-integration` / Tendril) | planned |
+| package-translator | Polytope | `takogami package` | Intent → packages and artifacts | planned |
+| portable-component-runtime | Wisp | `takogami portable` (planned) | WASM/WASI sandboxed components | planned |
 
 Archetypes are stable roles; products are swappable implementations. Above the filesystem,
 three [interface layers](docs/architecture.md#interface-layers) — toolchain, agent, application
@@ -44,8 +44,8 @@ Pins live in [`.prototools`](.prototools); graph and tasks in [`.moon/`](.moon/)
 | [`ontarch/`](packages/ontarch/README.md) | metadata plane — descriptors, schemas, policies | implemented |
 | [`panoply/`](packages/panoply/README.md) | native toolchain — global low-level tools | implemented |
 | [`wisp/`](packages/wisp/README.md) | portable component runtime (WASM/WASI) | planned |
-| [`polytope/`](packages/polytope/README.md) | package translator (`cth package`) | planned |
-| [`cthulhu/`](packages/cthulhu/README.md) | runtime controller (`cth`) | planned |
+| [`polytope/`](packages/polytope/README.md) | package translator (`takogami package`) | planned |
+| [`takogami/`](packages/takogami/README.md) | runtime controller (`takogami`) | planned |
 
 ## Apps
 

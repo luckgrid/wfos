@@ -44,7 +44,7 @@
   "decisions": [
     "registry JSON is compact (inline arrays, one record per line) to keep jq + RTK reads cheap, matching the tools.json shape",
     "units.json de-dupes by id with central overriding colocated; each record carries source=colocated|central for provenance",
-    "the M1 query interface is a jq cookbook (QUERIES.md + queries/*.jq) per the epic DoD; a dedicated query command is deferred to Cthulhu (H09)",
+    "the M1 query interface is a jq cookbook (QUERIES.md + queries/*.jq) per the epic DoD; a dedicated query command is deferred to Takogami (H09)",
     "ontarch sync reads tools.json but never regenerates it — tools.json stays Panoply's artifact (panoply doctor)"
   ],
   "next": "E04.S3 — stand up Workstreams/.agents/ (READMEs + generated local-toolkit.yml)",

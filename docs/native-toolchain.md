@@ -6,7 +6,7 @@ machine usable for both developers and AI agents. It is shell-first and installs
 live in this repo.
 
 The native-toolchain is where work is physically executed on the machine. The
-[runtime-controller (Cthulhu)](runtime-controller.md) controls and routes; Panoply runs the
+[runtime-controller (Takogami)](runtime-controller.md) controls and routes; Panoply runs the
 native commands.
 
 ## What lives in the package
@@ -93,7 +93,7 @@ tools      mise             mise (default) proto,asdf
 
 Alternative ids that are external runtimes (not themselves native-toolchain tools, e.g. `asdf`,
 `npm`, `yarn`) are reported as informational notes by `validate-substrate.sh`. The
-`runtime-controller` (Cthulhu) reads this matrix to detect and route through whichever member
+`runtime-controller` (Takogami) reads this matrix to detect and route through whichever member
 is active.
 
 The manifest (`manifest/panoply.tools.toml`) is the authoritative list, with per-tool `brew`,
