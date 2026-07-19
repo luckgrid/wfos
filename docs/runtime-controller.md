@@ -75,15 +75,24 @@ cth build|dev|check <unit>
 flowchart LR
   K["runtime-controller\nCthulhu · cth"] --> WF[cth workstream]
   WF --> PlanNs[Plan]
-  WF --> BrandNs[Brand]
-  WF --> BuildNs[Build]
-  WF --> ControlNs[Control]
+  subgraph Prod [Build and Brand — parallel production]
+    direction TB
+    BuildNs[Build]
+    BrandNs[Brand]
+    BuildNs <-.->|shared context| BrandNs
+    BrandNs -->|approved| BuildNs
+  end
+  ControlNs[Control]
+  WF --> Prod
+  WF --> ControlNs
   PlanNs -->|validated| BuildNs
-  BrandNs -->|approved| BuildNs
-  BuildNs -->|ship_ready| ControlNs
+  PlanNs -->|validated| BrandNs
+  BuildNs -->|released| ControlNs
+  PlanNs <-.->|ops context| ControlNs
 ```
 
-Canon: [architecture.md#workstreams-collection](architecture.md#workstreams-collection)
+Canon: [architecture.md#workstreams-collection](architecture.md#workstreams-collection). Shape:
+`Plan ←[gates]→ | Build ←→ Brand | ←[gates]→ Control`.
 
 ## Routing flow
 

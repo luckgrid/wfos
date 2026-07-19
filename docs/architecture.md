@@ -58,20 +58,49 @@ namespaces — each with its own role, typical artifacts, and promotion gates be
 The metadata plane registers units from these namespaces so the runtime controller and agents
 can route without crawling raw paths.
 
-| Namespace | Role | Typical artifacts | Gate to next |
-|-----------|------|-------------------|--------------|
-| **Plan** | Decisions — briefs, specs, strategy | fleeting capture (`bin/`), validated specs (`src/`) | validated → Build |
-| **Brand** | Expressions — design, content, voice | design tokens, copy, export-ready assets | approved → Build |
-| **Build** | Implementations — code, workspaces, data science | repos (`src/workspaces/`), packages, pipelines | ship-ready → Control |
-| **Control** | Operations — records, sync, release | ledgers, deployment records, sync state | — |
+Plan sits on the left and Control on the right. Between them, **Build and Brand work in
+parallel** inside one production cluster: each gated from Plan, integrating with each other,
+and releasing into Control. Context and feedback also circulate so the loop stays agile
+rather than rigidly linear.
+
+```mermaid
+flowchart LR
+  Plan[Plan — Decisions]
+  subgraph Prod [Build and Brand — parallel production]
+    direction TB
+    Build[Build]
+    Brand[Brand]
+    Build <-.->|shared context| Brand
+    Brand -->|approved| Build
+  end
+  Control[Control — Operations]
+  Plan -->|validated| Build
+  Plan -->|validated| Brand
+  Build -->|released| Control
+  Plan <-.->|ops context| Control
+```
+
+Shape in short: `Plan ←[gates]→ | Build ←→ Brand | ←[gates]→ Control`.
+
+| Namespace | Role | Typical artifacts | Gate |
+|-----------|------|-------------------|------|
+| **Plan** | Decisions — briefs, specs, strategy | fleeting capture (`bin/`), validated foundation (`src/`) | **`validated`** → Build and Brand in parallel |
+| **Brand** | Expressions — design, content, voice | design tokens, copy, export-ready assets | **`approved`** → Build (integration) |
+| **Build** | Implementations — code, workspaces, data science | repos (`src/workspaces/`), packages, pipelines | **`released`** → Control |
+| **Control** | Operations — records, sync, release | ledgers, deployment records, sync state | feeds vision / priorities back to Plan |
 
 **Interface layers and gates.** Content moves through the same three interface layers described
-above (toolchain → agent → application). Promotion between namespaces is gated: Plan content must
-be validated before Build implements it; Brand assets must be approved before they ship; Build
-artifacts must be ship-ready before Control records a release. The `runtime-controller` (Cthulhu,
-`cth`) is the design target for exposing these gates as routable commands via `cth workstream`
-(with profile aliases such as `cth plan`, `cth qa`, and `cth release`; Build-namespace entry is
-`cth workstream build` — top-level `cth build` stays unit lifecycle).
+above (toolchain → agent → application). Promotion between namespaces is gated: Plan foundation
+must be **validated** before Build and Brand each start their own specs (Build does not wait on
+Brand); Brand assets must be **approved** before Build integrates them; Build artifacts must be
+**released** before Control records a shipment. Solid arrows are those checkpoints. Dotted edges
+carry shared context, feedback, and ops priorities — the agile inner loop inside the production
+container, while Control still sees a clean outer waterfall.
+
+The `runtime-controller` (Cthulhu, `cth`) is the design target for exposing these gates as
+routable commands via `cth workstream` (with profile aliases such as `cth plan`, `cth qa`, and
+`cth release`; Build-namespace entry is `cth workstream build` — top-level `cth build` stays
+unit lifecycle). See [runtime-controller.md#workstream-routing](runtime-controller.md#workstream-routing).
 
 **Filesystem layout.** On a typical machine, Workstreams roots sit alongside each other under
 `~/Workstreams/` (or your chosen mount — the namespace names are conventions, not requirements).
