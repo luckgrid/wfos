@@ -22,10 +22,16 @@ implementations in this workspace and their CLIs.
 | `native-toolchain` | Native Unix/Rust tools and scripts | Panoply | `panoply` |
 | `portable-component-runtime` | WASM/WASI sandboxed components | Wisp | — |
 | `metadata-plane` | Descriptors, registry, schemas, policies | Ontarch | — |
-| `agent-interface` | Scoped agent/daemon layer (planned) | Casper | — |
 
 Another configuration could implement `runtime-controller` with a different product or
 collapse several archetypes behind one CLI — the archetype ids stay stable in metadata.
+
+### Future archetype — `agent-interface`
+
+Outside the current Level 0 package set, WfOS reserves the future archetype
+`agent-interface` for a scoped agent/daemon layer over Cthulhu and Ontarch. No product
+brand is adopted for it yet. See the Level 0 namespace alignment §17 for the conceptual
+surface; do not treat it as a core package, CLI, or repository requirement today.
 
 ## Interface layers
 
@@ -62,7 +68,9 @@ raw paths.
 above (toolchain → agent → application). Promotion between namespaces is gated: Plan content must
 be validated before Build implements it; Brand assets must be approved before they ship; Build
 artifacts must be ship-ready before Control records a release. Cthulhu (`cth`) is the design
-target for exposing these gates as routable commands (`cth plan`, `cth build`, `cth qa`, etc.).
+target for exposing these gates as routable commands via `cth workstream` (with profile aliases
+such as `cth plan`, `cth qa`, and `cth release`; Build-namespace entry is
+`cth workstream build` — top-level `cth build` stays unit lifecycle).
 
 **Filesystem layout.** On a typical machine, Workstreams roots sit alongside each other under
 `~/Workstreams/` (or your chosen mount — the namespace names are conventions, not requirements).

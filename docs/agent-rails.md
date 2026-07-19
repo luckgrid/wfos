@@ -150,8 +150,9 @@ cached scan and must be re-scanned (`ontarch skills scan <id>`) before it can lo
 skills not in `allowed_skill_ids` warn only. Together, the profile flag and per-skill scan mean
 an unscanned or stale skill does not load. See [agent-skills.md](agent-skills.md).
 
-## Agent interface (planned)
+## Agent interface (future archetype)
 
-A friendly scoped agent/daemon layer (codename Casper) is planned: it observes sessions, reads
-system context, suggests actions, and helps operate the runtime controller safely — always
-within the rails above, never around them.
+A scoped agent/daemon layer under the future `agent-interface` archetype may later observe
+sessions, read system context, suggest actions, and help operate the runtime controller
+safely — always within the rails above, never around them. Product naming is pending; it is
+not part of the current Level 0 package set.

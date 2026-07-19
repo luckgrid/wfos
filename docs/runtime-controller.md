@@ -30,6 +30,7 @@ cth portable <c> run or inspect portable WASM/WASI components (Wisp)
 cth native <c>   inspect and execute host-native tooling (Panoply)
 cth meta <c>     validate, graph, and query system metadata (Ontarch)
 cth package …    hand off to the package translator (Polytope)
+cth workstream …   profile-agnostic Workstreams / gateway routing
 cth tendril <c>  list, inspect, attach, and invoke runtime integrations
 cth agent        run scoped agent rails and workflows
 ```
@@ -43,26 +44,39 @@ Every command should be explainable: `cth <cmd> --explain` prints the unit, the 
 and native manifest it resolved, the runtime/package adapter, the native command, the session
 id, and the policies applied.
 
-## Workstreams routing
+## Workstream routing
 
-Cthulhu routes into the four Workstreams namespaces (design target):
+Cthulhu routes into Workstreams namespaces and gateway metadata through a universal
+`cth workstream` surface. Profile shortcuts (`cth plan`, `cth brand`, `cth control`, plus
+`spec` / `qa` / `release` / `agent`) alias into it. Top-level `cth build|dev|check` remain
+unit-lifecycle verbs — Build-namespace entry is `cth workstream build`, not `cth build`.
 
 ```txt
-cth plan …       Plan — Decisions (briefs, specs, strategy)
-cth brand …      Brand — Expressions (design, content)
-cth build …      Build — Implementations (code, wfos, ds)
-cth control …    Control — Operations (records, sync)
-cth spec …       Plan filter (kind: spec)
-cth qa …         Build QA gateway
-cth release …    Build + Control when enabled
+# Universal (preferred)
+cth workstream plan …       Plan — Decisions (briefs, specs, strategy)
+cth workstream brand …      Brand — Expressions (design, content)
+cth workstream build …      Build — Implementations (code, wfos, ds)
+cth workstream control …    Control — Operations (records, sync)
+
+# Workstreams profile aliases
+cth plan …                → cth workstream plan …
+cth brand …               → cth workstream brand …
+cth control …             → cth workstream control …
+cth spec …                Plan filter (kind: spec)
+cth qa …                  Build QA gateway
+cth release …             Build + Control when enabled
+
+# Unit lifecycle (not namespace routing)
+cth build|dev|check <unit>
 ```
 
 ```mermaid
 flowchart LR
-  K[Cthulhu cth] --> PlanNs[Plan]
-  K --> BrandNs[Brand]
-  K --> BuildNs[Build]
-  K --> ControlNs[Control]
+  K[Cthulhu cth] --> WF[cth workstream]
+  WF --> PlanNs[Plan]
+  WF --> BrandNs[Brand]
+  WF --> BuildNs[Build]
+  WF --> ControlNs[Control]
   PlanNs -->|validated| BuildNs
   BrandNs -->|approved| BuildNs
   BuildNs -->|ship_ready| ControlNs

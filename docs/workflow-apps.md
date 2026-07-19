@@ -5,8 +5,8 @@ note-taking, and AI-assisted document workflows — and how they fit together. T
 **recommendations**, not dependencies: none are installed by `panoply bootstrap`, and the
 markdown-on-disk source of truth keeps every choice swappable.
 
-The detailed product concept that builds on this stack (Mindflow) is a future, decoupled
-product — not part of WfOS today.
+The deeper planning-capture concept that builds on this stack is archived and intentionally
+decoupled — not part of the current WfOS Level 0 product set.
 
 Status legend: **recommended** (the WfOS starting point) · **optional** (swappable
 alternative) · **reference** (noted, not endorsed for new work).
@@ -244,7 +244,7 @@ session management.
 
 - These apps are **documented recommendations**, not Panoply-managed tools — install them yourself.
 - The markdown directory is the contract; editors and AI engines are swappable layers over it.
-- The deeper idea-capture → spec product concept (Mindflow) is intentionally decoupled and lives
-  in the Workstreams Plan workstream. WfOS may install it eventually, but is not coupled to it now.
+- The deeper idea-capture → spec planning-capture concept is intentionally decoupled and lives
+  in the Workstreams Plan workstream as an archived concept. WfOS is not coupled to it now.
 - See [tool-catalog.md](tool-catalog.md) for the full grouped catalog and [native-toolchain.md](native-toolchain.md) for
   the native CLI substrate.
