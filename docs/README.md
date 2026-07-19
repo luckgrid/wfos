@@ -14,11 +14,11 @@ This folder is the self-contained reference for the workspace. Start with
 | [architecture.md](architecture.md) | Archetypes vs products, interface layers, the system map |
 | [runtime-architecture.md](runtime-architecture.md) | Terminal-first engine: client-daemon model and the Rust stack |
 | [monorepo.md](monorepo.md) | moon project graph + proto toolchains, tasks, conventions |
-| [native-substrate.md](native-substrate.md) | Native substrate — Unix/Rust tools, modules, config templates |
+| [native-toolchain.md](native-toolchain.md) | Native toolchain — Unix/Rust tools, modules, config templates |
 | [metadata-plane.md](metadata-plane.md) | Metadata plane — descriptors, registry, schemas, policies |
-| [runtime-controller.md](runtime-controller.md) | Runtime controller (`krk`) — discovery, routing, sessions (planned) |
-| [package-translator.md](package-translator.md) | Package translator (`hqb`) — intent → packages (planned) |
-| [portable-runtime.md](portable-runtime.md) | Portable runtime — WASM/WASI components (planned) |
+| [runtime-controller.md](runtime-controller.md) | Runtime controller (`cth`) — discovery, routing, sessions (planned) |
+| [package-translator.md](package-translator.md) | Package translator (`cth package`) — intent → packages (planned) |
+| [portable-component-runtime.md](portable-component-runtime.md) | Portable component runtime — WASM/WASI components (planned) |
 | [agent-configs.md](agent-configs.md) | Shared agent profiles, app-integration pattern, lean AGENTS.md |
 | [agent-skills.md](agent-skills.md) | On-demand skill registry, templates, Fabric patterns, load logging |
 | [agent-rails.md](agent-rails.md) | Agent rails, gates, MCP exposure, skill scanning |
@@ -34,16 +34,16 @@ This folder is the self-contained reference for the workspace. Start with
 
 | Archetype | Product | CLI | Role |
 |-----------|---------|-----|------|
-| runtime-controller | Kraken | `krk` | Discovery, routing, sessions, agent rails |
-| package-translator | Hypercube | `hqb` | Intent → packages and artifacts |
-| native-substrate | Dust | `dust` | Local Unix/Rust tool execution |
-| portable-runtime | Ether | — | WASM/WASI sandboxed components |
-| metadata-plane | Archon | — | Descriptors, registry, schemas, policies |
+| runtime-controller | Cthulhu | `cth` | Discovery, routing, sessions, agent rails |
+| package-translator | Polytope | `cth package` | Intent → packages and artifacts |
+| native-toolchain | Panoply | `panoply` | Local Unix/Rust tool execution |
+| portable-component-runtime | Wisp | — | WASM/WASI sandboxed components |
+| metadata-plane | Ontarch | — | Descriptors, registry, schemas, policies |
 
 Archetypes are stable roles; products are the implementations shipped here. Any product is
 swappable — the archetype id is what other layers depend on.
 
 ## Status
 
-Implemented today: **Dust** (native substrate) and **Archon** (metadata plane).
-Planned: **Kraken**, **Hypercube**, **Ether**. See each guide for scope and roadmap.
+Implemented today: **Panoply** (native toolchain) and **Ontarch** (metadata plane).
+Planned: **Cthulhu**, **Polytope**, **Wisp**. See each guide for scope and roadmap.

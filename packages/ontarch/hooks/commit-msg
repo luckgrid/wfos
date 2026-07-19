@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# commit-msg — lightweight conventional-commit check. Dependency-free (bash only): no commitlint,
+# cog, or czg required. Enforces the subject grammar
+#   <type>[optional scope][!]: <description>
+# where type ∈ {feat, fix, docs, chore, refactor, test}. Merge/Revert/fixup subjects pass through.
+# Referenced from .pre-commit-config.yaml as a commit-msg-stage local hook.
+set -euo pipefail
+
+msg_file="${1:?usage: commit-msg <commit-message-file>}"
+subject="$(grep -vE '^\s*#' "$msg_file" | sed '/^\s*$/d' | head -n1)"
+
+case "$subject" in
+  "Merge "* | "Revert "* | "fixup! "* | "squash! "*) exit 0 ;;
+esac
+
+pattern='^(feat|fix|docs|chore|refactor|test)(\([a-z0-9._/-]+\))?!?: .+'
+if printf '%s' "$subject" | grep -Eq "$pattern"; then
+  exit 0
+fi
+
+cat >&2 <<EOF
+✗ commit message is not a conventional commit:
+    $subject
+
+  expected: <type>[(scope)][!]: <description>
+  type ∈ feat | fix | docs | chore | refactor | test
+  e.g.  feat(ontarch): add read-only polyrepo scan report
+EOF
+exit 1

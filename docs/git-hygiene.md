@@ -61,13 +61,13 @@ No secret reaches a commit. [gitleaks](https://github.com/gitleaks/gitleaks) run
 
 - **Pre-commit gate** — the local `gitleaks` hook runs `gitleaks git --staged` on every commit; a
   blocked secret is reported with its file and line and the commit is rejected.
-- **Scan routine** — `moon run archon:secrets-scan` runs a whole-repo, history-aware scan
-  (`archon secrets-scan detect`). A periodic run is a workflow-automation concern.
+- **Scan routine** — `moon run ontarch:secrets-scan` runs a whole-repo, history-aware scan
+  (`ontarch secrets-scan detect`). A periodic run is a workflow-automation concern.
 
 Both read the baseline [`.gitleaks.toml`](../.gitleaks.toml) (the built-in ruleset plus a low-noise
 allowlist for generated registry output and session logs). The routine is **report-only**: it
 scans, it never stages or writes tracked files, and it performs no remote operation. Scan a
-non-git directory or export with `archon secrets-scan dir <path>`.
+non-git directory or export with `ontarch secrets-scan dir <path>`.
 
 ## Conventional commits
 
@@ -79,11 +79,11 @@ Commit subjects follow a lightweight convention so history stays parseable and c
 type ∈ feat | fix | docs | chore | refactor | test
 ```
 
-Examples: `feat(archon): add read-only polyrepo scan report`, `fix: correct default-branch
+Examples: `feat(ontarch): add read-only polyrepo scan report`, `fix: correct default-branch
 detection`, `docs: document the gitleaks gate`.
 
 The check is a **dependency-free** `commit-msg` hook
-([`packages/archon/hooks/commit-msg`](../packages/archon/hooks/commit-msg), bash regex — no
+([`packages/ontarch/hooks/commit-msg`](../packages/ontarch/hooks/commit-msg), bash regex — no
 commitlint, cog, or czg required), wired into the pre-commit config at the `commit-msg` stage.
 Merge, revert, and fixup subjects pass through.
 
@@ -109,4 +109,4 @@ Sample on this host (`rtk` vs raw `git`, ~chars/4 token estimate; also confirmed
 Grammar-consistent conventional subjects keep `git log --oneline` RTK-compressible; deeper
 history with patches is where RTK's gain is largest. The polyrepo scan report is a separate
 win: one `registry/SCAN.md` (~1KB) replaces six per-repo `git status` reads (~1.1KB of status
-text alone, plus remotes/branches/manifests the statuses never carry) — `moon run archon:scan`.
+text alone, plus remotes/branches/manifests the statuses never carry) — `moon run ontarch:scan`.

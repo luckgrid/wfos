@@ -1,0 +1,43 @@
+{
+  "session_id": "2026-06-27-e06-s2",
+  "epic": "E06",
+  "story": "S2",
+  "title": "On-demand / deferred loading",
+  "status": "done",
+  "started_at": "2026-06-27T10:00:00Z",
+  "ended_at": "2026-06-27T12:00:00Z",
+  "agent": "cursor/auto",
+  "profile": "workspace-dev",
+  "loaded_context": [
+    "Build/bin/STATE.md",
+    "Build/bin/2026-06-27-wfos-e06-skills-and-commands-sprint.md#e06s2",
+    "packages/ontarch/registry/sessions/2026-06-27-e06-s1.json"
+  ],
+  "changed_paths": [
+    "Workstreams/.agents/profiles/workspace-dev.toml",
+    "Workstreams/.agents/profiles/agent-safe-maintenance.toml",
+    "Build/src/workspaces/wfos/packages/ontarch/schemas/profile.schema.json",
+    "Build/src/workspaces/wfos/packages/ontarch/lib/registry.sh",
+    "Build/src/workspaces/wfos/packages/ontarch/bin/ontarch-skills",
+    "Build/src/workspaces/wfos/packages/ontarch/bin/ontarch",
+    "Build/src/workspaces/wfos/packages/ontarch/bin/ontarch-validate",
+    "Build/src/workspaces/wfos/packages/ontarch/graphs/edges.schema.json",
+    "Build/src/workspaces/wfos/packages/ontarch/moon.yml"
+  ],
+  "commands_run": [
+    "moon run ontarch:sync",
+    "moon run ontarch:validate",
+    "packages/ontarch/bin/ontarch skills resolve improve --caller workspace-dev",
+    "packages/ontarch/bin/ontarch skills map",
+    "jq '.edges[]|select(.rel==\"can-invoke\")' packages/ontarch/registry/graph.json"
+  ],
+  "outcome": "On-demand loading wired. Profiles declare [skills] allowed_skill_ids for workspace-dev and agent-safe-maintenance (review, improve, qmd, ponytail). profile.schema.json + ontarch_profile_record carry allowed_skill_ids. New bin/ontarch-skills with resolve/map; ontarch dispatches skills subcommand. resolve prints body path and appends load-log JSONL. Graph extended: skill nodes + profile -can-invoke-> skill edges. moon run ontarch:skills-map task added.",
+  "validation": "ontarch skills resolve improve prints SKILLS_HOME body path + load-log line. Graph shows 8 can-invoke edges (4 skills \u00d7 2 profiles). allowed_skill_ids cross-ref enforced in validate. moon run ontarch:validate PASS.",
+  "decisions": [
+    "Load logs append to registry/sessions/skill-loads.jsonl (sanctioned session-log dir)",
+    "Runtime fetch-on-call interception deferred to Cthulhu \u2014 same boundary as E05 git-push"
+  ],
+  "next": "E06.S3 \u2014 templatize common I/O",
+  "blockers": [],
+  "token_note": "No session starts with a skill catalog in initial prompt \u2014 profile declares invocable IDs only; body resolves on call."
+}

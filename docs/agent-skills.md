@@ -10,15 +10,15 @@ or body.
 | Layer | Location | Role |
 |-------|----------|------|
 | Authoring | `Workstreams/.agents/skills/*.toml` | Curated records (tracked) |
-| Generated | `archon/registry/skills.json` | Flattened index (gitignored) |
+| Generated | `ontarch/registry/skills.json` | Flattened index (gitignored) |
 | Bodies | `$SKILLS_HOME/<body_ref>/SKILL.md` | Installed skill home (default `~/.agents/skills`) |
 | Templates | `.agents/skills/templates/*.md` | Repo-local template bodies |
 
 Override the skill home with `SKILLS_HOME` when your layout differs — it is an override point,
 not a canonical filesystem layout.
 
-`moon run archon:sync` projects each TOML record through `archon_skill_record` into
-`skills.json`. `moon run archon:validate` checks records against `schemas/skill.schema.json`
+`moon run ontarch:sync` projects each TOML record through `ontarch_skill_record` into
+`skills.json`. `moon run ontarch:validate` checks records against `schemas/skill.schema.json`
 and enforces:
 
 - `touches` non-empty ⇒ `risks` non-empty
@@ -48,16 +48,16 @@ allows, resolved on call.
 Report-only tools (agent-safe):
 
 ```bash
-bin/archon skills resolve <id> [--caller PROFILE_ID]   # body path + load-log line
-bin/archon skills scan <id>                            # record scan (SkillSpector when installed)
-bin/archon skills map                                  # installed-but-unregistered drift
-moon run archon:skills-map                             # same as map
+bin/ontarch skills resolve <id> [--caller PROFILE_ID]   # body path + load-log line
+bin/ontarch skills scan <id>                            # record scan (SkillSpector when installed)
+bin/ontarch skills map                                  # installed-but-unregistered drift
+moon run ontarch:skills-map                             # same as map
 ```
 
-Load logs append to `packages/archon/registry/sessions/skill-loads.jsonl` with
+Load logs append to `packages/ontarch/registry/sessions/skill-loads.jsonl` with
 `{skill_id, ts, caller, body_ref, scan_status}`.
 
-Runtime fetch-on-call interception is deferred to Kraken — same boundary as git-push blocking
+Runtime fetch-on-call interception is deferred to Cthulhu — same boundary as git-push blocking
 in [agent-rails.md](agent-rails.md).
 
 ## Templates
@@ -70,14 +70,14 @@ Common I/O workflows are `kind=template` records pointing at markdown + frontmat
 
 [Fabric](https://github.com/danielmiessler/fabric) patterns are optional `kind=pattern` catalog
 entries (`source=fabric`). They stay unscanned and out of `allowed_skill_ids` until installed
-and scanned. `archon skills resolve` refuses absent bodies with an install-Fabric message.
+and scanned. `ontarch skills resolve` refuses absent bodies with an install-Fabric message.
 
 Fabric and SkillSpector are optional tools — see [tool-catalog.md](tool-catalog.md). Gate
-structure lands in Archon; scanner execution is install-time.
+structure lands in Ontarch; scanner execution is install-time.
 
 ## Graph
 
-`archon sync` adds `skill:<id>` nodes and `profile:<p> -can-invoke-> skill:<id>` edges for
+`ontarch sync` adds `skill:<id>` nodes and `profile:<p> -can-invoke-> skill:<id>` edges for
 profile-declared skill ids alongside existing `profile -selects-> policy` edges.
 
 ## Related docs

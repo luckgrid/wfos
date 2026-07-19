@@ -1,0 +1,49 @@
+layer: tool
+language: bash
+
+project:
+  name: "panoply"
+  description: "Native toolchain — global low-level Unix/Rust tools for devs and agents."
+
+# Thin wrappers over the panoply dispatcher so the substrate joins the project graph.
+# doctor/list/env are read-only and agent-safe; bootstrap stays human-only and is
+# intentionally not exposed as a cached task.
+tasks:
+  doctor:
+    command: "bin/panoply"
+    args: ["doctor"]
+    options:
+      cache: false
+
+  list:
+    command: "bin/panoply"
+    args: ["list"]
+    options:
+      cache: false
+
+  env:
+    command: "bin/panoply"
+    args: ["env"]
+    options:
+      cache: false
+
+  gen-check:
+    command: "bin/panoply"
+    args: ["gen", "brewfile", "--check"]
+    options:
+      cache: false
+
+  validate-substrate:
+    command: "bin/validate-substrate.sh"
+    options:
+      cache: false
+
+  validate-dotfiles:
+    command: "dotfiles/bin/validate-dotfiles.sh"
+    options:
+      cache: false
+
+  validate-secrets:
+    command: "dotfiles/bin/validate-secrets.sh"
+    options:
+      cache: false

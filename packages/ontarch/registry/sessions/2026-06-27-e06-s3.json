@@ -1,0 +1,36 @@
+{
+  "session_id": "2026-06-27-e06-s3",
+  "epic": "E06",
+  "story": "S3",
+  "title": "Templatize common I/O",
+  "status": "done",
+  "started_at": "2026-06-27T12:00:00Z",
+  "ended_at": "2026-06-27T14:00:00Z",
+  "agent": "cursor/auto",
+  "profile": "workspace-dev",
+  "loaded_context": [
+    "Build/bin/2026-06-27-wfos-e06-skills-and-commands-sprint.md#e06s3",
+    "packages/ontarch/registry/sessions/2026-06-27-e06-s2.json"
+  ],
+  "changed_paths": [
+    "Workstreams/.agents/skills/templates/adr.md",
+    "Workstreams/.agents/skills/templates/agent-prompt.md",
+    "Workstreams/.agents/skills/templates/workflow-manifest.md",
+    "Workstreams/.agents/skills/adr.template.toml",
+    "Workstreams/.agents/skills/agent-prompt.template.toml",
+    "Workstreams/.agents/skills/workflow-manifest.template.toml",
+    "Build/src/workspaces/wfos/packages/ontarch/bin/ontarch-validate"
+  ],
+  "commands_run": [
+    "moon run ontarch:validate",
+    "packages/ontarch/bin/ontarch skills resolve adr --caller workspace-dev"
+  ],
+  "outcome": "Three template skills (ADR, agent-prompt, workflow-manifest) with markdown+frontmatter bodies under .agents/skills/templates/ and kind=template wfos records. _validate_skills checks template validator non-empty, body exists, and frontmatter parses.",
+  "validation": "moon run ontarch:validate PASS for 3 template records. Templates resolve via ontarch skills resolve to repo-local body paths.",
+  "decisions": [
+    "POC scope: 3 templates only; RD/PRD/TRD/ARD/SOP family extends same pattern per agent-skills.md"
+  ],
+  "next": "E06.S4 \u2014 Fabric patterns",
+  "blockers": [],
+  "token_note": "Agent sends template parameters, not a re-derived prompt \u2014 medium token lever."
+}

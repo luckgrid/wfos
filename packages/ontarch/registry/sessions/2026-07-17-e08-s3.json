@@ -1,0 +1,38 @@
+{
+  "session_id": "2026-07-17-e08-s3",
+  "epic": "E08",
+  "story": "S3",
+  "title": "Dry-run cleanup",
+  "status": "done",
+  "started_at": "2026-07-18T03:10:00Z",
+  "ended_at": "2026-07-18T03:18:00Z",
+  "agent": "cursor/composer",
+  "profile": "workspace-dev",
+  "loaded_context": [
+    "Build/bin/2026-07-17-wfos-e08-bin-archive-lifecycle-sprint.md#e08s3",
+    "packages/ontarch/registry/sessions/2026-07-17-e08-s2.json",
+    "packages/ontarch/registry/sessions/2026-07-17-e08-s1.json"
+  ],
+  "changed_paths": [
+    "Build/src/workspaces/wfos/packages/ontarch/bin/ontarch-bin-cleanup",
+    "Build/src/workspaces/wfos/packages/ontarch/bin/ontarch",
+    "Build/src/workspaces/wfos/packages/ontarch/moon.yml",
+    "Build/src/workspaces/wfos/docs/bin-archive.md"
+  ],
+  "commands_run": [
+    "moon run ontarch:bin-cleanup",
+    "moon run ontarch:bin-cleanup -- --mode dry-run",
+    "packages/ontarch/bin/ontarch-bin-cleanup --mode archive",
+    "PANOPLY_AGENT=1 packages/ontarch/bin/ontarch-bin-cleanup --mode archive",
+    "moon run ontarch:validate"
+  ],
+  "outcome": "ontarch-bin-cleanup implements four modes. report-only (default) and dry-run print plans with no action. archive/delete-approved validate args then refuse at draft gateway (never call rm/mv). delete-approved requires --scope; invalid/traversal scopes rejected; PANOPLY_AGENT=1 refused. Blocked: no-manifest, permanent, lib/src, approved_to mismatch. moon ontarch:bin-cleanup wired.",
+  "validation": "report-only and dry-run exit 0; archive/delete-approved exit 1 with deferred message; agent + bad-scope refusals exit 1; ontarch:validate PASS; no bin/lib/src mutations.",
+  "decisions": [
+    "draft gateway: archive/delete validate then refuse \u2014 real mutation deferred to H12/Cthulhu",
+    "delete-approved requires both --scope under namespace bin/ and matching approved_to"
+  ],
+  "next": "E08.S4 \u2014 archive classification",
+  "blockers": [],
+  "token_note": "exact cleanup plan in one read; enabling safety prerequisite"
+}

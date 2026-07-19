@@ -1,0 +1,40 @@
+{
+  "session_id": "2026-07-17-e08-s1",
+  "epic": "E08",
+  "story": "S1",
+  "title": "Report-only bin inventory",
+  "status": "done",
+  "started_at": "2026-07-18T03:00:00Z",
+  "ended_at": "2026-07-18T03:05:00Z",
+  "agent": "cursor/composer",
+  "profile": "workspace-dev",
+  "loaded_context": [
+    "Build/bin/2026-07-17-wfos-e08-bin-archive-lifecycle-sprint.md#e08s1",
+    "packages/ontarch/registry/sessions/2026-07-17-e07-s5.json",
+    "packages/ontarch/registry/sessions/2026-07-17-e07-s6.json"
+  ],
+  "changed_paths": [
+    "Build/src/workspaces/wfos/packages/ontarch/lib/registry.sh",
+    "Build/src/workspaces/wfos/packages/ontarch/bin/ontarch-bin-report",
+    "Build/src/workspaces/wfos/packages/ontarch/bin/ontarch",
+    "Build/src/workspaces/wfos/packages/ontarch/bin/ontarch-validate",
+    "Build/src/workspaces/wfos/packages/ontarch/moon.yml",
+    "Build/src/workspaces/wfos/.gitignore",
+    "Build/src/workspaces/wfos/docs/bin-archive.md",
+    "Build/src/workspaces/wfos/docs/README.md"
+  ],
+  "commands_run": [
+    "moon run ontarch:bin-report",
+    "moon run ontarch:validate",
+    "shellcheck -e SC1091 packages/ontarch/bin/ontarch packages/ontarch/bin/ontarch-bin-report packages/ontarch/lib/registry.sh"
+  ],
+  "outcome": "ontarch_emit_bin_inventory walks WS_ROOT/*/bin/<workflow>/ (du -sk, fd/find file count, oldest/newest age days, recursive manifest presence/count). bin/ontarch-bin-report + ontarch bin-report dispatch + moon ontarch:bin-report emit registry/bin-inventory.json + BIN-INVENTORY.md (gitignored). _validate_bin_inventory soft structural check. docs/bin-archive.md + docs/README.md matrix row. 4 Plan/bin workflow dirs inventoried; read-only (no bin/ writes).",
+  "validation": "moon run ontarch:bin-report produced 4 workflows / 0 with manifest; ontarch:validate PASS including bin inventory structural check; no bin/ files newer than inventory after run.",
+  "decisions": [
+    "inventory root is WS_ROOT/*/bin/<workflow>/ (namespace bins), not Build/src/workspaces package bins",
+    "size via du -sk (portable); fd preferred with find fallback; no dua dependency"
+  ],
+  "next": "E08.S2 \u2014 manifest schema",
+  "blockers": [],
+  "token_note": "one inventory read replaces N du/ls/stat explorations across namespace bin/ trees"
+}

@@ -2,7 +2,7 @@
 
 The essential native, local-first apps and tools WfOS recommends for low-level writing,
 note-taking, and AI-assisted document workflows — and how they fit together. These are
-**recommendations**, not dependencies: none are installed by `dust bootstrap`, and the
+**recommendations**, not dependencies: none are installed by `panoply bootstrap`, and the
 markdown-on-disk source of truth keeps every choice swappable.
 
 The detailed product concept that builds on this stack (Mindflow) is a future, decoupled
@@ -180,7 +180,7 @@ flowchart LR
 
 ---
 
-## Quick start (not part of `dust bootstrap`)
+## Quick start (not part of `panoply bootstrap`)
 
 These are documented installs you run manually — WfOS does not install or manage them.
 
@@ -231,20 +231,20 @@ Restore where you left off — windows, tabs, apps, and terminal context — acr
 | [Freeter](https://freeter.io/) | organize tools and resources per workflow | optional |
 | Decks | bring scattered knowledge back together | reference |
 | [Spaces](https://spacesformac.xyz/) | per-context window and app layouts | reference |
-| [tmux](https://github.com/tmux/tmux) / [zellij](https://github.com/zellij-org/zellij) | persistent terminal sessions (Dust `session` module) | core |
+| [tmux](https://github.com/tmux/tmux) / [zellij](https://github.com/zellij-org/zellij) | persistent terminal sessions (Panoply `session` module) | core |
 | [Kilo Code](https://github.com/Kilo-Org/kilocode) | reference for context/session storage and knowledge transfer between sessions/agents | reference |
 
-Terminal sessions are already part of the Dust [`session` module](native-substrate.md#modules); GUI
-window/space restoration is handled by the apps above today and is a candidate for future Kraken
+Terminal sessions are already part of the Panoply [`session` module](native-toolchain.md#modules); GUI
+window/space restoration is handled by the apps above today and is a candidate for future Cthulhu
 session management.
 
 ---
 
 ## Relationship to WfOS
 
-- These apps are **documented recommendations**, not Dust-managed tools — install them yourself.
+- These apps are **documented recommendations**, not Panoply-managed tools — install them yourself.
 - The markdown directory is the contract; editors and AI engines are swappable layers over it.
 - The deeper idea-capture → spec product concept (Mindflow) is intentionally decoupled and lives
   in the Workstreams Plan workstream. WfOS may install it eventually, but is not coupled to it now.
-- See [tool-catalog.md](tool-catalog.md) for the full grouped catalog and [native-substrate.md](native-substrate.md) for
+- See [tool-catalog.md](tool-catalog.md) for the full grouped catalog and [native-toolchain.md](native-toolchain.md) for
   the native CLI substrate.

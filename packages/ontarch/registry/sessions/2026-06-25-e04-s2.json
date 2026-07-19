@@ -1,0 +1,53 @@
+{
+  "session_id": "2026-06-25-e04-s2",
+  "epic": "E04",
+  "story": "S2",
+  "title": "Registry generation and query",
+  "status": "done",
+  "started_at": "2026-06-25T00:00:00Z",
+  "ended_at": "2026-06-25T00:00:00Z",
+  "agent": "factory/claude-opus-4.8",
+  "profile": "workspace-dev",
+  "loaded_context": [
+    "Build/bin/STATE.md",
+    "Build/bin/SESSIONS.md (tail)",
+    "Build/bin/E04_metadata_plane_registries.md#s2",
+    "packages/ontarch/registry/sessions/2026-06-25-e04-s1.json"
+  ],
+  "changed_paths": [
+    "Build/src/workspaces/wfos/packages/ontarch/lib/registry.sh",
+    "Build/src/workspaces/wfos/packages/ontarch/bin/ontarch-sync",
+    "Build/src/workspaces/wfos/packages/ontarch/registry/QUERIES.md",
+    "Build/src/workspaces/wfos/packages/ontarch/registry/queries/by-kind.jq",
+    "Build/src/workspaces/wfos/packages/ontarch/registry/queries/by-layer.jq",
+    "Build/src/workspaces/wfos/packages/ontarch/registry/queries/by-domain.jq",
+    "Build/src/workspaces/wfos/packages/ontarch/registry/queries/by-status.jq",
+    "Build/src/workspaces/wfos/packages/ontarch/registry/queries/requires.jq",
+    "Build/src/workspaces/wfos/packages/ontarch/registry/queries/provides.jq",
+    "Build/src/workspaces/wfos/packages/ontarch/registry/queries/depends-on.jq",
+    "Build/src/workspaces/wfos/.gitignore",
+    "Build/src/workspaces/wfos/docs/metadata-plane.md",
+    "Build/src/workspaces/wfos/packages/ontarch/README.md",
+    "Build/src/workspaces/wfos/packages/ontarch/AGENTS.md",
+    "Build/src/workspaces/wfos/AGENTS.md"
+  ],
+  "commands_run": [
+    "bin/ontarch sync",
+    "moon run ontarch:sync",
+    "moon run ontarch:validate",
+    "jq --arg kind workspace -f registry/queries/by-kind.jq registry/units.json",
+    "moon run panoply:validate-substrate",
+    "shellcheck --severity=warning bin/ontarch* lib/*.sh"
+  ],
+  "outcome": "Registry generation + jq query interface. lib/registry.sh emits compact JSON (one record per line, like tools.json): units.json (colocated-first discovery, central overrides colocated by id, projected to id/kind/title/status/domain/layer/path/native_manifests/entrypoints/provides/requires/policy/source + a by_kind summary), policies.json (every policy TOML parsed via the descriptor reader + source path), and skills.json/profiles.json seeds (empty arrays; E06/E05 populate from .agents/). bin/ontarch-sync writes all four under registry/ and reports counts; it reads (does not regenerate) Panoply's tools.json. jq cookbook: registry/QUERIES.md + 7 reusable filters (by-kind/layer/domain/status, requires, provides, depends-on). Refreshed the stale host-specific tools.json via `panoply doctor` (it predated Panoply's ANSI-escaping fix and had raw control chars). Docs: metadata-plane.md gained a 'Generation and queries' + token-cost section; ontarch README/AGENTS document the validate/sync tasks; wfos AGENTS allow-list adds the two agent-safe tasks. .gitignore now ignores registry/*.json + *.dot while keeping registry/sessions/ and the jq cookbook tracked.",
+  "validation": "GATE moon run ontarch:sync PASS (units 3, policies 1, skills 0, profiles 0) and moon run ontarch:validate PASS (3/3). Filtered queries return correctly: kind=workspace -> {ds, wfos}; layer=application -> {ds, wfos}; domain=luckgrid -> {ds, panoply, wfos}; requires=proto -> wfos; provides=metadata.registry -> wfos. gitignore verified via git check-ignore (units/tools/policies json + graph.dot ignored; sessions/*.json, QUERIES.md, queries/*.jq tracked). Regression: moon run panoply:validate-substrate exit 0. shellcheck --severity=warning CLEAN.",
+  "decisions": [
+    "registry JSON is compact (inline arrays, one record per line) to keep jq + RTK reads cheap, matching the tools.json shape",
+    "units.json de-dupes by id with central overriding colocated; each record carries source=colocated|central for provenance",
+    "the M1 query interface is a jq cookbook (QUERIES.md + queries/*.jq) per the epic DoD; a dedicated query command is deferred to Cthulhu (H09)",
+    "ontarch sync reads tools.json but never regenerates it — tools.json stays Panoply's artifact (panoply doctor)"
+  ],
+  "next": "E04.S3 — stand up Workstreams/.agents/ (READMEs + generated local-toolkit.yml)",
+  "blockers": [],
+  "token_note": "one filtered query (jq over a small units.json) answers kind/layer/domain/dependency questions that otherwise need scanning moon.yml + each package manifest + READMEs; token-cost note recorded in QUERIES.md and docs/metadata-plane.md"
+}

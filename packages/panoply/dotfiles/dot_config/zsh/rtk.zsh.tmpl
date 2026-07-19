@@ -1,0 +1,20 @@
+{{- $p := index .profiles .profile -}}
+# ~/.config/zsh/rtk.zsh — managed by chezmoi (WfOS). Profile: {{ .profile }}
+#
+# Wires RTK (the recommended-default output compressor) from profile data. RTK INSTALL is owned
+# by `panoply bootstrap` / the manifest `agent` module; this fragment owns the chezmoi integration
+# and the profile-driven on/off, then sources the single authoritative Panoply RTK layer so the
+# routing logic lives in one place (config/shell/rtk.zsh).
+{{ if $p.rtk -}}
+export PANOPLY_RTK=1
+{{- else -}}
+export PANOPLY_RTK=0
+{{- end }}
+
+# Tell panoply.zsh not to also source the RTK layer (this fragment is authoritative here).
+export PANOPLY_RTK_MANAGED=1
+
+# Source the Panoply RTK layer (guarded; safe when rtk is absent). PANOPLY_HOME is set by panoply.zsh.
+_wfos_rtk_frag="${PANOPLY_HOME:-$HOME/Workstreams/Build/src/workspaces/wfos/packages/panoply}/config/shell/rtk.zsh"
+[ -f "$_wfos_rtk_frag" ] && source "$_wfos_rtk_frag"
+unset _wfos_rtk_frag

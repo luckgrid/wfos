@@ -1,4 +1,4 @@
-# Archon descriptor — WfOS Level 0 workspace (colocated beside the unit).
+# Ontarch descriptor — WfOS Level 0 workspace (colocated beside the unit).
 # One read here replaces scanning packages/, apps/, moon.yml, and the READMEs to
 # infer what this workspace is, how to drive it, and the rails it runs under.
 id = "wfos"
@@ -6,7 +6,7 @@ kind = "workspace"
 title = "WfOS Level 0 Workspace"
 status = "active"
 version = "0.1.0"
-summary = "Local-first Workflows Operating System workspace — native substrate + metadata plane."
+summary = "Local-first Workflows Operating System workspace — native toolchain + metadata plane."
 
 system_space = "luckgrid"
 domain = "luckgrid"

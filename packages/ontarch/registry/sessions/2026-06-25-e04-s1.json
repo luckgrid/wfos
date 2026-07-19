@@ -1,0 +1,44 @@
+{
+  "session_id": "2026-06-25-e04-s1",
+  "epic": "E04",
+  "story": "S1",
+  "title": "Expand ontarch descriptor schema",
+  "status": "done",
+  "started_at": "2026-06-25T00:00:00Z",
+  "ended_at": "2026-06-25T00:00:00Z",
+  "agent": "factory/claude-opus-4.8",
+  "profile": "workspace-dev",
+  "loaded_context": [
+    "Build/bin/STATE.md",
+    "Build/bin/SESSIONS.md (tail)",
+    "Build/bin/E04_metadata_plane_registries.md#s1",
+    "Plan/bin/wfos/lg_wfos_lvl_0_metadata_plane.md#101-descriptors"
+  ],
+  "changed_paths": [
+    "Build/src/workspaces/wfos/packages/ontarch/schemas/unit.schema.json",
+    "Build/src/workspaces/wfos/packages/ontarch/descriptors/ds.descriptor.toml",
+    "Build/src/workspaces/wfos/packages/ontarch/descriptors/panoply.descriptor.toml",
+    "Build/src/workspaces/wfos/packages/ontarch/lib/common.sh",
+    "Build/src/workspaces/wfos/packages/ontarch/lib/descriptor.sh",
+    "Build/src/workspaces/wfos/packages/ontarch/bin/ontarch",
+    "Build/src/workspaces/wfos/packages/ontarch/bin/ontarch-validate",
+    "Build/src/workspaces/wfos/packages/ontarch/moon.yml",
+    "Build/src/workspaces/wfos/wfos.descriptor.toml"
+  ],
+  "commands_run": [
+    "bin/ontarch validate",
+    "moon run ontarch:validate",
+    "shellcheck --severity=warning bin/ontarch bin/ontarch-validate lib/common.sh lib/descriptor.sh"
+  ],
+  "outcome": "Unit descriptor schema + the dependency-free ontarch validate gate. schemas/unit.schema.json validates the canon §10.1 fields (id, kind, title, status, system_space, domain, layer, paths.root, native.manifests, entrypoints, cli, capabilities.provides/requires, policy) with enums for kind/status/layer and additionalProperties:true so the richer panoply descriptor (cli/install/modules/runtime_manager) still validates. New ontarch toolchain (bash+awk+jq, no new deps): lib/common.sh (paths/logging), lib/descriptor.sh (awk reader for the regular TOML subset -> jq-assembled nested JSON + ontarch_find_descriptors discovery), bin/ontarch dispatcher, bin/ontarch-validate gate that reads required keys + enums FROM the schema (schema is source of truth). Descriptors: wfos workspace colocated at the workspace root; ds workspace central + status=planned (no dir scaffold, per decision); panoply brought up to schema (added title/status/paths.root/layer/domain, kept routing hints). Discovery is colocated-first (workspaces/<ws>/, wfos packages/apps) + central ontarch/descriptors override.",
+  "validation": "GATE moon run ontarch:validate PASS — 3/3 descriptors (ds, panoply, wfos) validate against unit.schema.json (required present, enums in range, paths.root non-empty). bin/ontarch validate exit 0. shellcheck --severity=warning CLEAN on all 4 new bash files.",
+  "decisions": [
+    "ontarch owns build-time metadata tasks (validate/sync) in bash+awk+jq — zero new deps, mirrors Panoply's E01-E03 precedent; ontarch still exposes no runtime CLI",
+    "descriptors use a regular TOML subset (top-level + single-bracket tables + single-line inline arrays) so an awk reader + jq can assemble nested JSON without a TOML library",
+    "validator reads required/enum from unit.schema.json rather than hardcoding them, so the schema stays the single source of truth",
+    "ds is a central planned descriptor (no directory scaffold); wfos is colocated at the workspace root; central overrides colocated for managed units"
+  ],
+  "next": "E04.S2 — registry generation (units/skills/profiles/policies json) + jq query cookbook",
+  "blockers": [],
+  "token_note": "loaded 1 story block + 1 canon ref (§10.1) + STATE/ledger tail; one descriptor read answers what scanning packages/apps/moon.yml/READMEs would (token-cost note quantified in S2)"
+}

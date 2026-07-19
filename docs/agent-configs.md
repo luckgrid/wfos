@@ -14,21 +14,21 @@ remote-write policy, an `[isolation]` field (worktree/branch scope + jj opt-in),
 validators, an output compressor, and a session-log target. Apps consume the shared intent through
 their own (chezmoi-rendered) config syntax — they never become a second policy source of truth.
 
-[Archon](metadata-plane.md) policies remain the enforcement authority. A profile *selects* a
+[Ontarch](metadata-plane.md) policies remain the enforcement authority. A profile *selects* a
 policy through its `rails` field and *scopes* it. The cross-cutting
-[`agent-git`](../packages/archon/policies/agent-git.policy.toml) policy (`applies_to = "agent"`)
-governs git allow/gate/block via the graph; profiles keep `dust.agent` / `no-agent-git-push` as
+[`agent-git`](../packages/ontarch/policies/agent-git.policy.toml) policy (`applies_to = "agent"`)
+governs git allow/gate/block via the graph; profiles keep `panoply.agent` / `no-agent-git-push` as
 `rails` and must not contradict `agent-git` in `[commands]`. Scoped agents declare
 `[isolation] mode` as `worktree` or `branch` (not `main`) with `jj = "opt-in"` — see
-[agent-rails.md](agent-rails.md#worktree-isolation). `archon validate` checks every profile against
-`schemas/profile.schema.json`; `archon sync` flattens them into `registry/profiles.json` and draws
+[agent-rails.md](agent-rails.md#worktree-isolation). `ontarch validate` checks every profile against
+`schemas/profile.schema.json`; `ontarch sync` flattens them into `registry/profiles.json` and draws
 `profile → selects → policy` edges in the project graph.
 
 ## App integration pattern
 
 ```mermaid
 flowchart TD
-  Pol[Archon policies] -->|selected via rails| Reg[.agents/profiles]
+  Pol[Ontarch policies] -->|selected via rails| Reg[.agents/profiles]
   Reg --> Cursor[Cursor]
   Reg --> Zed[Zed]
   Reg --> Factory[Factory]
@@ -48,7 +48,7 @@ Rules:
 - Require logs for autonomous routines.
 
 The wiring from each app to the profile data is recorded in the routing contract
-([`packages/dust/dotfiles/.chezmoidata/routing.toml`](../packages/dust/dotfiles/.chezmoidata/routing.toml)):
+([`packages/panoply/dotfiles/.chezmoidata/routing.toml`](../packages/panoply/dotfiles/.chezmoidata/routing.toml)):
 for every app, `consumes_profile_data = true` and `holds_secrets = false`.
 
 Chezmoi app templates that exist today: Claude Code (`dot_claude/settings.json.tmpl`) and Zed
@@ -61,8 +61,8 @@ WfOS carries **two** profile concepts. They answer different questions and must 
 
 | Layer | Home | Question it answers | Consumed by |
 |-------|------|-------------------|-------------|
-| **Agent operating profile** | `Workstreams/.agents/profiles/*.toml` | What may this agent session touch? (scope, commands, rails, validators, compressor intent) | Agents, Archon (`archon validate` / `archon sync` → `profiles.json`), app renderers that read registry data |
-| **Machine / chezmoi profile** | `packages/dust/dotfiles/.chezmoidata/profiles.toml` | What config targets render on this host? (GUI, secrets, `rtk` shell hook) | chezmoi at render time (`local-macos-full`, `agent-safe`, …) |
+| **Agent operating profile** | `Workstreams/.agents/profiles/*.toml` | What may this agent session touch? (scope, commands, rails, validators, compressor intent) | Agents, Ontarch (`ontarch validate` / `ontarch sync` → `profiles.json`), app renderers that read registry data |
+| **Machine / chezmoi profile** | `packages/panoply/dotfiles/.chezmoidata/profiles.toml` | What config targets render on this host? (GUI, secrets, `rtk` shell hook) | chezmoi at render time (`local-macos-full`, `agent-safe`, …) |
 
 ```mermaid
 flowchart TD
@@ -79,13 +79,13 @@ flowchart TD
 **RTK wiring today:** the agent profile `[output] compressor` field records compressor intent in
 the registry (`output_compressor` in `profiles.json`). The Claude Code hook and the shell RTK
 layer (`config/shell/rtk.zsh`) gate on the **machine** profile `rtk` flag in
-`.chezmoidata/profiles.toml` (from the native-substrate module). Until chezmoi bridges registry
+`.chezmoidata/profiles.toml` (from the native-toolchain module). Until chezmoi bridges registry
 data at render time, keep them aligned manually: set machine `rtk = true` when the active agent
 profile declares `compressor = "rtk"`; set machine `rtk = false` to opt out on disk regardless of
 registry intent. Skill-loading dev profiles (`workspace-dev`, `agent-safe-maintenance`) declare
 `compressor = "rtk"`; `docs-only` omits it.
 
-See [`packages/dust/dotfiles/ROUTING.md`](../packages/dust/dotfiles/ROUTING.md) for how app
+See [`packages/panoply/dotfiles/ROUTING.md`](../packages/panoply/dotfiles/ROUTING.md) for how app
 templates consume machine profile data without becoming a policy source of truth.
 
 ## The lean `AGENTS.md` pattern
@@ -116,5 +116,5 @@ prompt, and a lean `AGENTS.md` keeps per-workspace instructions short. Shared pr
 ## Related
 
 - [Agent rails and gates](agent-rails.md) — the rails, gates, and the SkillSpector skill gate.
-- [Metadata plane](metadata-plane.md) — Archon descriptors, policies, registry, and graph.
+- [Metadata plane](metadata-plane.md) — Ontarch descriptors, policies, registry, and graph.
 - [`.agents/profiles/README.md`](../../../../../.agents/profiles/README.md) — the profile contract.

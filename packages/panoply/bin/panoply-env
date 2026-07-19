@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+# panoply env — print the resolved Panoply environment (paths, module map, PANOPLY_AGENT state).
+# Read-only and agent-safe.
+#
+#   panoply env            resolved environment as KEY=value lines + a module map
+#   panoply env --shell    the shell activation snippet (config/shell/panoply.zsh)
+#   panoply env --json     the resolved environment as a JSON object (paths + modules)
+set -uo pipefail
+
+_self="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../lib/common.sh
+source "$_self/../lib/common.sh"
+# shellcheck source=../lib/manifest.sh
+source "$_self/../lib/manifest.sh"
+
+_json_escape() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'; }
+
+# Default-tool ids for a module, comma-joined.
+_module_defaults() {
+  panoply_manifest_tsv | awk -F'\037' -v m="$1" '$1==m && $3=="true" {printf (n++?",":"") $2}'
+}
+# Alternative ids referenced by a module's tools, de-duplicated, comma-joined.
+_module_alternatives() {
+  panoply_manifest_tsv | awk -F'\037' -v m="$1" '
+    $1==m && $7!="" { n=split($7,a,","); for(i=1;i<=n;i++) if(!seen[a[i]]++) printf (c++?",":"") a[i] }'
+}
+
+cmd_shell() {
+  local fragment="$PANOPLY_CONFIG/shell/panoply.zsh"
+  [ -f "$fragment" ] || panoply_die "missing shell fragment: $fragment"
+  cat "$fragment"
+}
+
+cmd_json() {
+  local agent="${PANOPLY_AGENT:-0}"
+  local home_resolved="${PANOPLY_HOME:-$PANOPLY_PKG}"
+  printf '{\n'
+  printf '  "paths": {\n'
+  printf '    "panoply_pkg": "%s",\n' "$(_json_escape "$PANOPLY_PKG")"
+  printf '    "panoply_manifest": "%s",\n' "$(_json_escape "$PANOPLY_MANIFEST")"
+  printf '    "panoply_config": "%s",\n' "$(_json_escape "$PANOPLY_CONFIG")"
+  printf '    "panoply_bin": "%s",\n' "$(_json_escape "$PANOPLY_BIN")"
+  printf '    "panoply_home": "%s",\n' "$(_json_escape "$home_resolved")"
+  printf '    "wfos_root": "%s",\n' "$(_json_escape "$WFOS_ROOT")"
+  printf '    "ontarch_pkg": "%s",\n' "$(_json_escape "$ONTARCH_PKG")"
+  printf '    "ontarch_registry": "%s"\n' "$(_json_escape "$ONTARCH_REGISTRY")"
+  printf '  },\n'
+  printf '  "agent": %s,\n' "$([ "$agent" = "1" ] && echo true || echo false)"
+  printf '  "manifest_version": "%s",\n' "$(panoply_manifest_version)"
+  printf '  "modules": {\n'
+  local first=1 m defs alts
+  while IFS= read -r m; do
+    [ -n "$m" ] || continue
+    [ "$first" = "1" ] || printf ',\n'
+    first=0
+    defs="$(_module_defaults "$m")"
+    alts="$(_module_alternatives "$m")"
+    printf '    "%s": {"default": [%s], "alternatives": [%s]}' "$m" \
+      "$(printf '%s' "$defs" | awk -F',' '{for(i=1;i<=NF;i++) printf (i>1?",":"") "\"" $i "\""}')" \
+      "$(printf '%s' "$alts" | awk -F',' '{for(i=1;i<=NF;i++) if($i!="") printf (c++?",":"") "\"" $i "\""}')"
+  done < <(panoply_manifest_modules)
+  printf '\n  }\n'
+  printf '}\n'
+}
+
+cmd_resolved() {
+  local home_resolved
+  if [ -n "${PANOPLY_HOME:-}" ]; then home_resolved="$PANOPLY_HOME"; else home_resolved="(unset; resolves to $PANOPLY_PKG)"; fi
+  printf 'PANOPLY_PKG=%s\n'         "$PANOPLY_PKG"
+  printf 'PANOPLY_MANIFEST=%s\n'    "$PANOPLY_MANIFEST"
+  printf 'PANOPLY_CONFIG=%s\n'      "$PANOPLY_CONFIG"
+  printf 'PANOPLY_BIN=%s\n'         "$PANOPLY_BIN"
+  printf 'PANOPLY_HOME=%s\n'        "$home_resolved"
+  printf 'WFOS_ROOT=%s\n'        "$WFOS_ROOT"
+  printf 'ONTARCH_PKG=%s\n'       "$ONTARCH_PKG"
+  printf 'ONTARCH_REGISTRY=%s\n'  "$ONTARCH_REGISTRY"
+  printf 'PANOPLY_AGENT=%s\n'       "${PANOPLY_AGENT:-0}"
+  printf 'manifest_version=%s\n' "$(panoply_manifest_version)"
+  printf 'modules=%s\n' "$(panoply_manifest_modules | paste -sd, -)"
+  echo
+  printf '%smodule map (default tools)%s\n' "$_C_BOLD" "$_C_RESET"
+  local m defs
+  while IFS= read -r m; do
+    [ -n "$m" ] || continue
+    defs="$(_module_defaults "$m" | sed 's/,/, /g')"
+    printf '  %-10s %s%s%s\n' "$m" "$_C_DIM" "${defs:-—}" "$_C_RESET"
+  done < <(panoply_manifest_modules)
+}
+
+main() {
+  case "${1:-}" in
+    --shell) cmd_shell ;;
+    --json)  cmd_json ;;
+    ""|--resolved) cmd_resolved ;;
+    -h|--help) printf 'usage: panoply env [--shell|--json]\n' ;;
+    *) panoply_err "unknown flag: $1"; printf 'usage: panoply env [--shell|--json]\n' >&2; exit 1 ;;
+  esac
+}
+
+main "$@"

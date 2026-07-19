@@ -1,0 +1,42 @@
+{
+  "session_id": "2026-06-23-e02-s2",
+  "epic": "E02",
+  "story": "S2",
+  "title": "Agent secret-read hard block",
+  "status": "done",
+  "started_at": "2026-06-23T00:00:00Z",
+  "ended_at": "2026-06-23T00:00:00Z",
+  "agent": "factory/claude-opus-4.8",
+  "profile": "workspace-dev",
+  "loaded_context": [
+    "Build/bin/STATE.md",
+    "Build/bin/SESSIONS.md (tail)",
+    "Build/bin/E02_secrets_and_vaults.md#s2",
+    "Plan/bin/wfos/lg_wfos_lvl_0_agent_rails.md"
+  ],
+  "changed_paths": [
+    "Build/src/workspaces/wfos/packages/ontarch/policies/panoply.agent.policy.toml",
+    "Build/src/workspaces/wfos/packages/panoply/lib/common.sh",
+    "Build/src/workspaces/wfos/packages/panoply/bin/panoply-doctor",
+    "Build/src/workspaces/wfos/packages/panoply/dotfiles/bin/validate-secrets.sh",
+    "Build/src/workspaces/wfos/packages/panoply/moon.yml",
+    "Build/src/workspaces/wfos/docs/agent-rails.md"
+  ],
+  "commands_run": [
+    "bin/panoply doctor --no-write",
+    "PANOPLY_AGENT=1 bin/panoply doctor --no-write",
+    "PANOPLY_AGENT=1 bash -c 'source lib/common.sh; panoply_require_secret_access pass'",
+    "bash packages/panoply/dotfiles/bin/validate-secrets.sh",
+    "shellcheck -x --severity=warning bin/panoply-doctor lib/common.sh dotfiles/bin/validate-secrets.sh"
+  ],
+  "outcome": "no_secret_read made enforceable, not advisory. Policy gains a [secrets] block_tools=[\"pass\",\"age\",\"sops\"] declaration (manifest agent_safe=false remains the source of truth). lib/common.sh adds panoply_require_secret_access (mirrors panoply_require_human; exit 13 under PANOPLY_AGENT=1). panoply-doctor gains a read-only secrets-rail assertion phase: it verifies each policy-blocked tool is agent_safe=false in the manifest, the policy gate is true, and a live guard self-test blocks under PANOPLY_AGENT=1; it exits non-zero only on genuine drift. The consolidated gate validate-secrets.sh (moon: panoply:validate-secrets) was authored here and proves the block; agent-rails.md documents the hard block.",
+  "validation": "panoply doctor exits 0 with 'secrets rail: ENFORCED' in both human and PANOPLY_AGENT=1 mode. Guard self-test: PANOPLY_AGENT=1 panoply_require_secret_access -> exit 13; human (PANOPLY_AGENT unset) -> exit 0. validate-secrets.sh [2/5] PASS. shellcheck --severity=warning clean (0 warnings/errors; only repo-baseline info-level SC2015/SC1091).",
+  "decisions": [
+    "Chose the guard-helper + doctor self-test approach (no new command surface), per the epic's 'no new mechanism; codify in policy and assert in panoply doctor'",
+    "Rail check targets the policy block_tools list, not the whole secrets module, so the agent-safe scanner gitleaks (added in S4) is correctly excluded from the agent_safe=false requirement",
+    "doctor never invokes pass/age/sops; it tests only the guard function, so the assertion stays read-only and agent-safe"
+  ],
+  "next": "E02.S3 — chezmoi secret integration",
+  "blockers": [],
+  "token_note": "loaded 1 story block + 1 canon ref + STATE/ledger tail; compact PASS/FAIL + exit-code gate output"
+}

@@ -17,11 +17,11 @@ implementations in this workspace and their CLIs.
 
 | Archetype id | Purpose | Product | CLI |
 |--------------|---------|---------|-----|
-| `runtime-controller` | Discovery, routing, sessions, rails | Kraken | `krk` |
-| `package-translator` | High-level intent → packages, artifacts | Hypercube | `hqb` |
-| `native-substrate` | Native Unix/Rust tools and scripts | Dust | `dust` |
-| `portable-runtime` | WASM/WASI sandboxed components | Ether | — |
-| `metadata-plane` | Descriptors, registry, schemas, policies | Archon | — |
+| `runtime-controller` | Discovery, routing, sessions, rails | Cthulhu | `cth` |
+| `package-translator` | High-level intent → packages, artifacts | Polytope | `cth package` |
+| `native-toolchain` | Native Unix/Rust tools and scripts | Panoply | `panoply` |
+| `portable-component-runtime` | WASM/WASI sandboxed components | Wisp | — |
+| `metadata-plane` | Descriptors, registry, schemas, policies | Ontarch | — |
 | `agent-interface` | Scoped agent/daemon layer (planned) | Casper | — |
 
 Another configuration could implement `runtime-controller` with a different product or
@@ -41,14 +41,14 @@ Application layer (high)  apps, sites, dashboards — minimal path surface
 
 A developer lives mostly in the toolchain layer. An agent operator works through the agent
 layer (scoped skills and tools, not folder trees). A reader of the docs site only sees the
-application layer. [Archon](metadata-plane.md) binds these layers to what lives on disk: full
+application layer. [Ontarch](metadata-plane.md) binds these layers to what lives on disk: full
 abstraction for higher levels, direct access for lower levels when needed.
 
 ## Workstreams collection
 
 The **`Workstreams/`** tree lives outside this workspace. It organizes work across four
 namespaces — each with its own role, typical artifacts, and promotion gates between them.
-Archon registers units from these namespaces so Kraken and agents can route without crawling
+Ontarch registers units from these namespaces so Cthulhu and agents can route without crawling
 raw paths.
 
 | Namespace | Role | Typical artifacts | Gate to next |
@@ -61,38 +61,38 @@ raw paths.
 **Interface layers and gates.** Content moves through the same three interface layers described
 above (toolchain → agent → application). Promotion between namespaces is gated: Plan content must
 be validated before Build implements it; Brand assets must be approved before they ship; Build
-artifacts must be ship-ready before Control records a release. Kraken (`krk`) is the design
-target for exposing these gates as routable commands (`krk plan`, `krk build`, `krk qa`, etc.).
+artifacts must be ship-ready before Control records a release. Cthulhu (`cth`) is the design
+target for exposing these gates as routable commands (`cth plan`, `cth build`, `cth qa`, etc.).
 
 **Filesystem layout.** On a typical machine, Workstreams roots sit alongside each other under
 `~/Workstreams/` (or your chosen mount — the namespace names are conventions, not requirements).
 WfOS itself often lives under `Build/src/workspaces/wfos/` in that layout; if yours differs,
-set `DUST_HOME` to your Dust package path (see [setup.md](setup.md#dust_home-and-workstreams-layout)).
+set `PANOPLY_HOME` to your Panoply package path (see [setup.md](setup.md#panoply_home-and-workstreams-layout)).
 
 ## System map
 
 ```mermaid
 flowchart TD
   WS[Workstreams Plan Brand Build Control]
-  Dev[Developer / Agent] --> KRK[Kraken krk]
-  KRK --> WS
-  KRK --> CX[Archon metadata]
-  KRK --> HQB[Hypercube hqb]
-  KRK --> DUST[Dust native tools]
-  KRK --> ETH[Ether WASM/WASI]
-  HQB --> CX
-  DUST --> CX
+  Dev[Developer / Agent] --> CTH[Cthulhu cth]
+  CTH --> WS
+  CTH --> CX[Ontarch metadata]
+  CTH --> PLT[Polytope cth package]
+  CTH --> PANOPLY[Panoply native tools]
+  CTH --> WSP[Wisp WASM/WASI]
+  PLT --> CX
+  PANOPLY --> CX
   WS --> CX
   CX --> Reg[registry + descriptors + policies]
 ```
 
-Kraken reads Archon, routes commands, runs native tools through Dust and portable components
-through Ether, and asks Hypercube to translate higher-level intent into packages. Archon is
+Cthulhu reads Ontarch, routes commands, runs native tools through Panoply and portable components
+through Wisp, and asks Polytope to translate higher-level intent into packages. Ontarch is
 the shared meaning underneath all of it.
 
 ## Principles
 
-- **Native manifests stay authoritative.** Archon describes meaning, routing, policy, and
+- **Native manifests stay authoritative.** Ontarch describes meaning, routing, policy, and
   relationships; it never replaces `Cargo.toml`, `package.json`, `mise.toml`, or a lockfile.
 - **Swappable by default.** fzf ↔ skim, tmux ↔ zellij, mise ↔ proto, git ↔ jj. Nothing
   hard-locks a workflow; the controller detects and routes.
@@ -105,4 +105,4 @@ the shared meaning underneath all of it.
 
 - Engine internals and the CLI/daemon/TUI plan: [runtime-architecture.md](runtime-architecture.md)
 - How the workspace is built and tasks run: [monorepo.md](monorepo.md)
-- The implemented pair: [native-substrate.md](native-substrate.md) and [metadata-plane.md](metadata-plane.md)
+- The implemented pair: [native-toolchain.md](native-toolchain.md) and [metadata-plane.md](metadata-plane.md)

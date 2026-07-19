@@ -1,0 +1,236 @@
+#!/usr/bin/env bash
+# ontarch-bin-cleanup — draft-safe bin cleanup planner.
+# Modes: report-only (default), dry-run, archive, delete-approved.
+# At gateway_state: draft, archive/delete-approved validate arguments then refuse —
+# they never call rm or mv. Agents under PANOPLY_AGENT=1 are refused those modes outright.
+# See docs/bin-archive.md.
+set -uo pipefail
+
+_self="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../lib/common.sh
+source "$_self/../lib/common.sh"
+# shellcheck source=../lib/registry.sh
+source "$_self/../lib/registry.sh"
+
+ontarch_require_jq
+
+MODE="report-only"
+SCOPE=""
+
+usage() {
+  cat <<EOF
+ontarch bin-cleanup — draft-safe cleanup planner (no silent deletes)
+
+usage: ontarch bin-cleanup [--mode report-only|dry-run|archive|delete-approved] [--scope <path>]
+
+modes:
+  report-only       print inventory summary + stale candidates (default; no action)
+  dry-run           print an exact move/delete plan; exit 0; no action
+  archive           validate then refuse at draft gateway (human-only; deferred)
+  delete-approved   require --scope; validate then refuse at draft gateway (human-only; deferred)
+
+Blocked always: rm -rf globs, git clean, lib/src deletes, retention=permanent,
+unmanifested deletes, scope mismatch / path traversal.
+EOF
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --mode) MODE="${2:-}"; shift 2 ;;
+    --scope) SCOPE="${2:-}"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) ontarch_err "unknown argument: $1"; usage; exit 1 ;;
+  esac
+done
+
+case "$MODE" in
+  report-only|dry-run|archive|delete-approved) ;;
+  *) ontarch_err "unknown mode: $MODE"; usage; exit 1 ;;
+esac
+
+INV="$ONTARCH_REGISTRY/bin-inventory.json"
+if [ ! -f "$INV" ]; then
+  ontarch_warn "bin-inventory.json absent — generating via bin-report"
+  "$_self/ontarch-bin-report" || ontarch_die "bin-report failed"
+fi
+
+# Normalize and reject path traversal / absolute escapes outside WS_ROOT.
+_normalize_scope() {
+  local s="$1"
+  [ -n "$s" ] || return 1
+  case "$s" in
+    *..*|~*|/*) return 1 ;;
+  esac
+  # Must stay under a namespace bin/ or lib/ is blocked entirely below.
+  case "$s" in
+    */bin|*/bin/*|bin/*) ;;
+    *) return 1 ;;
+  esac
+  printf '%s\n' "$s"
+}
+
+_is_blocked_path() {
+  local p="$1"
+  case "$p" in
+    */lib|*/lib/*|*/src|*/src/*|lib/*|src/*) return 0 ;;
+  esac
+  return 1
+}
+
+# Find a manifest beside or under a workflow path (relative to WS_ROOT).
+_find_manifest() {
+  local rel="$1"
+  local abs="$WS_ROOT/$rel"
+  if [ -f "$abs/manifest.json" ]; then
+    printf '%s\n' "$abs/manifest.json"
+    return 0
+  fi
+  if command -v fd >/dev/null 2>&1; then
+    fd --type f --hidden --no-ignore '^manifest\.json$' "$abs" 2>/dev/null | head -1
+  else
+    find "$abs" -type f -name 'manifest.json' 2>/dev/null | head -1
+  fi
+}
+
+_print_inventory_summary() {
+  printf 'mode: %s\n' "$MODE"
+  printf 'inventory: %s\n' "$INV"
+  printf 'generated_at: %s\n' "$(jq -r '.generated_at' "$INV")"
+  printf 'workflows: %s (with_manifest: %s)\n\n' \
+    "$(jq -r '.summary.total' "$INV")" \
+    "$(jq -r '.summary.with_manifest' "$INV")"
+}
+
+# Classify each workflow into actionable / blocked / advisory lines on stdout.
+# Args: <plan_kind>  where plan_kind is archive|delete
+_emit_plan_lines() {
+  local plan_kind="$1"
+  local path mf retention approved present
+  while IFS= read -r path; do
+    [ -n "$path" ] || continue
+    if _is_blocked_path "$path"; then
+      printf 'BLOCKED  %s  reason=lib-or-src\n' "$path"
+      continue
+    fi
+    present="$(jq -r --arg p "$path" '.workflows[] | select(.path == $p) | .manifest_present' "$INV")"
+    mf="$(_find_manifest "$path")"
+    if [ -z "$mf" ] || [ ! -f "$mf" ]; then
+      printf 'BLOCKED  %s  reason=no-manifest\n' "$path"
+      continue
+    fi
+    retention="$(jq -r '.retention // empty' "$mf")"
+    approved="$(jq -r '.approved_to // empty' "$mf")"
+    if [ "$retention" = "permanent" ]; then
+      printf 'BLOCKED  %s  reason=retention-permanent\n' "$path"
+      continue
+    fi
+    if [ "$plan_kind" = "delete" ]; then
+      if [ -z "$SCOPE" ]; then
+        printf 'BLOCKED  %s  reason=scope-required\n' "$path"
+        continue
+      fi
+      # delete-approved: path must be under --scope, and if approved_to is set it must equal scope
+      case "$path" in
+        "$SCOPE"|"$SCOPE"/*) ;;
+        *)
+          printf 'BLOCKED  %s  reason=outside-scope (scope=%s)\n' "$path" "$SCOPE"
+          continue
+          ;;
+      esac
+      if [ -n "$approved" ] && [ "$approved" != "$SCOPE" ]; then
+        printf 'BLOCKED  %s  reason=approved_to-mismatch (approved_to=%s scope=%s)\n' \
+          "$path" "$approved" "$SCOPE"
+        continue
+      fi
+      if [ -z "$approved" ]; then
+        printf 'BLOCKED  %s  reason=approved_to-null\n' "$path"
+        continue
+      fi
+      printf 'WOULD_DELETE  %s  retention=%s archive_reason=stale\n' "$path" "$retention"
+    else
+      printf 'WOULD_ARCHIVE %s  retention=%s archive_reason=stale promoted_to=%s/archives/\n' \
+        "$path" "$retention" "$(dirname "$path")"
+    fi
+  done < <(jq -r '.workflows[].path' "$INV")
+}
+
+_report_only() {
+  ontarch_info "ontarch bin-cleanup — report-only (no action)"
+  _print_inventory_summary
+  printf 'stale / review candidates:\n'
+  local path age present
+  while IFS= read -r path; do
+    present="$(jq -r --arg p "$path" '.workflows[] | select(.path == $p) | .manifest_present' "$INV")"
+    age="$(jq -r --arg p "$path" '.workflows[] | select(.path == $p) | .oldest_file_age_days // empty' "$INV")"
+    if [ "$present" = "false" ]; then
+      printf '  - %s  (no manifest; advisory review-before-delete)\n' "$path"
+    elif [ -n "$age" ] && [ "$age" -ge 30 ]; then
+      printf '  - %s  (oldest_file_age_days=%s)\n' "$path" "$age"
+    fi
+  done < <(jq -r '.workflows[].path' "$INV")
+  printf '\nblocked by policy (all modes): rm -rf globs, git clean, lib/src, retention=permanent, unmanifested deletes\n'
+  ontarch_ok "report-only complete (no filesystem changes)"
+}
+
+_dry_run() {
+  ontarch_info "ontarch bin-cleanup — dry-run (exact plan; no action)"
+  _print_inventory_summary
+  printf 'plan (archive candidates):\n'
+  _emit_plan_lines archive
+  printf '\nplan (delete-approved candidates; require matching --scope + approved_to):\n'
+  if [ -n "$SCOPE" ]; then
+    printf 'scope: %s\n' "$SCOPE"
+  else
+    printf 'scope: (none — delete lines will show scope-required / mismatch)\n'
+  fi
+  _emit_plan_lines delete
+  printf '\nNOTE: draft gateway — dry-run never executes rm/mv.\n'
+  ontarch_ok "dry-run complete (no filesystem changes)"
+}
+
+_refuse_mutation() {
+  local mode="$1"
+  if [ "${PANOPLY_AGENT:-}" = "1" ]; then
+    ontarch_err "mode=$mode refused under PANOPLY_AGENT=1 (agent rail)"
+    exit 1
+  fi
+  if [ "$mode" = "delete-approved" ]; then
+    if [ -z "$SCOPE" ]; then
+      ontarch_err "mode=delete-approved requires --scope <path>"
+      exit 1
+    fi
+    local norm
+    if ! norm="$(_normalize_scope "$SCOPE")"; then
+      ontarch_err "invalid --scope '$SCOPE' (must be a relative namespace bin path; no .. or absolute)"
+      exit 1
+    fi
+    SCOPE="$norm"
+  fi
+  ontarch_info "ontarch bin-cleanup — mode=$mode (draft gateway)"
+  _print_inventory_summary
+  if [ "$mode" = "delete-approved" ]; then
+    printf 'validated scope: %s\n' "$SCOPE"
+    printf 'would-be plan:\n'
+    _emit_plan_lines delete
+  else
+    printf 'would-be plan:\n'
+    _emit_plan_lines archive
+  fi
+  ontarch_err "mode=$mode deferred at draft gateway — no archive/delete executed (see docs/bin-archive.md; H12/Cthulhu)"
+  exit 1
+}
+
+case "$MODE" in
+  report-only) _report_only ;;
+  dry-run)
+    if [ -n "$SCOPE" ]; then
+      if ! SCOPE="$(_normalize_scope "$SCOPE")"; then
+        ontarch_err "invalid --scope '$SCOPE'"
+        exit 1
+      fi
+    fi
+    _dry_run
+    ;;
+  archive) _refuse_mutation archive ;;
+  delete-approved) _refuse_mutation delete-approved ;;
+esac

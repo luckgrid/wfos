@@ -4,8 +4,8 @@
 projects:
   sources:
     wfos: "."
-    dust: "packages/dust"
-    archon: "packages/archon"
+    panoply: "packages/panoply"
+    ontarch: "packages/ontarch"
 
 vcs:
   defaultBranch: main

@@ -1,0 +1,15 @@
+# Ontarch policy — agents never push or publish (WfOS Level 0 §10.4).
+# Reading and staging are safe for agents; publishing to a remote is a human action.
+id = "no-agent-git-push"
+applies_to = "agent"
+version = "0.1.0"
+
+[block]
+commands = ["git push", "git push --force", "git push --force-with-lease"]
+tools = ["gh release create", "gh pr merge"]
+
+[allow]
+commands = ["git status", "git diff", "git log", "git fetch", "git add", "git commit"]
+
+[rationale]
+text = "Push and release mutate shared history and ship code; they require a human. An agent may inspect and stage changes but never publish them to a remote."

@@ -1,0 +1,212 @@
+#!/usr/bin/env bash
+# ontarch-skills — report-only skill registry tools (resolve, scan, map).
+# Resolves body paths on demand; never inlines skill bodies into prompts.
+set -uo pipefail
+
+_self="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../lib/common.sh
+source "$_self/../lib/common.sh"
+# shellcheck source=../lib/descriptor.sh
+source "$_self/../lib/descriptor.sh"
+# shellcheck source=../lib/registry.sh
+source "$_self/../lib/registry.sh"
+
+SKILLS_HOME="${SKILLS_HOME:-$HOME/.agents/skills}"
+
+usage() {
+  cat <<EOF
+ontarch skills — on-demand skill registry tools (report-only)
+
+usage:
+  ontarch skills resolve <id> [--caller PROFILE_ID]
+  ontarch skills scan <id>
+  ontarch skills map
+
+resolve   print the body path for a skill id and append a load-log line
+scan      run SkillSpector when available; update the skill record scan fields
+map       report installed-but-unregistered skills (drift)
+EOF
+}
+
+# Args: <skill-json>
+_skill_body_path() {
+  local full="$1" kind body_ref
+  kind="$(jq -r '.kind // "skill"' <<<"$full")"
+  body_ref="$(jq -r '.body_ref // .id' <<<"$full")"
+  case "$kind" in
+    template)
+      printf '%s/skills/%s\n' "$AGENTS_HOME" "$body_ref"
+      ;;
+    skill|pattern|command)
+      printf '%s/%s/SKILL.md\n' "$SKILLS_HOME" "$body_ref"
+      ;;
+    *) printf '%s/%s/SKILL.md\n' "$SKILLS_HOME" "$body_ref" ;;
+  esac
+}
+
+# Args: <skill-json>
+_skill_scan_gate_ok() {
+  jq -e '
+    (.scan.status // "unscanned") == "passed"
+    and ((.scan.hash // "") != "")
+    and (.scan.hash == (.version // ""))
+  ' <<<"$1" >/dev/null
+}
+
+# Find skill TOML by id. Sets _SKILL_FILE and _SKILL_JSON.
+_skill_lookup() {
+  local id="$1" f
+  _SKILL_FILE=""
+  _SKILL_JSON=""
+  for f in "$AGENTS_HOME"/skills/*.toml; do
+    [ -e "$f" ] || continue
+    if [ "$(jq -r '.id' <<<"$(ontarch_descriptor_json "$f")")" = "$id" ]; then
+      _SKILL_FILE="$f"
+      _SKILL_JSON="$(ontarch_descriptor_json "$f")"
+      return 0
+    fi
+  done
+  return 1
+}
+
+_cmd_resolve() {
+  local id="${1:-}" caller="${2:-unknown}"
+  [ -n "$id" ] || ontarch_die "usage: ontarch skills resolve <id> [--caller PROFILE_ID]"
+  _skill_lookup "$id" || ontarch_die "skill not found in registry: $id"
+
+  local kind scan_status body path log_dir log_file ts line
+  kind="$(jq -r '.kind // "skill"' <<<"$_SKILL_JSON")"
+  scan_status="$(jq -r '.scan.status // "unscanned"' <<<"$_SKILL_JSON")"
+  body="$(_skill_body_path "$_SKILL_JSON")"
+
+  if [ "$kind" = "pattern" ]; then
+    if [ ! -f "$body" ]; then
+      ontarch_err "Fabric pattern '$id' body absent at $body — install Fabric to use this pattern"
+      exit 1
+    fi
+  elif [ "$kind" = "template" ]; then
+    if [ ! -f "$body" ]; then
+      ontarch_err "template body absent at $body"
+      exit 1
+    fi
+  elif ! _skill_scan_gate_ok "$_SKILL_JSON"; then
+    ontarch_err "skill '$id' blocked: no passing scan or stale scan.hash != version (re-scan required)"
+    exit 1
+  elif [ ! -f "$body" ]; then
+    ontarch_err "skill body absent at $body (check SKILLS_HOME=$SKILLS_HOME)"
+    exit 1
+  fi
+
+  path="$body"
+
+  ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  printf 'body_ref: %s\n' "$path"
+  printf 'scan_status: %s\n' "$scan_status"
+
+  log_dir="$WFOS_ROOT/packages/ontarch/registry/sessions"
+  log_file="$log_dir/skill-loads.jsonl"
+  mkdir -p "$log_dir"
+  line="$(jq -c -n \
+    --arg skill_id "$id" --arg ts "$ts" --arg caller "$caller" \
+    --arg body_ref "$path" --arg scan_status "$scan_status" \
+    '{skill_id:$skill_id, ts:$ts, caller:$caller, body_ref:$body_ref, scan_status:$scan_status}')"
+  printf '%s\n' "$line" >> "$log_file"
+  ontarch_ok "load-log appended to registry/sessions/skill-loads.jsonl"
+}
+
+# ponytail: rewrite scan table fields in the skill TOML (tracked, reviewable).
+_cmd_scan() {
+  local id="${1:-}"
+  [ -n "$id" ] || ontarch_die "usage: ontarch skills scan <id>"
+  _skill_lookup "$id" || ontarch_die "skill not found in registry: $id"
+
+  local version status hash scanned_at scanner="skillspector"
+  version="$(jq -r '.version // ""' <<<"$_SKILL_JSON")"
+  scanned_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+  if command -v skillspector >/dev/null 2>&1; then
+    local body verdict
+    body="$(_skill_body_path "$_SKILL_JSON")"
+    if [ -f "$body" ] && skillspector scan "$body" >/dev/null 2>&1; then
+      status="passed"
+    else
+      status="failed"
+    fi
+    hash="$version"
+    ontarch_info "skillspector ran on $body -> $status"
+  else
+    status="unscanned"
+    hash=""
+    ontarch_warn "skillspector not on PATH — recorded unscanned (install optional per docs/tool-catalog.md)"
+  fi
+
+  # Rewrite [scan] section in the TOML file.
+  awk -v status="$status" -v scanner="$scanner" -v hash="$hash" -v scanned_at="$scanned_at" '
+    BEGIN { in_scan=0; done=0 }
+    /^\[scan\]/ { in_scan=1; print; next }
+    in_scan && /^\[/ { in_scan=0 }
+    in_scan && /^status = / { print "status = \"" status "\""; done=1; next }
+    in_scan && /^scanner = / { print "scanner = \"" scanner "\""; next }
+    in_scan && /^hash = / { print "hash = \"" hash "\""; next }
+    in_scan && /^scanned_at = / { print "scanned_at = \"" scanned_at "\""; next }
+    { print }
+  ' "$_SKILL_FILE" > "${_SKILL_FILE}.tmp" && mv "${_SKILL_FILE}.tmp" "$_SKILL_FILE"
+
+  ontarch_ok "scan recorded for $id: status=$status hash=$hash"
+}
+
+_cmd_map() {
+  local registered='[]' f id installed unregistered='[]' dangling='[]'
+  ontarch_require_jq
+  for f in "$AGENTS_HOME"/skills/*.toml; do
+    [ -e "$f" ] || continue
+    id="$(jq -r '.id' <<<"$(ontarch_descriptor_json "$f")")"
+    registered="$(jq -c --arg id "$id" '. + [$id]' <<<"$registered")"
+    body_ref="$(jq -r '.body_ref // .id' <<<"$(ontarch_descriptor_json "$f")")"
+    kind="$(jq -r '.kind // "skill"' <<<"$(ontarch_descriptor_json "$f")")"
+    if [ "$kind" = "template" ]; then
+      [ -f "$AGENTS_HOME/skills/$body_ref" ] || dangling="$(jq -c --arg id "$id" '. + [$id]' <<<"$dangling")"
+    elif [ "$kind" = "pattern" ]; then
+      [ -f "$SKILLS_HOME/$body_ref/SKILL.md" ] || dangling="$(jq -c --arg id "$id" '. + [$id]' <<<"$dangling")"
+    else
+      [ -f "$SKILLS_HOME/$body_ref/SKILL.md" ] || dangling="$(jq -c --arg id "$id" '. + [$id]' <<<"$dangling")"
+    fi
+  done
+
+  if [ -d "$SKILLS_HOME" ]; then
+    for installed in "$SKILLS_HOME"/*/; do
+      [ -d "$installed" ] || continue
+      id="$(basename "$installed")"
+      [ -f "$installed/SKILL.md" ] || continue
+      jq -e --arg id "$id" 'index($id)' <<<"$registered" >/dev/null \
+        || unregistered="$(jq -c --arg id "$id" '. + [$id]' <<<"$unregistered")"
+    done
+  fi
+
+  ontarch_info "skill drift report"
+  printf '  registered:   %s\n' "$(jq -r 'join(", ") // "none"' <<<"$registered")"
+  printf '  unregistered: %s\n' "$(jq -r 'if length==0 then "none" else join(", ") end' <<<"$unregistered")"
+  printf '  dangling_ref: %s\n' "$(jq -r 'if length==0 then "none" else join(", ") end' <<<"$dangling")"
+}
+
+main() {
+  local cmd="${1:-help}"; shift || true
+  case "$cmd" in
+    resolve)
+      local id="" caller="unknown"
+      while [ $# -gt 0 ]; do
+        case "$1" in
+          --caller) caller="$2"; shift 2 ;;
+          *) id="$1"; shift ;;
+        esac
+      done
+      _cmd_resolve "$id" "$caller"
+      ;;
+    scan) _cmd_scan "${1:-}" ;;
+    map)  _cmd_map ;;
+    help|-h|--help) usage ;;
+    *) ontarch_err "unknown skills command: $cmd"; echo; usage; exit 1 ;;
+  esac
+}
+
+main "$@"

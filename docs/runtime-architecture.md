@@ -1,6 +1,6 @@
 # Runtime architecture
 
-This is the engine blueprint that sits under [Kraken](runtime-controller.md): a high-performance,
+This is the engine blueprint that sits under [Cthulhu](runtime-controller.md): a high-performance,
 terminal-first orchestrator driven by a unified CLI/TUI. It proxies native utilities,
 coordinates asynchronous data across simultaneous workstreams, isolates distinct
 tenant/brand execution profiles, and integrates AI augmentation natively.
@@ -16,13 +16,13 @@ data multiplexing, and AI state live in a long-running local daemon.
 
 ```mermaid
 flowchart LR
-  CLI[krk CLI/TUI] -->|cmd| D[Local daemon]
+  CLI[cth CLI/TUI] -->|cmd| D[Local daemon]
   D --> PR[tokio::process pool]
-  PR --> Dust[Dust native tools]
+  PR --> Panoply[Panoply native tools]
   D --> ORK[Orka DAG optional]
   D --> MCP[rmcp MCP server]
   MCP --> LLM[Agents / LLM]
-  D --> CX[Archon profiles + policies]
+  D --> CX[Ontarch profiles + policies]
   D -. federation .-> ZEN[Zenoh fabric]
 ```
 
@@ -42,11 +42,11 @@ systems-level primitives, each mapped to a WfOS responsibility.
 | Crate / spec | Role in WfOS | Maps to |
 |--------------|--------------|---------|
 | [Tokio](https://crates.io/crates/tokio) | Async event loop; non-blocking execution and signals | engine core |
-| [`tokio::process`](https://docs.rs/tokio/latest/tokio/process/) | Spawn native tools as async children; stream stdout/stderr without UI lag | Dust proxying |
-| [starbase](https://crates.io/crates/starbase) | Application shell — lifecycle, sessions, diagnostics, reactive systems | Kraken `krk` |
-| [clap](https://crates.io/crates/clap) | Type-safe argument and command parsing inside the starbase app | Kraken commands |
+| [`tokio::process`](https://docs.rs/tokio/latest/tokio/process/) | Spawn native tools as async children; stream stdout/stderr without UI lag | Panoply proxying |
+| [starbase](https://crates.io/crates/starbase) | Application shell — lifecycle, sessions, diagnostics, reactive systems | Cthulhu `cth` |
+| [clap](https://crates.io/crates/clap) | Type-safe argument and command parsing inside the starbase app | Cthulhu commands |
 | [Ratatui](https://crates.io/crates/ratatui) | Immediate-mode multi-panel terminal UI | TUI phase |
-| [Serde](https://crates.io/crates/serde) | Parse profiles, brand maps, and pipeline configs | Archon configs |
+| [Serde](https://crates.io/crates/serde) | Parse profiles, brand maps, and pipeline configs | Ontarch configs |
 | [Orka](https://crates.io/crates/orka) | Pluggable async DAG workflow engine (candidate) | task orchestration |
 | [Zenoh](https://crates.io/crates/zenoh) | Zero-overhead pub/sub data fabric | federation / multi-process |
 | [`rmcp`](https://crates.io/crates/rmcp) + [MCP](https://modelcontextprotocol.io) | Expose native commands as standardized LLM tools | AI augmentation |
@@ -54,9 +54,9 @@ systems-level primitives, each mapped to a WfOS responsibility.
 ### Notes that keep it honest
 
 - **starbase and clap are not alternatives.** starbase is the application shell (app
-  lifecycle, sessions, diagnostics); clap is the parser it builds on. Kraken is a starbase
+  lifecycle, sessions, diagnostics); clap is the parser it builds on. Cthulhu is a starbase
   app with clap-derived commands.
-- **Config is TOML-first.** [Archon](metadata-plane.md) descriptors, policies, and the tool manifest
+- **Config is TOML-first.** [Ontarch](metadata-plane.md) descriptors, policies, and the tool manifest
   are TOML; the registry is JSON. Serde reads all of them — keep TOML as the default and
   reach for JSON/YAML only where a format is already imposed.
 - **Orka is a candidate, not a commitment.** It is young. v0 can sequence tasks directly or
@@ -65,8 +65,8 @@ systems-level primitives, each mapped to a WfOS responsibility.
 - **Zenoh is for crossing boundaries.** On a single machine, local IPC is a Unix domain
   socket plus Tokio channels (or the `interprocess` crate). Zenoh earns its place when work
   spans processes or machines — it is the federation fabric, not the first-day default.
-- **MCP is gated.** The daemon can embed an MCP server that exposes Dust/native commands as
-  tools, but every tool call is checked against Archon agent policy (see
+- **MCP is gated.** The daemon can embed an MCP server that exposes Panoply/native commands as
+  tools, but every tool call is checked against Ontarch agent policy (see
   [agent-rails.md](agent-rails.md)). Skills are scanned with SkillSpector before they are
   trusted.
 
@@ -74,9 +74,9 @@ systems-level primitives, each mapped to a WfOS responsibility.
 
 A single operator works across brands, domains, and clients. Isolation starts at the child
 process boundary — the daemon injects the active profile's context (tenant, brand, scoped
-env) when it spawns a tool. Stronger isolation (capability-scoped WASM via [Ether](portable-runtime.md),
+env) when it spawns a tool. Stronger isolation (capability-scoped WASM via [Wisp](portable-component-runtime.md),
 OS sandboxing) layers on later. The classification of what data may cross which boundary is
-[Archon](metadata-plane.md) stream policy (`private … federated`), and promotion scope is the abstract
+[Ontarch](metadata-plane.md) stream policy (`private … federated`), and promotion scope is the abstract
 Leader policy — neither is a folder.
 
 ## Core engine prototype

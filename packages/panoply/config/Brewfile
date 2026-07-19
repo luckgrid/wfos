@@ -1,0 +1,60 @@
+# Panoply tool library — Homebrew bundle (GENERATED from manifest/panoply.tools.toml).
+# Regenerate with:  panoply gen brewfile   (do not hand-edit — the manifest is the source of truth).
+# Install all with:  brew bundle --file=Brewfile
+# `panoply bootstrap` installs only the missing subset.
+
+# shell
+brew "starship"
+brew "shellcheck"
+brew "zsh-autosuggestions"
+brew "zsh-syntax-highlighting"
+brew "zsh-autocomplete"
+
+# git
+brew "git"
+brew "gh"
+brew "jj"
+brew "lazygit"
+brew "git-delta"
+
+# nav
+brew "fzf"
+brew "zoxide"
+brew "eza"
+brew "bat"
+brew "ripgrep"
+brew "fd"
+brew "jq"
+brew "sk"
+brew "tealdeer"
+brew "choose-rust"
+
+# system
+brew "btop"
+brew "dua-cli"
+
+# session
+brew "tmux"
+brew "zellij"
+
+# secrets
+brew "pass"
+brew "age"
+brew "sops"
+brew "gitleaks"
+
+# tools
+brew "mise"
+brew "direnv"
+
+# dotfiles
+brew "chezmoi"
+
+# rust
+brew "cargo-nextest"
+
+# wisp
+brew "wasmtime"
+
+# agent
+brew "rtk"

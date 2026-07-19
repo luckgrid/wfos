@@ -1,0 +1,42 @@
+# Ontarch descriptor — Panoply native toolchain (WfOS Level 0).
+id = "panoply"
+kind = "native-toolchain"
+title = "Panoply — Native Toolchain"
+status = "active"
+archetype = "native-toolchain"
+brand = "panoply"
+version = "0.1.0"
+summary = "Global low-level Unix/Rust tool substrate for devs and agents."
+
+system_space = "luckgrid"
+domain = "luckgrid"
+layer = "native-toolchain"
+system = "wfos"
+
+[paths]
+# Relative to ~/Workstreams/ by convention — adjust if your tree differs.
+root = "Build/src/workspaces/wfos/packages/panoply"
+package = "Build/src/workspaces/wfos/packages/panoply"
+manifest = "Build/src/workspaces/wfos/packages/panoply/manifest/panoply.tools.toml"
+registry = "Build/src/workspaces/wfos/packages/ontarch/registry/tools.json"
+policy = "Build/src/workspaces/wfos/packages/ontarch/policies/panoply.agent.policy.toml"
+schema = "Build/src/workspaces/wfos/packages/ontarch/schemas/panoply.tools.schema.json"
+note = "Paths are suggested layout hints for Ontarch routing, not hard requirements."
+
+[cli]
+entry = "panoply"
+commands = ["doctor", "list", "gen", "env", "bootstrap", "version", "help"]
+
+[install]
+strategy = "global"
+package_managers = ["homebrew", "mise"]
+shell = "zsh"
+note = "Binaries install globally; only manifest, scripts, configs, and metadata live in-repo."
+
+[modules]
+ids = ["shell", "git", "nav", "system", "session", "secrets", "tools", "dotfiles", "js", "rust", "wisp", "logs", "agent"]
+
+[runtime_manager]
+default = "mise"
+present = "proto"
+note = "mise is the Panoply default; proto retained and left intact on this machine."

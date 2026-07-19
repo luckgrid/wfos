@@ -1,0 +1,53 @@
+layer: configuration
+language: bash
+
+project:
+  name: "ontarch"
+  description: "Metadata plane — descriptors, schemas, policies, and the generated registry."
+
+# Build-time metadata tasks. Ontarch still exposes no end-user runtime CLI; `validate` is
+# the registry gate and `sync` regenerates the registry from descriptors + policies + the
+# Panoply tools registry. Both are read-only over sources (agent-safe) and uncached (they read
+# host-specific inputs and emit generated output).
+tasks:
+  validate:
+    command: "bin/ontarch"
+    args: ["validate"]
+    options:
+      cache: false
+
+  sync:
+    command: "bin/ontarch"
+    args: ["sync"]
+    options:
+      cache: false
+
+  skills-map:
+    command: "bin/ontarch"
+    args: ["skills", "map"]
+    options:
+      cache: false
+
+  scan:
+    command: "bin/ontarch"
+    args: ["scan"]
+    options:
+      cache: false
+
+  bin-report:
+    command: "bin/ontarch"
+    args: ["bin-report"]
+    options:
+      cache: false
+
+  bin-cleanup:
+    command: "bin/ontarch"
+    args: ["bin-cleanup"]
+    options:
+      cache: false
+
+  secrets-scan:
+    command: "bin/ontarch"
+    args: ["secrets-scan", "detect"]
+    options:
+      cache: false

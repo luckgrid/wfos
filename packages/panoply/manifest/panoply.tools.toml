@@ -1,0 +1,469 @@
+# Panoply tool library — single source of truth.
+#
+# Format: flat array-of-tables ([[tool]]) for dependency-free shell parsing.
+# Derived artifacts: Brewfile, ontarch/registry/tools.json (doctor), shell activations.
+#
+# Fields:
+#   module        Panoply module (shell|git|nav|session|secrets|tools|js|rust|wisp|logs)
+#   id            stable tool id
+#   default       true if it is the module default (vs a swappable alternative)
+#   brew          Homebrew formula; empty string = detect-only (no auto-install)
+#   detect        command checked on PATH for "installed?"
+#   agent_safe    true if agents may invoke this tool directly
+#   alternatives  comma-separated alternative ids (informational)
+#   purpose       one-line description
+
+version = "0.1.0"
+
+# ── shell ──────────────────────────────────────────────────────────────────
+[[tool]]
+module = "shell"
+id = "starship"
+default = true
+brew = "starship"
+detect = "starship"
+agent_safe = true
+alternatives = ""
+purpose = "cross-shell prompt context"
+
+[[tool]]
+module = "shell"
+id = "shellcheck"
+default = true
+brew = "shellcheck"
+detect = "shellcheck"
+agent_safe = true
+alternatives = ""
+purpose = "shell script linting"
+
+[[tool]]
+module = "shell"
+id = "zsh-autosuggestions"
+default = true
+brew = "zsh-autosuggestions"
+detect = "share/zsh-autosuggestions/zsh-autosuggestions.zsh"
+agent_safe = true
+alternatives = ""
+purpose = "fish-like async command suggestions from history (sourced plugin)"
+
+[[tool]]
+module = "shell"
+id = "zsh-syntax-highlighting"
+default = true
+brew = "zsh-syntax-highlighting"
+detect = "share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
+agent_safe = true
+alternatives = ""
+purpose = "real-time command-line syntax highlighting (sourced plugin)"
+
+[[tool]]
+module = "shell"
+id = "zsh-autocomplete"
+default = false
+brew = "zsh-autocomplete"
+detect = "share/zsh-autocomplete/zsh-autocomplete.plugin.zsh"
+agent_safe = true
+alternatives = ""
+purpose = "real-time menu completion (sourced plugin; can conflict — optional)"
+
+# ── git ────────────────────────────────────────────────────────────────────
+[[tool]]
+module = "git"
+id = "git"
+default = true
+brew = "git"
+detect = "git"
+agent_safe = true
+alternatives = "jj"
+purpose = "version control"
+
+[[tool]]
+module = "git"
+id = "gh"
+default = true
+brew = "gh"
+detect = "gh"
+agent_safe = true
+alternatives = ""
+purpose = "GitHub CLI"
+
+[[tool]]
+module = "git"
+id = "jj"
+default = false
+brew = "jj"
+detect = "jj"
+agent_safe = true
+alternatives = "git"
+purpose = "Jujutsu VCS (git-compatible alternative)"
+
+[[tool]]
+module = "git"
+id = "lazygit"
+default = false
+brew = "lazygit"
+detect = "lazygit"
+agent_safe = true
+alternatives = ""
+purpose = "terminal git UI"
+
+[[tool]]
+module = "git"
+id = "git-delta"
+default = false
+brew = "git-delta"
+detect = "delta"
+agent_safe = true
+alternatives = ""
+purpose = "syntax-highlighting diff pager"
+
+# ── nav ────────────────────────────────────────────────────────────────────
+[[tool]]
+module = "nav"
+id = "fzf"
+default = true
+brew = "fzf"
+detect = "fzf"
+agent_safe = true
+alternatives = "skim"
+purpose = "fuzzy finder and selection"
+
+[[tool]]
+module = "nav"
+id = "zoxide"
+default = true
+brew = "zoxide"
+detect = "zoxide"
+agent_safe = true
+alternatives = ""
+purpose = "smarter directory jumping"
+
+[[tool]]
+module = "nav"
+id = "eza"
+default = true
+brew = "eza"
+detect = "eza"
+agent_safe = true
+alternatives = ""
+purpose = "modern ls replacement"
+
+[[tool]]
+module = "nav"
+id = "bat"
+default = true
+brew = "bat"
+detect = "bat"
+agent_safe = true
+alternatives = ""
+purpose = "cat with syntax highlighting"
+
+[[tool]]
+module = "nav"
+id = "ripgrep"
+default = true
+brew = "ripgrep"
+detect = "rg"
+agent_safe = true
+alternatives = ""
+purpose = "fast recursive search"
+
+[[tool]]
+module = "nav"
+id = "fd"
+default = true
+brew = "fd"
+detect = "fd"
+agent_safe = true
+alternatives = ""
+purpose = "fast file find"
+
+[[tool]]
+module = "nav"
+id = "jq"
+default = true
+brew = "jq"
+detect = "jq"
+agent_safe = true
+alternatives = ""
+purpose = "JSON processor"
+
+[[tool]]
+module = "nav"
+id = "skim"
+default = false
+brew = "sk"
+detect = "sk"
+agent_safe = true
+alternatives = "fzf"
+purpose = "fuzzy finder (Rust alternative to fzf)"
+
+[[tool]]
+module = "nav"
+id = "tldr"
+default = true
+brew = "tealdeer"
+detect = "tldr"
+agent_safe = true
+alternatives = ""
+purpose = "practical command cheatsheets (fast Rust tldr client)"
+
+[[tool]]
+module = "nav"
+id = "choose"
+default = false
+brew = "choose-rust"
+detect = "choose"
+agent_safe = true
+alternatives = ""
+purpose = "field selector — human-friendly cut/awk alternative"
+
+# ── system (resource + disk inspection) ──────────────────────────────────────
+[[tool]]
+module = "system"
+id = "btop"
+default = true
+brew = "btop"
+detect = "btop"
+agent_safe = true
+alternatives = ""
+purpose = "modern resource/process monitor (top/htop replacement)"
+
+[[tool]]
+module = "system"
+id = "dua"
+default = true
+brew = "dua-cli"
+detect = "dua"
+agent_safe = true
+alternatives = ""
+purpose = "fast disk-usage visualizer (du replacement; chosen over the external 'dust' CLI, which clashed with the former native-toolchain brand)"
+
+# ── session ──────────────────────────────────────────────────────────────────
+[[tool]]
+module = "session"
+id = "tmux"
+default = true
+brew = "tmux"
+detect = "tmux"
+agent_safe = true
+alternatives = "zellij"
+purpose = "persistent terminal sessions"
+
+[[tool]]
+module = "session"
+id = "zellij"
+default = false
+brew = "zellij"
+detect = "zellij"
+agent_safe = true
+alternatives = "tmux"
+purpose = "terminal workspace/multiplexer (alternative to tmux)"
+
+# ── secrets ──────────────────────────────────────────────────────────────────
+[[tool]]
+module = "secrets"
+id = "pass"
+default = true
+brew = "pass"
+detect = "pass"
+agent_safe = false
+alternatives = "age,sops"
+purpose = "Unix password store"
+
+[[tool]]
+module = "secrets"
+id = "age"
+default = false
+brew = "age"
+detect = "age"
+agent_safe = false
+alternatives = "sops"
+purpose = "modern file encryption"
+
+[[tool]]
+module = "secrets"
+id = "sops"
+default = false
+brew = "sops"
+detect = "sops"
+agent_safe = false
+alternatives = "age"
+purpose = "encrypted secrets in files"
+
+[[tool]]
+module = "secrets"
+id = "gitleaks"
+default = false
+brew = "gitleaks"
+detect = "gitleaks"
+agent_safe = true
+alternatives = ""
+purpose = "scan staged/committed files for leaked secrets (pre-commit gate)"
+
+# ── tools (version + env managers) ────────────────────────────────────────────
+[[tool]]
+module = "tools"
+id = "mise"
+default = true
+brew = "mise"
+detect = "mise"
+agent_safe = true
+alternatives = "proto,asdf"
+purpose = "runtime + tool version manager (Panoply default)"
+
+[[tool]]
+module = "tools"
+id = "direnv"
+default = true
+brew = "direnv"
+detect = "direnv"
+agent_safe = true
+alternatives = ""
+purpose = "per-directory environment activation"
+
+[[tool]]
+module = "tools"
+id = "proto"
+default = false
+brew = ""
+detect = "proto"
+agent_safe = true
+alternatives = "mise"
+purpose = "existing tool version manager (kept; not auto-installed)"
+
+# ── dotfiles (cross-machine config management) ───────────────────────────────
+[[tool]]
+module = "dotfiles"
+id = "chezmoi"
+default = false
+brew = "chezmoi"
+detect = "chezmoi"
+agent_safe = true
+alternatives = ""
+purpose = "cross-machine dotfile manager (optional; complements Panoply's symlink bootstrap)"
+
+# ── js ───────────────────────────────────────────────────────────────────────
+[[tool]]
+module = "js"
+id = "node"
+default = true
+brew = ""
+detect = "node"
+agent_safe = true
+alternatives = ""
+purpose = "Node.js runtime (managed via mise; detect-only)"
+
+[[tool]]
+module = "js"
+id = "pnpm"
+default = true
+brew = ""
+detect = "pnpm"
+agent_safe = true
+alternatives = "npm,yarn,bun,deno"
+purpose = "JS package manager (detect-only)"
+
+[[tool]]
+module = "js"
+id = "bun"
+default = false
+brew = ""
+detect = "bun"
+agent_safe = true
+alternatives = "pnpm,npm,deno"
+purpose = "JS runtime + package manager (detect-only)"
+
+[[tool]]
+module = "js"
+id = "deno"
+default = false
+brew = ""
+detect = "deno"
+agent_safe = true
+alternatives = "node"
+purpose = "secure JS/TS runtime (detect-only)"
+
+[[tool]]
+module = "js"
+id = "aube"
+default = false
+brew = ""
+detect = "aube"
+agent_safe = true
+alternatives = "pnpm,bun"
+purpose = "preferred JS package adapter (experimental; detect-only)"
+
+# ── rust ───────────────────────────────────────────────────────────────────────
+[[tool]]
+module = "rust"
+id = "cargo"
+default = true
+brew = ""
+detect = "cargo"
+agent_safe = true
+alternatives = ""
+purpose = "Rust package/build tool (detect-only; managed by rustup)"
+
+[[tool]]
+module = "rust"
+id = "rustup"
+default = false
+brew = ""
+detect = "rustup"
+agent_safe = true
+alternatives = ""
+purpose = "Rust toolchain manager (detect-only)"
+
+[[tool]]
+module = "rust"
+id = "cargo-nextest"
+default = false
+brew = "cargo-nextest"
+detect = "cargo-nextest"
+agent_safe = true
+alternatives = ""
+purpose = "faster Rust test runner"
+
+# ── wisp (portable binary runtime) ──────────────────────────────────────────
+[[tool]]
+module = "wisp"
+id = "wasmtime"
+default = true
+brew = "wasmtime"
+detect = "wasmtime"
+agent_safe = true
+alternatives = ""
+purpose = "WASM/WASI runtime for portable components"
+
+# ── logs ───────────────────────────────────────────────────────────────────────
+[[tool]]
+module = "logs"
+id = "sqlite3"
+default = false
+brew = ""
+detect = "sqlite3"
+agent_safe = true
+alternatives = ""
+purpose = "local structured session/command logs (detect-only)"
+
+# ── agent (LLM token-cost enhancements) ──────────────────────────────────────
+[[tool]]
+module = "agent"
+id = "rtk"
+default = true
+brew = "rtk"
+detect = "rtk"
+agent_safe = true
+alternatives = ""
+purpose = "LLM output compressor — proxies dev commands, cuts tokens 60-90% (recommended-default; swappable via PANOPLY_RTK + profile data)"
+
+[[tool]]
+module = "agent"
+id = "qmd"
+default = false
+brew = ""
+detect = "qmd"
+agent_safe = true
+alternatives = ""
+purpose = "local markdown retrieval index (BM25+vectors) for agents (detect-only; complements RTK, different role)"

@@ -1,0 +1,112 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "wfos/ontarch/schemas/profile.schema.json",
+  "title": "Ontarch agent profile",
+  "description": "A shared agent operating profile authored under Workstreams/.agents/profiles/*.toml: one declaration of scope, policy, gates, and logs consumed by every agent app (Claude, Cursor, Zed, Factory, OpenCode, CLI). Ontarch policies remain the enforcement authority; a profile selects a policy via `rails` and scopes it. Canon: lg_wfos_lvl_0_agent_rails.md §13. Indexed (flattened) into registry/profiles.json by `ontarch sync`.",
+  "type": "object",
+  "required": ["id", "purpose"],
+  "additionalProperties": true,
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+    "title": { "type": "string" },
+    "purpose": { "type": "string" },
+    "rails": {
+      "type": "string",
+      "description": "The Ontarch policy id this profile selects and runs under (the enforcement authority)."
+    },
+    "rails_bin": {
+      "type": "string",
+      "description": "Optional secondary Ontarch policy id for bin/archive mutation rails (e.g. agent-bin). Preserves the primary rails string while selecting an additional policy."
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "allowed_paths": { "type": "array", "items": { "type": "string" } },
+        "blocked_paths": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "commands": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "allowed_commands": { "type": "array", "items": { "type": "string" } },
+        "gated_commands": { "type": "array", "items": { "type": "string" } },
+        "blocked_commands": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "secret_access": { "type": "boolean" },
+        "remote_write_policy": {
+          "type": "string",
+          "enum": ["blocked", "local-only", "elevated"]
+        }
+      }
+    },
+    "isolation": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Where a scoped agent runs. Agents default to local branch/worktree scope (agent-rails §13.4); the main worktree is reserved. jj is opt-in for change-oriented workflows, never the default.",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["worktree", "branch", "main"],
+          "description": "worktree = run in a dedicated git worktree; branch = a scoped branch off the working repo; main = the main worktree (elevated profiles only)."
+        },
+        "jj": {
+          "type": "string",
+          "enum": ["opt-in", "default", "off"],
+          "description": "jj (Jujutsu) availability for this profile. opt-in is the sanctioned value; default/off reserved."
+        }
+      }
+    },
+    "skills": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "loads_external": {
+          "type": "boolean",
+          "description": "Whether this profile may load external (third-party) agent skills. When true, required_validators MUST include skillspector_scan (enforced by ontarch validate) — an unscanned skill is treated like an unreviewed dependency and does not load."
+        },
+        "allowed_skill_ids": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Skill IDs this profile may invoke on demand. Bodies resolve at invocation only — never pre-loaded in agent context."
+        }
+      }
+    },
+    "validators": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "required_validators": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "Known validator vocabulary: skillspector_scan (mandatory for any profile that loads external skills — an unscanned skill does not load), markdown_links, frontmatter, git_diff_review, format, typecheck, tests."
+          }
+        }
+      }
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "compressor": {
+          "type": "string",
+          "description": "Output compressor for this profile. `rtk` wires RTK transparent command rewriting; omit or `none` to opt out (swappable)."
+        }
+      }
+    },
+    "logs": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "session_log_target": { "type": "string" }
+      }
+    }
+  }
+}

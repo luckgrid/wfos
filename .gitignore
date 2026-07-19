@@ -4,14 +4,14 @@
 # Agents
 .cursor/
 
-# Generated, host-specific Archon registry. Descriptors, schemas, policies, the jq
+# Generated, host-specific Ontarch registry. Descriptors, schemas, policies, the jq
 # cookbook (QUERIES.md + queries/), and registry/sessions/ stay tracked; the generated
 # registry JSON and graph output do not. (registry/*.json matches top-level registry files
 # only, so registry/sessions/*.json remains tracked.)
-packages/archon/registry/*.json
-packages/archon/registry/*.dot
-packages/archon/registry/SCAN.md
-packages/archon/registry/BIN-INVENTORY.md
+packages/ontarch/registry/*.json
+packages/ontarch/registry/*.dot
+packages/ontarch/registry/SCAN.md
+packages/ontarch/registry/BIN-INVENTORY.md
 
 # Rust
 target/

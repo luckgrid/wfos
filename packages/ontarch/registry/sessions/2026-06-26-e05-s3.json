@@ -1,0 +1,43 @@
+{
+  "session_id": "2026-06-26-e05-s3",
+  "epic": "E05",
+  "story": "S3",
+  "title": "RTK hook config",
+  "status": "done",
+  "started_at": "2026-06-26T05:00:00Z",
+  "ended_at": "2026-06-26T07:00:00Z",
+  "agent": "zed/claude-opus",
+  "profile": "workspace-dev",
+  "loaded_context": [
+    "Build/bin/STATE.md",
+    "Build/bin/SESSIONS.md (tail)",
+    "Build/bin/E05_agent_configs_profiles.md#s3",
+    "Build/bin/2026-06-26-wfos-e05-agent-configs-profiles-sprint.md",
+    "packages/ontarch/registry/sessions/2026-06-26-e05-s2.json",
+    "packages/panoply/dotfiles/dot_config/zsh/rtk.zsh.tmpl",
+    "packages/panoply/dotfiles/.chezmoidata/profiles.toml",
+    "~/.factory/RTK.md (reference)"
+  ],
+  "changed_paths": [
+    "Build/src/workspaces/wfos/packages/panoply/dotfiles/dot_claude/settings.json.tmpl",
+    "Build/src/workspaces/wfos/packages/panoply/dotfiles/dot_claude/RTK-HOOK.md.tmpl",
+    "Build/src/workspaces/wfos/packages/panoply/dotfiles/ROUTING.md",
+    "Build/bin/STATE.md",
+    "Build/bin/SESSIONS.md"
+  ],
+  "commands_run": [
+    "chezmoi execute-template --config <on.toml> < dot_claude/settings.json.tmpl",
+    "chezmoi execute-template --config <off.toml> < dot_claude/settings.json.tmpl"
+  ],
+  "outcome": "RTK wired as a profile-declared output compressor at the agent-app layer. The agent profiles already carry [output] compressor = rtk (S1); this story adds the Claude Code hook as a chezmoi-templated config that renders per profile. dot_claude/settings.json.tmpl renders a PreToolUse Bash hook (rtk hook claude-pretooluse \u2014 transparent git status -> rtk git status rewrite, 0 token overhead) ONLY when the active machine profile enables rtk (.chezmoidata/profiles.toml `rtk`); the hooks block is dropped when rtk=false, so opting out is a one-flag change. dot_claude/RTK-HOOK.md.tmpl mirrors ~/.factory/RTK.md per profile (meta commands rtk gain|discover|proxy stay raw; the name-collision guard documented). ROUTING.md's per-app-template section now records the Claude hook as the first landed instance of the consume-shared-profile-data pattern. Draft posture: chezmoi source only, not applied to $HOME; the exact hook entrypoint is confirmed against the installed rtk at panoply bootstrap.",
+  "validation": "chezmoi execute-template render proof (throwaway harness, removed): profile rtk=true -> settings.json includes the hooks.PreToolUse Bash block (valid JSON); profile rtk=false -> settings.json omits the hooks block (valid JSON). moon run ontarch:validate unaffected (no ontarch change) and remains PASS from S2.",
+  "decisions": [
+    "RTK hook is gated purely on the profile `rtk` flag (not the agent-tools/GUI exclusion category), matching the epic's 'agent-safe and local-macos-full declare RTK as the output compressor' \u2014 RTK is a cross-cutting compressor, not an opencode-style agent-tool config",
+    "Hook kept swappable: rtk=false drops the hooks block entirely; the Panoply shell layer (config/shell/rtk.zsh) stays the no-op-safe authority for the shell side",
+    "Install stays owned by panoply bootstrap / manifest agent module; the template owns only per-profile wiring (same boundary as rtk.zsh.tmpl from E03.S4)",
+    "Exact Claude hook entrypoint left as a documented draft (rtk hook claude-pretooluse), confirmed at bootstrap against the installed rtk version \u2014 consistent with gateway_state: draft (no $HOME writes)"
+  ],
+  "next": "E05.S4 \u2014 SkillSpector gate (skillspector_scan required-validator for skill-loading profiles)",
+  "blockers": [],
+  "token_note": "RTK is the headline output-compression lever (60-90% on dev command output) wired into the agent layer via one profile flag instead of a manual per-app hook setup. Declared once in profile data; rendered into each app's config. rtk gain baseline from E03.S4: 44.8% / 83.7K tokens saved."
+}

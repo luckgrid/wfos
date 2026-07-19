@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# panoply bootstrap — install missing Panoply tools (Homebrew), symlink configs, wire the shell.
+# Mutating: blocked in agent mode.
+set -uo pipefail
+
+_self="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../lib/common.sh
+source "$_self/../lib/common.sh"
+# shellcheck source=../lib/manifest.sh
+source "$_self/../lib/manifest.sh"
+# shellcheck source=../lib/generate.sh
+source "$_self/../lib/generate.sh"
+# shellcheck source=../lib/configure.sh
+source "$_self/../lib/configure.sh"
+
+# Human-only: installs + shell/dotfile mutation. Blocked under PANOPLY_AGENT=1 (exit 13).
+# An agent assesses readiness with `panoply doctor [--json]` and derives the install plan with
+# `panoply gen brewfile --missing [--defaults]`; a human runs this command to apply it.
+panoply_require_human "panoply bootstrap"
+
+dry=0
+[ "${1:-}" = "--dry-run" ] && dry=1
+
+panoply_has brew || panoply_die "Homebrew not found. Install from https://brew.sh first."
+
+# 1) Install missing brew formulae via the derived Brewfile (manifest is the source of truth).
+bundle_file="$(mktemp "${TMPDIR:-/tmp}/panoply-brewfile.XXXXXX")"
+trap 'rm -f "$bundle_file"' EXIT
+panoply_gen_brewfile --missing >"$bundle_file"
+if ! grep -q '^brew ' "$bundle_file"; then
+  panoply_ok "all installable Panoply tools already present"
+elif [ "$dry" = "1" ]; then
+  panoply_info "would install from derived Brewfile:"
+  grep '^brew ' "$bundle_file" | sed 's/^/  /'
+  panoply_warn "dry-run: skipping installs"
+else
+  panoply_info "brew bundle --file=$bundle_file (derived from manifest)"
+  if brew bundle --file="$bundle_file"; then
+    panoply_ok "brew bundle complete"
+  else
+    panoply_warn "brew bundle reported failures (continuing)"
+  fi
+fi
+
+# 2) Configure tool settings + shell wiring (idempotent).
+if [ "$dry" = "1" ]; then
+  panoply_warn "dry-run: skipping config + shell wiring"
+else
+  panoply_info "linking config templates"
+  panoply_configure_shell
+  panoply_configure_session
+  panoply_configure_tools
+  panoply_link_cli
+  panoply_wire_shell
+
+  if panoply_has mise; then
+    panoply_info "mise present — runtimes are defined in ~/.config/mise/config.toml"
+    panoply_info "run 'mise install' to provision pinned runtimes (skipped here to stay fast)"
+  fi
+fi
+
+echo
+panoply_info "re-checking readiness"
+echo
+exec "$_self/panoply-doctor"

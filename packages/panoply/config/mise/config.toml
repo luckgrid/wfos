@@ -1,0 +1,13 @@
+# Panoply global mise config. Linked to ~/.config/mise/config.toml by `panoply bootstrap`.
+# Runtimes are commented out to avoid surprise installs; uncomment + `mise install`
+# to provision. mise is the Panoply default; proto remains available for existing setups.
+
+[settings]
+experimental = true
+# Avoid clobbering tools managed elsewhere (e.g. proto) unless explicitly pinned.
+idiomatic_version_file_enable_tools = ["node", "python"]
+
+# [tools]
+# node = "lts"
+# python = "3.12"
+# rust = "stable"

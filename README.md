@@ -13,11 +13,11 @@ Full documentation lives in [`docs/`](docs/README.md). Start with
 
 | Archetype | Product | CLI | Role | Status |
 |-----------|---------|-----|------|--------|
-| native-substrate | Dust | `dust` | Local Unix/Rust tool execution | implemented |
-| metadata-plane | Archon | — | Descriptors, registry, schemas, policies | implemented |
-| runtime-controller | Kraken | `krk` | Discovery, routing, sessions, rails | planned |
-| package-translator | Hypercube | `hqb` | Intent → packages and artifacts | planned |
-| portable-runtime | Ether | — | WASM/WASI sandboxed components | planned |
+| native-toolchain | Panoply | `panoply` (later `cth native`) | Local Unix/Rust tool execution | implemented |
+| metadata-plane | Ontarch | `ontarch` (later `cth meta`) | Descriptors, registry, schemas, policies | implemented |
+| runtime-controller | Cthulhu | `cth` | Discovery, routing, sessions, rails, integrations (Tendrils) | planned |
+| package-translator | Polytope | `cth package` | Intent → packages and artifacts | planned |
+| portable-component-runtime | Wisp | `cth portable` | WASM/WASI sandboxed components | planned |
 
 Archetypes are stable roles; products are swappable implementations. Above the filesystem,
 three [interface layers](docs/architecture.md#interface-layers) — toolchain, agent, application
@@ -30,7 +30,7 @@ This workspace is a [moon](https://moonrepo.dev/moon) monorepo with toolchains p
 
 ```bash
 moon run wfos:setup     # proto install — fetch pinned toolchains
-moon run dust:doctor    # detect tools + write the Archon registry (read-only)
+moon run panoply:doctor    # detect tools + write the Ontarch registry (read-only)
 moon query projects     # inspect the project graph
 ```
 
@@ -41,11 +41,11 @@ Pins live in [`.prototools`](.prototools); graph and tasks in [`.moon/`](.moon/)
 
 | Package | Role | Status |
 |---------|------|--------|
-| [`archon/`](packages/archon/README.md) | metadata plane — descriptors, schemas, policies | implemented |
-| [`dust/`](packages/dust/README.md) | native substrate — global low-level tools | implemented |
-| [`ether/`](packages/ether/README.md) | portable runtime (WASM/WASI) | planned |
-| [`hypercube/`](packages/hypercube/README.md) | package translator (`hqb`) | planned |
-| [`kraken/`](packages/kraken/README.md) | runtime controller (`krk`) | planned |
+| [`ontarch/`](packages/ontarch/README.md) | metadata plane — descriptors, schemas, policies | implemented |
+| [`panoply/`](packages/panoply/README.md) | native toolchain — global low-level tools | implemented |
+| [`wisp/`](packages/wisp/README.md) | portable component runtime (WASM/WASI) | planned |
+| [`polytope/`](packages/polytope/README.md) | package translator (`cth package`) | planned |
+| [`cthulhu/`](packages/cthulhu/README.md) | runtime controller (`cth`) | planned |
 
 ## Apps
 
@@ -61,9 +61,9 @@ Pins live in [`.prototools`](.prototools); graph and tasks in [`.moon/`](.moon/)
 | [architecture](docs/architecture.md) | Archetypes vs products, interface layers, system map |
 | [runtime-architecture](docs/runtime-architecture.md) | Terminal-first engine: client-daemon, Rust stack |
 | [monorepo](docs/monorepo.md) | moon + proto graph, tasks, conventions |
-| [native-substrate](docs/native-substrate.md) | Native substrate — tools, modules, config |
+| [native-toolchain](docs/native-toolchain.md) | Native toolchain — tools, modules, config |
 | [metadata-plane](docs/metadata-plane.md) | Metadata plane — descriptors, registry, schemas, policies |
-| [runtime-controller](docs/runtime-controller.md) · [package-translator](docs/package-translator.md) · [portable-runtime](docs/portable-runtime.md) | Planned products |
+| [runtime-controller](docs/runtime-controller.md) · [package-translator](docs/package-translator.md) · [portable-component-runtime](docs/portable-component-runtime.md) | Planned products |
 | [agent-configs](docs/agent-configs.md) | Shared agent profiles and lean AGENTS.md pattern |
 | [agent-skills](docs/agent-skills.md) | On-demand skill registry, templates, load logging |
 | [agent-rails](docs/agent-rails.md) | Agent rails, gates, MCP, skill scanning |
@@ -77,5 +77,5 @@ For agents, see [AGENTS.md](AGENTS.md).
 ## Git
 
 This workspace is its own standalone git repository (`main`), local-first with no required
-remote. Generated, host-specific output (the Archon tools registry, `target/`, `.moon/cache`)
+remote. Generated, host-specific output (the Ontarch tools registry, `target/`, `.moon/cache`)
 is gitignored; sources, contracts, and docs stay tracked.

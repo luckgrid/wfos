@@ -33,11 +33,11 @@ being scaffolded:
 projects:
   sources:
     wfos: "."
-    dust: "packages/dust"
-    archon: "packages/archon"
+    panoply: "packages/panoply"
+    ontarch: "packages/ontarch"
 ```
 
-As `packages/kraken`, `packages/hypercube`, `packages/ether`, and `apps/*` gain their own
+As `packages/cthulhu`, `packages/polytope`, `packages/wisp`, and `apps/*` gain their own
 `moon.yml`, add them here (or switch to `apps/*` / `packages/*` globs once every directory
 under those paths is a real project). Keeping it explicit avoids moon trying to treat a stub
 folder as a project before it has any config.
@@ -46,14 +46,14 @@ folder as a project before it has any config.
 
 ```bash
 moon run wfos:setup     # proto install — fetch pinned toolchains
-moon run dust:doctor    # detect tools + write the Archon registry (read-only)
-moon run dust:list      # list Dust modules and tools
-moon run dust:env       # print the shell activation snippet
-moon run wfos:doctor    # aggregate: depends on dust:doctor
+moon run panoply:doctor    # detect tools + write the Ontarch registry (read-only)
+moon run panoply:list      # list Panoply modules and tools
+moon run panoply:env       # print the shell activation snippet
+moon run wfos:doctor    # aggregate: depends on panoply:doctor
 moon query projects     # inspect the graph
 ```
 
-The `dust:*` tasks are thin wrappers over `packages/dust/bin/dust` so the substrate joins
+The `panoply:*` tasks are thin wrappers over `packages/panoply/bin/panoply` so the substrate joins
 the graph. They are `cache: false` because `doctor` inspects the live machine and `bootstrap`
 is intentionally not exposed as a task (it is human-only — see [agent-rails.md](agent-rails.md)).
 
@@ -69,14 +69,14 @@ is intentionally not exposed as a task (it is human-only — see [agent-rails.md
 ## Rust workspace (deferred)
 
 There are no Rust crates yet, so there is no root `Cargo.toml`. The Cargo workspace lands
-with the first crate ([Kraken](runtime-controller.md)); at that point the root `Cargo.toml` lists
-`packages/kraken` as a member, and `.moon/toolchains.yml` already has the rust toolchain
+with the first crate ([Cthulhu](runtime-controller.md)); at that point the root `Cargo.toml` lists
+`packages/cthulhu` as a member, and `.moon/toolchains.yml` already has the rust toolchain
 enabled with `clippy` and `rustfmt`.
 
-## How Kraken relates to moon
+## How Cthulhu relates to moon
 
-[Kraken](runtime-controller.md) (`krk`) is the WfOS runtime controller, not a replacement for moon. moon
-is the project-graph and task backend; Kraken routes higher-level workflow commands to moon's
-task graph (a compat backend) and to [Dust](native-substrate.md) native tools, recording sessions and
+[Cthulhu](runtime-controller.md) (`cth`) is the WfOS runtime controller, not a replacement for moon. moon
+is the project-graph and task backend; Cthulhu routes higher-level workflow commands to moon's
+task graph (a compat backend) and to [Panoply](native-toolchain.md) native tools, recording sessions and
 applying policy along the way. Native manifests and the moon graph stay authoritative for
-builds; Kraken adds discovery, routing, and rails on top.
+builds; Cthulhu adds discovery, routing, and rails on top.

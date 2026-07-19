@@ -1,0 +1,179 @@
+#!/usr/bin/env bash
+# panoply doctor — detect Panoply tools, print a readiness report, write ontarch registry.
+# Read-only and agent-safe.
+set -uo pipefail
+
+_self="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../lib/common.sh
+source "$_self/../lib/common.sh"
+# shellcheck source=../lib/manifest.sh
+source "$_self/../lib/manifest.sh"
+
+_json_escape() {
+  # Strip ANSI + control chars so tool --version output (e.g. btop, pass) stays valid JSON.
+  printf '%s' "$1" \
+    | sed $'s/\x1b\\[[0-9;]*m//g' \
+    | tr '\n\r' ' ' \
+    | tr -d '\000-\037' \
+    | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'
+}
+
+total=0; installed=0; missing=0; missing_default=0
+json_tools=""
+missing_default_ids=""
+missing_default_arr=""
+current_module=""
+
+write_json=1
+json_mode=0
+for _a in "$@"; do
+  case "$_a" in
+    --no-write) write_json=0 ;;
+    --json)     json_mode=1 ;;
+  esac
+done
+
+# In --json mode all human chatter is suppressed; stdout carries only the JSON object.
+_say() { [ "$json_mode" = "1" ] || "$@"; }
+
+_say panoply_info "Panoply readiness (manifest v$(panoply_manifest_version))"
+_say echo
+
+# shellcheck disable=SC2034  # fields bound positionally; not all used here
+while IFS=$'\037' read -r module id def brew detect agent_safe alts purpose; do
+  [ -n "$id" ] || continue
+  if [ "$module" != "$current_module" ]; then
+    [ "$json_mode" = "0" ] && [ -n "$current_module" ] && echo
+    _say printf '%s%s%s\n' "$_C_BOLD" "$module" "$_C_RESET"
+    current_module="$module"
+  fi
+  total=$((total + 1))
+  if panoply_detect "$detect"; then
+    case "$detect" in
+      */*) ver="installed" ;;   # path-detected (e.g. sourced plugin) — no --version
+      *) ver="$(panoply_version "$detect")" ;;
+    esac
+    installed=$((installed + 1))
+    _say printf '  %sok%s  %-14s %s%s%s\n' "$_C_GREEN" "$_C_RESET" "$id" "$_C_DIM" "$ver" "$_C_RESET"
+    is_installed=true
+  else
+    missing=$((missing + 1))
+    ver=""
+    if [ "$def" = "true" ]; then
+      missing_default=$((missing_default + 1))
+      missing_default_ids="${missing_default_ids:+$missing_default_ids, }$id"
+      missing_default_arr="${missing_default_arr:+$missing_default_arr,}\"$id\""
+      _say printf '  %smiss%s %-14s %s(default, %s)%s\n' "$_C_RED" "$_C_RESET" "$id" "$_C_DIM" "${purpose}" "$_C_RESET"
+    else
+      _say printf '  %s--%s   %-14s %s(optional, %s)%s\n' "$_C_YELLOW" "$_C_RESET" "$id" "$_C_DIM" "${purpose}" "$_C_RESET"
+    fi
+    is_installed=false
+  fi
+  obj=$(printf '{"module":"%s","id":"%s","installed":%s,"default":%s,"agent_safe":%s,"detect":"%s","brew":"%s","version":"%s"}' \
+    "$module" "$id" "$is_installed" "$def" "$agent_safe" "$detect" "$brew" "$(_json_escape "$ver")")
+  if [ -z "$json_tools" ]; then json_tools="$obj"; else json_tools="$json_tools,$obj"; fi
+done < <(panoply_manifest_tsv)
+
+_say echo
+_say panoply_info "installed $installed/$total  ·  missing $missing  ·  missing defaults $missing_default"
+if [ "$missing_default" -gt 0 ]; then
+  _say panoply_warn "missing defaults: $missing_default_ids  (run 'panoply bootstrap' — human-only)"
+fi
+
+# ── replaceability matrix (read-only) ────────────────────────────────────────
+# Project the manifest's swappable roles and the ACTIVE member of each.
+roles_json=""
+_say echo
+_say panoply_info "replaceability (active member per swappable role)"
+# shellcheck disable=SC2034  # fields bound positionally
+while IFS=$'\037' read -r r_mod r_def r_alts r_active r_kind; do
+  [ -n "$r_mod" ] || continue
+  case "$r_kind" in
+    default)     _say printf '  %sok%s  %-10s active %s %s(default)%s  alts: %s\n' "$_C_GREEN" "$_C_RESET" "$r_mod" "$r_active" "$_C_DIM" "$_C_RESET" "$r_alts" ;;
+    alternative) _say printf '  %s~~%s  %-10s active %s %s(alt; default %s missing)%s  alts: %s\n' "$_C_YELLOW" "$_C_RESET" "$r_mod" "$r_active" "$_C_DIM" "$r_def" "$_C_RESET" "$r_alts" ;;
+    *)           _say printf '  %s--%s  %-10s %s(none; default %s missing)%s  alts: %s\n' "$_C_RED" "$_C_RESET" "$r_mod" "$_C_DIM" "$r_def" "$_C_RESET" "$r_alts" ;;
+  esac
+  robj=$(printf '{"module":"%s","default":"%s","active":"%s","active_kind":"%s"}' "$r_mod" "$r_def" "$r_active" "$r_kind")
+  if [ -z "$roles_json" ]; then roles_json="$robj"; else roles_json="$roles_json,$robj"; fi
+done < <(panoply_role_matrix)
+
+# Emit the registry JSON document (used for both the file write and --json stdout).
+_emit_registry_json() {
+  printf '{\n'
+  printf '  "generated_at": "%s",\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  printf '  "manifest_version": "%s",\n' "$(panoply_manifest_version)"
+  printf '  "host": "%s",\n' "$(_json_escape "$(uname -sm)")"
+  printf '  "summary": {"total":%s,"installed":%s,"missing":%s,"missing_default":%s},\n' \
+    "$total" "$installed" "$missing" "$missing_default"
+  printf '  "missing_defaults": [%s],\n' "$missing_default_arr"
+  printf '  "roles": [%s],\n' "$roles_json"
+  printf '  "tools": [%s]\n' "$json_tools"
+  printf '}\n'
+}
+
+if [ "$write_json" = "1" ]; then
+  mkdir -p "$ONTARCH_REGISTRY"
+  out="$ONTARCH_REGISTRY/tools.json"
+  _emit_registry_json > "$out"
+  _say panoply_ok "wrote $out"
+fi
+
+# --json: stdout carries only the JSON object (registry doc).
+[ "$json_mode" = "1" ] && _emit_registry_json
+
+# ── secrets rail assertion (read-only; agent-safe) ───────────────────────────
+# Asserts the no_secret_read gate is intact: manifest flags + policy gate + a live
+# guard self-test. Never invokes pass/age/sops; only checks config and the guard.
+# Prints are suppressed in --json mode, but the check still runs and sets the exit code.
+_say echo
+_say panoply_info "secrets rail (no_secret_read gate)"
+policy="$ONTARCH_PKG/policies/panoply.agent.policy.toml"
+rail_fail=0
+
+# agent_safe value for a manifest tool id (field 6), or MISSING.
+_agent_safe_of() {
+  panoply_manifest_tsv | awk -F'\037' -v id="$1" '$2==id {print $6; f=1} END{if(!f) print "MISSING"}'
+}
+
+# 1) every policy-blocked secret tool must be agent_safe = false in the manifest.
+if [ -f "$policy" ]; then
+  block_tools="$(grep -E '^[[:space:]]*block_tools[[:space:]]*=' "$policy" | sed -E 's/.*\[(.*)\].*/\1/; s/[",]/ /g')"
+else
+  block_tools=""
+fi
+[ -n "$block_tools" ] || { _say printf '  %sxx%s  policy        block_tools missing (or policy missing)\n' "$_C_RED" "$_C_RESET"; rail_fail=1; }
+for t in $block_tools; do
+  as="$(_agent_safe_of "$t")"
+  if [ "$as" = "false" ]; then
+    _say printf '  %sok%s  %-14s agent_safe=false\n' "$_C_GREEN" "$_C_RESET" "$t"
+  else
+    _say printf '  %sxx%s  %-14s agent_safe=%s (must be false)\n' "$_C_RED" "$_C_RESET" "$t" "$as"
+    rail_fail=1
+  fi
+done
+
+# 2) policy must declare no_secret_read = true.
+if [ -f "$policy" ] && grep -Eq '^[[:space:]]*no_secret_read[[:space:]]*=[[:space:]]*true' "$policy"; then
+  _say printf '  %sok%s  policy        no_secret_read = true\n' "$_C_GREEN" "$_C_RESET"
+else
+  _say printf '  %sxx%s  policy        no_secret_read not true (or policy missing)\n' "$_C_RED" "$_C_RESET"
+  rail_fail=1
+fi
+
+# 3) live guard self-test: under PANOPLY_AGENT=1 the secret-read guard must exit 13.
+( export PANOPLY_AGENT=1; panoply_require_secret_access pass ) >/dev/null 2>&1
+guard_rc=$?
+if [ "$guard_rc" -eq 13 ]; then
+  _say printf '  %sok%s  guard         PANOPLY_AGENT=1 blocks secret read (exit 13)\n' "$_C_GREEN" "$_C_RESET"
+else
+  _say printf '  %sxx%s  guard         PANOPLY_AGENT=1 did not block (exit %s, expected 13)\n' "$_C_RED" "$_C_RESET" "$guard_rc"
+  rail_fail=1
+fi
+
+if [ "$rail_fail" -eq 0 ]; then
+  _say panoply_ok "secrets rail: ENFORCED"
+else
+  _say panoply_err "secrets rail: DRIFT — secret material could reach agent context"
+fi
+
+exit "$rail_fail"

@@ -13,6 +13,6 @@ tasks:
 
   doctor:
     deps:
-      - "dust:doctor"
+      - "panoply:doctor"
     options:
       cache: false

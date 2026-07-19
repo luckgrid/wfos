@@ -3,16 +3,16 @@
 The open-source tools, libraries, skills, and crates that WfOS builds on or plans to include,
 grouped by role. Each entry notes its status and where it fits.
 
-Status legend: **core** (installed by Dust today) · **recommended-default** (a Dust default,
+Status legend: **core** (installed by Panoply today) · **recommended-default** (a Panoply default,
 still swappable) · **optional** (detected/swappable) · **planned** (intended, not yet wired) ·
 **inspiration** (reference, not a dependency).
 
 ---
 
-## Core dependencies — Unix substrate (Dust)
+## Core dependencies — Unix substrate (Panoply)
 
-The low-level CLI layer. Defaults are installed by `dust bootstrap`; alternatives are
-detected if present. See [native-substrate.md](native-substrate.md).
+The low-level CLI layer. Defaults are installed by `panoply bootstrap`; alternatives are
+detected if present. See [native-toolchain.md](native-toolchain.md).
 
 | Tool | Status | Role | License |
 |------|--------|------|---------|
@@ -30,7 +30,7 @@ detected if present. See [native-substrate.md](native-substrate.md).
 | [jq](https://github.com/jqlang/jq) | core | JSON processor | MIT |
 | [tldr (tealdeer)](https://github.com/tldr-pages/tealdeer) | core | practical command cheatsheets | MIT/Apache-2.0 |
 | [btop](https://github.com/aristocratos/btop) | core | resource/process monitor (top/htop replacement) | Apache-2.0 |
-| [dua](https://github.com/Byron/dua-cli) | core | disk-usage visualizer (`du` replacement; substitutes `dust` to avoid CLI name clash) | MIT |
+| [dua](https://github.com/Byron/dua-cli) | core | disk-usage visualizer (`du` replacement; chosen over the external `dust` CLI, which clashed with the former native-toolchain brand) | MIT |
 | [direnv](https://direnv.net/) | core | per-directory environment activation | MIT |
 | [shellcheck](https://www.shellcheck.net/) | core | shell script linting | GPL-3.0 |
 | [zsh-autosuggestions](https://github.com/zsh-users/zsh-autosuggestions) | core | async command suggestions from history (sourced plugin) | MIT |
@@ -38,8 +38,8 @@ detected if present. See [native-substrate.md](native-substrate.md).
 | [pass](https://www.passwordstore.org/) | core | Unix password store (agent-blocked) | GPL-2.0 |
 | [age](https://github.com/FiloSottile/age) / [sops](https://github.com/getsops/sops) | optional | file/secret encryption (config files: sops+age; interactive: pass) | BSD-3 / MPL-2.0 |
 | [gitleaks](https://github.com/gitleaks/gitleaks) | optional | scan staged/committed files for leaked secrets (pre-commit gate candidate) | MIT |
-| [chezmoi](https://www.chezmoi.io/) | optional | cross-machine dotfile manager (complements Dust's symlink bootstrap) | MIT |
-| [RTK (Rust Token Killer)](https://github.com/rtk-ai/rtk) | recommended-default | LLM output compressor — proxies dev commands, cuts tokens 60-90% (Dust `agent` module; swappable via `DUST_RTK`) | Apache-2.0 |
+| [chezmoi](https://www.chezmoi.io/) | optional | cross-machine dotfile manager (complements Panoply's symlink bootstrap) | MIT |
+| [RTK (Rust Token Killer)](https://github.com/rtk-ai/rtk) | recommended-default | LLM output compressor — proxies dev commands, cuts tokens 60-90% (Panoply `agent` module; swappable via `PANOPLY_RTK`) | Apache-2.0 |
 | [choose](https://github.com/theryangeary/choose) | optional | field selector — human-friendly `cut`/`awk` alternative | MIT |
 | [zsh-autocomplete](https://github.com/marlonrichert/zsh-autocomplete) | optional | real-time menu completion (sourced plugin; can conflict) | MIT |
 | [jj](https://github.com/jj-vcs/jj) | optional | Git-compatible VCS alternative | MIT/Apache-2.0 |
@@ -49,8 +49,8 @@ detected if present. See [native-substrate.md](native-substrate.md).
 
 Secrets are tiered by concern: **pass** for interactive CLI logins/keys, **sops + age** for
 configuration files checked into git (encrypts values, keeps keys and diffs readable). See
-[`packages/dust/dotfiles/SECRETS.md`](../packages/dust/dotfiles/SECRETS.md) and
-[native-substrate.md](native-substrate.md#modules).
+[`packages/panoply/dotfiles/SECRETS.md`](../packages/panoply/dotfiles/SECRETS.md) and
+[native-toolchain.md](native-toolchain.md#modules).
 
 Dotfiles practice and bootstrap inspiration: [dotfiles.github.io](https://dotfiles.github.io/)
 (utilities, frameworks, bootstrap, tips). WfOS integrates low-level tooling in this spirit —
@@ -62,14 +62,14 @@ small, composable, dotfile-friendly.
 |------|--------|------|
 | [proto](https://moonrepo.dev/proto) | core | pins and installs workspace toolchains (`.prototools`) |
 | [moon](https://moonrepo.dev/moon) | core | project graph, task running, caching |
-| [starbase](https://github.com/moonrepo/starbase) | planned | Rust framework for the Kraken CLI |
-| [mise](https://mise.jdx.dev/) | core | runtime/version manager (Dust default) |
+| [starbase](https://github.com/moonrepo/starbase) | planned | Rust framework for the Cthulhu CLI |
+| [mise](https://mise.jdx.dev/) | core | runtime/version manager (Panoply default) |
 
 See [monorepo.md](monorepo.md).
 
 ## Runtime engine — Rust crates
 
-The engine under [Kraken](runtime-controller.md); see [runtime-architecture.md](runtime-architecture.md).
+The engine under [Cthulhu](runtime-controller.md); see [runtime-architecture.md](runtime-architecture.md).
 
 | Crate / spec | Status | Role |
 |--------------|--------|------|
@@ -98,7 +98,7 @@ required for WfOS to be useful.
 
 | Tool | Status | What it does |
 |------|--------|--------------|
-| [RTK (Rust Token Killer)](https://github.com/rtk-ai/rtk) | recommended-default | CLI proxy that compresses command output to cut LLM token use 60–90%; single Rust binary. Now a Dust `agent`-module default (see the Unix-substrate table above); swappable via `DUST_RTK`. |
+| [RTK (Rust Token Killer)](https://github.com/rtk-ai/rtk) | recommended-default | CLI proxy that compresses command output to cut LLM token use 60–90%; single Rust binary. Now a Panoply `agent`-module default (see the Unix-substrate table above); swappable via `PANOPLY_RTK`. |
 | [QMD](https://github.com/tobi/qmd) | optional | Local hybrid search (BM25 + vectors + rerank) over markdown collections; CLI/MCP `query` → `get` retrieval for agents without loading full vaults |
 | [ponytail](https://github.com/DietrichGebert/ponytail) | optional | forces the simplest, most minimal solution that works (anti-over-engineering) |
 | [drawio-skill](https://github.com/Agents365-ai/drawio-skill) | optional | generate diagrams/flowcharts as draw.io files and export images |
@@ -117,7 +117,7 @@ but at different layers. See [workflow-apps.md](workflow-apps.md#agent-retrieval
 ## AI engine / writing (docs-only — see workflow-apps.md)
 
 Recommended for local-first, native writing and AI-assisted document workflows. These are
-**documented recommendations**, not Dust-managed tools — install them yourself. Full guide and
+**documented recommendations**, not Panoply-managed tools — install them yourself. Full guide and
 quick-start in [workflow-apps.md](workflow-apps.md).
 
 | Tool | Status | Role | License |
@@ -132,7 +132,7 @@ quick-start in [workflow-apps.md](workflow-apps.md).
 
 ## Native / local apps (docs-only — see workflow-apps.md)
 
-Core writing, note-taking, and session-restoration apps. Documented recommendations, not Dust
+Core writing, note-taking, and session-restoration apps. Documented recommendations, not Panoply
 dependencies; the full guide is in [workflow-apps.md](workflow-apps.md).
 
 | App | Status | Role | License |
@@ -145,12 +145,12 @@ dependencies; the full guide is in [workflow-apps.md](workflow-apps.md).
 
 ## WASM / WASI runtimes
 
-The portable execution target; see [portable-runtime.md](portable-runtime.md).
+The portable execution target; see [portable-component-runtime.md](portable-component-runtime.md).
 
 | Project | Status | Role |
 |---------|--------|------|
 | [WASI](https://github.com/WebAssembly/WASI) | planned | system interface spec for portable components |
-| [Wasmtime](https://wasmtime.dev/) | core | WASM/WASI runtime (Dust `ether` module) |
+| [Wasmtime](https://wasmtime.dev/) | core | WASM/WASI runtime (Panoply `wisp` module) |
 | [Spin](https://github.com/spinframework/spin) | inspiration | event-driven WASM apps without a container layer |
 | [wasmCloud](https://github.com/wasmcloud/wasmcloud) | inspiration | distributed platform for WASM components |
 | [Hyperlight Wasm](https://opensource.microsoft.com/blog/2025/03/26/hyperlight-wasm-fast-secure-and-os-free/) | inspiration | micro-VM isolation for WASM |

@@ -1,0 +1,30 @@
+# Ontarch descriptor — Design System workspace (central, planned).
+# `ds` is not yet on disk; approved Brand assets promote into it (see the namespaces
+# canon). The descriptor exists centrally so the registry can list the planned unit
+# without a directory scaffold; it gains a colocated descriptor when it is built.
+id = "ds"
+kind = "workspace"
+title = "Design System Workspace"
+status = "planned"
+summary = "Brand design system — tokens and UI patterns promoted from Brand/."
+
+system_space = "luckgrid"
+domain = "luckgrid"
+layer = "application"
+system = "brand"
+
+[paths]
+root = "Build/src/workspaces/ds"
+
+[native]
+manifests = []
+
+[entrypoints]
+
+[capabilities]
+provides = ["design.tokens", "ui.components"]
+requires = ["filesystem.read"]
+
+[policy]
+allow_git_push = false
+allow_secret_read = false

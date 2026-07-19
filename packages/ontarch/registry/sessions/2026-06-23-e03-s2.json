@@ -1,0 +1,43 @@
+{
+  "session_id": "2026-06-23-e03-s2",
+  "epic": "E03",
+  "story": "S2",
+  "title": "doctor --json, panoply env redesign, bootstrap hardening",
+  "status": "done",
+  "started_at": "2026-06-24T00:00:00Z",
+  "ended_at": "2026-06-24T00:00:00Z",
+  "agent": "factory/claude-opus-4.8",
+  "profile": "workspace-dev",
+  "loaded_context": [
+    "Build/bin/STATE.md",
+    "Build/bin/SESSIONS.md (tail)",
+    "Build/bin/E03_native_toolchain.md#s2"
+  ],
+  "changed_paths": [
+    "Build/src/workspaces/wfos/packages/panoply/bin/panoply-doctor",
+    "Build/src/workspaces/wfos/packages/panoply/bin/panoply-env",
+    "Build/src/workspaces/wfos/packages/panoply/bin/panoply-bootstrap",
+    "Build/src/workspaces/wfos/packages/ontarch/schemas/panoply.tools.schema.json",
+    "Build/src/workspaces/wfos/packages/panoply/README.md",
+    "Build/src/workspaces/wfos/docs/native-toolchain.md",
+    "Build/src/workspaces/wfos/packages/panoply/AGENTS.md"
+  ],
+  "commands_run": [
+    "bin/panoply doctor --json --no-write | jq '{summary,missing_defaults}'",
+    "bin/panoply env",
+    "bin/panoply env --json | jq",
+    "bin/panoply env --shell | head",
+    "PANOPLY_AGENT=1 bin/panoply bootstrap",
+    "shellcheck --severity=warning bin/panoply-doctor bin/panoply-env bin/panoply-bootstrap"
+  ],
+  "outcome": "panoply doctor gained --json: emits the registry object (summary + missing_defaults[] + tools[]) to stdout, suppressing all human/colored chatter via a _say wrapper; the secrets-rail check still runs silently and the exit code still reflects rail status (exit 0 here, ENFORCED). Added a human-mode 'missing defaults: \u2026' recap line. panoply env redesigned: default prints the resolved environment (PANOPLY_PKG/MANIFEST/CONFIG/BIN, WFOS_ROOT, ONTARCH_PKG/REGISTRY, PANOPLY_HOME resolution, PANOPLY_AGENT state, manifest_version, module map of default tools); --shell prints the old activation snippet; --json emits {paths, agent, manifest_version, modules{default,alternatives}} (the modules map also feeds S5). bootstrap hardened with an explicit human-only header comment; already exits 13 under PANOPLY_AGENT=1. Schema extended with optional missing_defaults[]. Command tables in README + native-toolchain.md and the AGENTS allowed list updated.",
+  "validation": "doctor --json --no-write parses via jq (total 42, installed 33, missing_default 5 = zsh-autosuggestions, zsh-syntax-highlighting, tldr, btop, dua), exit 0. env prints resolved paths + module map; env --json parses (paths+agent+modules); env --shell yields the fragment. PANOPLY_AGENT=1 bootstrap exits 13. doctor human recap line renders. Registry file rewritten with missing_defaults[] (schema-conformant). shellcheck --severity=warning CLEAN.",
+  "decisions": [
+    "secrets-rail status is conveyed to --json consumers via the exit code (non-zero on drift), not embedded in the JSON, to avoid entangling the E02 rail output with the tools registry schema",
+    "env --json carries the full modules map (default + alternatives) now so S5 only needs to add doctor's replaceability section + list --matrix",
+    "kept panoply env --shell so the prior 'print the activation snippet' behavior remains available (callers / panoply env consumers)"
+  ],
+  "next": "E03.S3 \u2014 install plan for the 5 missing defaults (human-run install)",
+  "blockers": [],
+  "token_note": "loaded 1 story block + STATE/ledger tail; doctor --json is a single structured read replacing per-tool probes; no canon ref needed"
+}

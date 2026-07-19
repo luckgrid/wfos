@@ -1,0 +1,626 @@
+#!/usr/bin/env bash
+# ontarch validate — GATE. Validate descriptors, policies, and the generated graph
+# against their JSON schemas. Read-only and agent-safe. The schema is the source of truth:
+# required keys and enums are read from the schema, not hardcoded here.
+set -uo pipefail
+
+_self="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../lib/common.sh
+source "$_self/../lib/common.sh"
+# shellcheck source=../lib/descriptor.sh
+source "$_self/../lib/descriptor.sh"
+
+ontarch_require_jq
+
+fail=0
+
+# Check a present field's value against its schema enum (no-op if field absent).
+_check_enum() {
+  local full="$1" field="$2" schema="$3" label="$4" val
+  val="$(jq -r --arg k "$field" '.[$k] // empty' <<<"$full")"
+  [ -n "$val" ] || return 0
+  if jq -e --arg k "$field" 'has("properties") and (.properties[$k].enum != null)' "$schema" >/dev/null; then
+    if ! jq -e --arg k "$field" --arg v "$val" '.properties[$k].enum | index($v)' "$schema" >/dev/null; then
+      ontarch_err "$label: $field='$val' is not in the schema enum"
+      return 1
+    fi
+  fi
+  return 0
+}
+
+_validate_descriptors() {
+  local schema="$ONTARCH_SCHEMAS/unit.schema.json"
+  [ -f "$schema" ] || ontarch_die "missing schema: $schema"
+  local required count=0
+  required="$(jq -r '.required[]' "$schema")"
+
+  ontarch_info "descriptors (vs schemas/unit.schema.json)"
+  local f src full id req
+  while IFS=$'\037' read -r f src; do
+    [ -n "$f" ] || continue
+    count=$((count + 1))
+    full="$(ontarch_descriptor_json "$f")"
+    id="$(jq -r '.id // "?"' <<<"$full")"
+    local label="$id [$src]"
+    local unit_fail=0
+
+    for req in $required; do
+      jq -e --arg k "$req" 'has($k)' <<<"$full" >/dev/null \
+        || { ontarch_err "$label: missing required '$req'"; unit_fail=1; }
+    done
+    jq -e '.paths.root // empty | length > 0' <<<"$full" >/dev/null \
+      || { ontarch_err "$label: paths.root is required and must be non-empty"; unit_fail=1; }
+
+    _check_enum "$full" kind "$schema" "$label" || unit_fail=1
+    _check_enum "$full" status "$schema" "$label" || unit_fail=1
+    _check_enum "$full" layer "$schema" "$label" || unit_fail=1
+
+    if [ "$unit_fail" -eq 0 ]; then
+      printf '  %sok%s  %-12s %s%s%s\n' "$_C_GREEN" "$_C_RESET" "$id" "$_C_DIM" "$f" "$_C_RESET"
+    else
+      fail=1
+    fi
+  done < <(ontarch_find_descriptors)
+
+  [ "$count" -gt 0 ] || { ontarch_err "no descriptors found"; fail=1; }
+  ontarch_info "validated $count descriptor(s)"
+}
+
+_validate_policies() {
+  local schema="$ONTARCH_SCHEMAS/policy.schema.json"
+  [ -f "$schema" ] || ontarch_die "missing schema: $schema"
+  local required count=0
+  required="$(jq -r '.required[]' "$schema")"
+
+  ontarch_info "policies (vs schemas/policy.schema.json)"
+  local f full id req pol_fail
+  for f in "$ONTARCH_POLICIES"/*.toml; do
+    [ -e "$f" ] || continue
+    count=$((count + 1))
+    full="$(ontarch_descriptor_json "$f")"
+    id="$(jq -r '.id // "?"' <<<"$full")"
+    pol_fail=0
+
+    for req in $required; do
+      jq -e --arg k "$req" 'has($k)' <<<"$full" >/dev/null \
+        || { ontarch_err "policy $id: missing required '$req'"; pol_fail=1; }
+    done
+
+    # id must match the schema pattern (^[a-z0-9][a-z0-9._-]*$)
+    if ! jq -e '.id | test("^[a-z0-9][a-z0-9._-]*$")' <<<"$full" >/dev/null 2>&1; then
+      ontarch_err "policy $id: id does not match schema pattern"
+      pol_fail=1
+    fi
+
+    if [ "$pol_fail" -eq 0 ]; then
+      printf '  %sok%s  %-20s %s%s%s\n' "$_C_GREEN" "$_C_RESET" "$id" "$_C_DIM" "$f" "$_C_RESET"
+    else
+      fail=1
+    fi
+  done
+
+  [ "$count" -gt 0 ] || { ontarch_warn "no policies found"; }
+  [ "$count" -gt 0 ] && ontarch_info "validated $count policy/policies"
+}
+
+# SkillSpector gate pairing: loads_external=true requires skillspector_scan in required_validators.
+# Args: <profile-json>
+_profile_skillspector_gate_ok() {
+  jq -e '
+    (.skills.loads_external // false) != true
+    or ((.validators.required_validators // []) | index("skillspector_scan"))
+  ' <<<"$1" >/dev/null
+}
+
+_selfcheck_skillspector_gate() {
+  ontarch_info "skillspector gate (selfcheck)"
+  local bad='{"id":"_gate_negative","skills":{"loads_external":true},"validators":{"required_validators":["frontmatter"]}}'
+  local good='{"id":"_gate_positive","skills":{"loads_external":true},"validators":{"required_validators":["skillspector_scan"]}}'
+  if _profile_skillspector_gate_ok "$bad"; then
+    ontarch_err "skillspector selfcheck: negative fixture should fail the gate"
+    fail=1
+  else
+    printf '  %sok%s  negative fixture rejected\n' "$_C_GREEN" "$_C_RESET"
+  fi
+  if _profile_skillspector_gate_ok "$good"; then
+    printf '  %sok%s  positive fixture accepted\n' "$_C_GREEN" "$_C_RESET"
+  else
+    ontarch_err "skillspector selfcheck: positive fixture should pass the gate"
+    fail=1
+  fi
+}
+
+# Collect skill ids from .agents/skills/*.toml (one id per line).
+_ontarch_skill_ids_from_sources() {
+  local f id
+  for f in "$AGENTS_HOME"/skills/*.toml; do
+    [ -e "$f" ] || continue
+    id="$(jq -r '.id // empty' <<<"$(ontarch_descriptor_json "$f")")"
+    [ -n "$id" ] && printf '%s\n' "$id"
+  done
+}
+
+# Args: <skill-id> <profile-id> — loadable skills must have passed, non-stale scan.
+_skill_loadable_scan_ok() {
+  local sid="$1" profile="$2" f full
+  for f in "$AGENTS_HOME"/skills/*.toml; do
+    [ -e "$f" ] || continue
+    full="$(ontarch_descriptor_json "$f")"
+    [ "$(jq -r '.id' <<<"$full")" = "$sid" ] || continue
+    if jq -e '
+      (.scan.status // "unscanned") == "passed"
+      and (.scan.hash // "") != ""
+      and (.scan.hash == (.version // ""))
+    ' <<<"$full" >/dev/null; then
+      return 0
+    fi
+    ontarch_err "profile $profile: loadable skill '$sid' has no passing scan or stale scan.hash != version — re-scan required"
+    return 1
+  done
+  ontarch_err "profile $profile: loadable skill '$sid' not found in registry"
+  return 1
+}
+
+_selfcheck_skill_scan_gate() {
+  ontarch_info "skill scan gate (selfcheck)"
+  local bad='{"id":"_scan_bad","version":"abc","scan":{"status":"unscanned","hash":""}}'
+  local good='{"id":"_scan_good","version":"abc","scan":{"status":"passed","hash":"abc"}}'
+  if jq -e '
+    (.scan.status // "unscanned") == "passed"
+    and (.scan.hash // "") != ""
+    and (.scan.hash == (.version // ""))
+  ' <<<"$bad" >/dev/null; then
+    ontarch_err "skill scan selfcheck: negative fixture should fail"
+    fail=1
+  else
+    printf '  %sok%s  negative scan fixture rejected\n' "$_C_GREEN" "$_C_RESET"
+  fi
+  if jq -e '
+    (.scan.status // "unscanned") == "passed"
+    and (.scan.hash // "") != ""
+    and (.scan.hash == (.version // ""))
+  ' <<<"$good" >/dev/null; then
+    printf '  %sok%s  positive scan fixture accepted\n' "$_C_GREEN" "$_C_RESET"
+  else
+    ontarch_err "skill scan selfcheck: positive fixture should pass"
+    fail=1
+  fi
+}
+
+# ponytail: frontmatter check is a single --- delimiter pair at file start.
+_skill_frontmatter_ok() {
+  local f="$1"
+  [ -f "$f" ] || return 1
+  awk 'BEGIN { found=0; ok=0 }
+       NR==1 && /^---$/ { found=1; next }
+       found && /^---$/ { ok=1; exit }
+       END { exit ok ? 0 : 1 }' "$f"
+}
+
+_validate_skills() {
+  local schema="$ONTARCH_SCHEMAS/skill.schema.json"
+  [ -f "$schema" ] || ontarch_die "missing schema: $schema"
+  local dir="$AGENTS_HOME/skills"
+  [ -d "$dir" ] || { ontarch_warn "no .agents/skills directory"; return 0; }
+  local required count=0
+  required="$(jq -r '.required[]' "$schema")"
+  local kind_enum source_enum
+  kind_enum="$(jq -r '.properties.kind.enum[]' "$schema")"
+  source_enum="$(jq -r '.properties.source.enum[]' "$schema")"
+
+  ontarch_info "skills (vs schemas/skill.schema.json)"
+  local f full id req sk_fail kind source touches risks body_ref body_path
+  for f in "$dir"/*.toml; do
+    [ -e "$f" ] || continue
+    count=$((count + 1))
+    full="$(ontarch_descriptor_json "$f")"
+    id="$(jq -r '.id // "?"' <<<"$full")"
+    sk_fail=0
+
+    for req in $required; do
+      jq -e --arg k "$req" 'has($k)' <<<"$full" >/dev/null \
+        || { ontarch_err "skill $id: missing required '$req'"; sk_fail=1; }
+    done
+
+    if ! jq -e '.id | test("^[a-z0-9][a-z0-9._-]*$")' <<<"$full" >/dev/null 2>&1; then
+      ontarch_err "skill $id: id does not match schema pattern"
+      sk_fail=1
+    fi
+
+    kind="$(jq -r '.kind // empty' <<<"$full")"
+    source="$(jq -r '.source // empty' <<<"$full")"
+    echo "$kind_enum" | grep -qx "$kind" \
+      || { ontarch_err "skill $id: kind='$kind' is not in the schema enum"; sk_fail=1; }
+    echo "$source_enum" | grep -qx "$source" \
+      || { ontarch_err "skill $id: source='$source' is not in the schema enum"; sk_fail=1; }
+
+    touches="$(jq -r '(.touches // []) | length' <<<"$full")"
+    risks="$(jq -r '(.risks // []) | length' <<<"$full")"
+    if [ "$touches" -gt 0 ] && [ "$risks" -eq 0 ]; then
+      ontarch_err "skill $id: touches is non-empty but risks is empty"
+      sk_fail=1
+    fi
+
+    kind="$(jq -r '.kind // "skill"' <<<"$full")"
+    body_ref="$(jq -r '.body_ref // .id' <<<"$full")"
+    if [ "$kind" = "template" ]; then
+      jq -e '.validator // empty | length > 0' <<<"$full" >/dev/null \
+        || { ontarch_err "skill $id: kind=template requires a non-empty validator"; sk_fail=1; }
+      body_path="$AGENTS_HOME/skills/$body_ref"
+      [ -f "$body_path" ] \
+        || { ontarch_err "skill $id: template body missing at $body_path"; sk_fail=1; }
+      _skill_frontmatter_ok "$body_path" \
+        || { ontarch_err "skill $id: template body missing valid frontmatter"; sk_fail=1; }
+    fi
+
+    if [ "$kind" = "pattern" ]; then
+      scan_status="$(jq -r '.scan.status // "unscanned"' <<<"$full")"
+      [ "$scan_status" = "unscanned" ] \
+        && ontarch_warn "skill $id: pattern catalogued but unscanned (not loadable until scanned)"
+    fi
+
+    if [ "$sk_fail" -eq 0 ]; then
+      printf '  %sok%s  %-24s %s%s%s\n' "$_C_GREEN" "$_C_RESET" "$id" "$_C_DIM" "$f" "$_C_RESET"
+    else
+      fail=1
+    fi
+  done
+
+  [ "$count" -gt 0 ] || { ontarch_warn "no skill records found"; }
+  [ "$count" -gt 0 ] && ontarch_info "validated $count skill record(s)"
+}
+
+_validate_profiles() {
+  local schema="$ONTARCH_SCHEMAS/profile.schema.json"
+  [ -f "$schema" ] || ontarch_die "missing schema: $schema"
+  local dir="$AGENTS_HOME/profiles"
+  [ -d "$dir" ] || { ontarch_warn "no .agents/profiles directory"; return 0; }
+  local required count=0
+  required="$(jq -r '.required[]' "$schema")"
+  local rwp_enum iso_enum
+  rwp_enum="$(jq -r '.properties.policy.properties.remote_write_policy.enum[]' "$schema")"
+  iso_enum="$(jq -r '.properties.isolation.properties.mode.enum[]' "$schema")"
+
+  ontarch_info "profiles (vs schemas/profile.schema.json)"
+  local f full id req pr_fail rwp sa
+  for f in "$dir"/*.toml; do
+    [ -e "$f" ] || continue
+    count=$((count + 1))
+    full="$(ontarch_descriptor_json "$f")"
+    id="$(jq -r '.id // "?"' <<<"$full")"
+    pr_fail=0
+
+    for req in $required; do
+      jq -e --arg k "$req" 'has($k)' <<<"$full" >/dev/null \
+        || { ontarch_err "profile $id: missing required '$req'"; pr_fail=1; }
+    done
+
+    # id must match the schema pattern (^[a-z0-9][a-z0-9._-]*$)
+    if ! jq -e '.id | test("^[a-z0-9][a-z0-9._-]*$")' <<<"$full" >/dev/null 2>&1; then
+      ontarch_err "profile $id: id does not match schema pattern"
+      pr_fail=1
+    fi
+
+    # scope.allowed_paths must be a non-empty array
+    jq -e '(.scope.allowed_paths // []) | type == "array" and length > 0' <<<"$full" >/dev/null \
+      || { ontarch_err "profile $id: scope.allowed_paths is required and must be a non-empty array"; pr_fail=1; }
+
+    # policy.remote_write_policy, when present, must be in the schema enum
+    rwp="$(jq -r '.policy.remote_write_policy // empty' <<<"$full")"
+    if [ -n "$rwp" ] && ! echo "$rwp_enum" | grep -qx "$rwp"; then
+      ontarch_err "profile $id: policy.remote_write_policy='$rwp' is not in the schema enum"
+      pr_fail=1
+    fi
+
+    # isolation.mode, when present, must be in the schema enum (worktree|branch|main)
+    local iso
+    iso="$(jq -r '.isolation.mode // empty' <<<"$full")"
+    if [ -n "$iso" ] && ! echo "$iso_enum" | grep -qx "$iso"; then
+      ontarch_err "profile $id: isolation.mode='$iso' is not in the schema enum"
+      pr_fail=1
+    fi
+
+    # policy.secret_access, when present, must be boolean
+    sa="$(jq -r '.policy | has("secret_access")' <<<"$full" 2>/dev/null)"
+    if [ "$sa" = "true" ]; then
+      jq -e '.policy.secret_access | type == "boolean"' <<<"$full" >/dev/null \
+        || { ontarch_err "profile $id: policy.secret_access must be boolean"; pr_fail=1; }
+    fi
+
+    # SkillSpector gate (E05.S4): any profile that loads external skills MUST require a
+    # skillspector_scan. An unscanned skill is an unreviewed dependency and does not load.
+    if ! _profile_skillspector_gate_ok "$full"; then
+      ontarch_err "profile $id: loads_external skills but required_validators is missing 'skillspector_scan' (SkillSpector gate)"
+      pr_fail=1
+    fi
+
+    # Cross-ref allowed_skill_ids against the curated skill registry (E06.S2).
+    local sid skill_ids
+    skill_ids="$(_ontarch_skill_ids_from_sources)"
+    for sid in $(jq -r '.skills.allowed_skill_ids // [] | .[]' <<<"$full" 2>/dev/null); do
+      echo "$skill_ids" | grep -qx "$sid" \
+        || { ontarch_err "profile $id: allowed_skill_ids references unknown skill '$sid'"; pr_fail=1; }
+    done
+
+    # Loadable-skill scan gate (E06.S5): listed skills need a passing, non-stale scan.
+    for sid in $(jq -r '.skills.allowed_skill_ids // [] | .[]' <<<"$full" 2>/dev/null); do
+      _skill_loadable_scan_ok "$sid" "$id" || pr_fail=1
+    done
+
+    if [ "$pr_fail" -eq 0 ]; then
+      printf '  %sok%s  %-24s %s%s%s\n' "$_C_GREEN" "$_C_RESET" "$id" "$_C_DIM" "$f" "$_C_RESET"
+    else
+      fail=1
+    fi
+  done
+
+  [ "$count" -gt 0 ] || { ontarch_warn "no profiles found"; }
+  [ "$count" -gt 0 ] && ontarch_info "validated $count profile(s)"
+}
+
+_validate_scan() {
+  local schema="$ONTARCH_SCHEMAS/scan.schema.json"
+  local scan="$ONTARCH_REGISTRY/scan.json"
+  [ -f "$schema" ] || ontarch_die "missing schema: $schema"
+  [ -f "$scan" ]   || { ontarch_warn "scan.json absent — run 'moon run ontarch:scan' first"; return 0; }
+
+  ontarch_info "scan report (vs schemas/scan.schema.json)"
+  local sfail=0 req
+  for req in $(jq -r '.required[]' "$schema"); do
+    jq -e --arg k "$req" 'has($k)' "$scan" >/dev/null \
+      || { ontarch_err "scan: missing required '$req'"; sfail=1; }
+  done
+
+  # each workspace entry must carry the required workspace keys
+  local wreq
+  wreq="$(jq -r '.properties.workspaces.items.required[]' "$schema")"
+  local missing
+  for req in $wreq; do
+    missing="$(jq -r --arg k "$req" '[.workspaces[] | select(has($k) | not) | .path] | length' "$scan")"
+    [ "$missing" = "0" ] || { ontarch_err "scan: $missing workspace(s) missing '$req'"; sfail=1; }
+  done
+
+  # worktree_status.state must be clean|dirty
+  local badstate
+  badstate="$(jq -r '[.workspaces[] | select((.worktree_status.state // "") | test("^(clean|dirty)$") | not)] | length' "$scan")"
+  [ "$badstate" = "0" ] || { ontarch_err "scan: $badstate workspace(s) with invalid worktree_status.state"; sfail=1; }
+
+  if [ "$sfail" -eq 0 ]; then
+    printf '  %sok%s  scan.json (%s workspaces) — report valid\n' \
+      "$_C_GREEN" "$_C_RESET" "$(jq -r '.summary.total' "$scan")"
+  else
+    fail=1
+  fi
+}
+
+# Soft structural check for the bin inventory (no dedicated schema — fields are
+# defined by ontarch_emit_bin_inventory). Warns if absent; validates shape when present.
+_validate_bin_inventory() {
+  local inv="$ONTARCH_REGISTRY/bin-inventory.json"
+  [ -f "$inv" ] || { ontarch_warn "bin-inventory.json absent — run 'moon run ontarch:bin-report' first"; return 0; }
+
+  ontarch_info "bin inventory (structural)"
+  local ifail=0 req
+  for req in generated_at root summary workflows; do
+    jq -e --arg k "$req" 'has($k)' "$inv" >/dev/null \
+      || { ontarch_err "bin-inventory: missing required '$req'"; ifail=1; }
+  done
+
+  local missing
+  for req in path size_bytes file_count manifest_present manifest_count; do
+    missing="$(jq -r --arg k "$req" '[.workflows[] | select(has($k) | not) | .path] | length' "$inv")"
+    [ "$missing" = "0" ] || { ontarch_err "bin-inventory: $missing workflow(s) missing '$req'"; ifail=1; }
+  done
+
+  # oldest >= newest when both present (ages are days-since-mtime)
+  local badage
+  badage="$(jq -r '[.workflows[]
+    | select(.oldest_file_age_days != null and .newest_file_age_days != null)
+    | select(.oldest_file_age_days < .newest_file_age_days)] | length' "$inv")"
+  [ "$badage" = "0" ] || { ontarch_err "bin-inventory: $badage workflow(s) with oldest < newest age"; ifail=1; }
+
+  if [ "$ifail" -eq 0 ]; then
+    printf '  %sok%s  bin-inventory.json (%s workflows) — report valid\n' \
+      "$_C_GREEN" "$_C_RESET" "$(jq -r '.summary.total' "$inv")"
+  else
+    fail=1
+  fi
+}
+
+# Retention pattern from manifest.schema.json (concrete auto-archive-after:<N>d allowed).
+_manifest_retention_ok() {
+  jq -e '.retention | test("^(review-before-delete|permanent|session-exports|auto-archive-after:[0-9]+d)$")' <<<"$1" >/dev/null
+}
+
+_manifest_archive_reason_ok() {
+  local reason
+  reason="$(jq -r '.archive_reason // empty' <<<"$1")"
+  [ -z "$reason" ] && return 0
+  case "$reason" in
+    superseded|imported|retired|reference|duplicate|stale) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Validate one manifest JSON document against required keys + retention/archive enums.
+# Args: <label> <json>
+_check_manifest_doc() {
+  local label="$1" full="$2" schema="$ONTARCH_SCHEMAS/manifest.schema.json"
+  local mfail=0 req
+  for req in $(jq -r '.required[]' "$schema"); do
+    jq -e --arg k "$req" 'has($k)' <<<"$full" >/dev/null \
+      || { ontarch_err "$label: missing required '$req'"; mfail=1; }
+  done
+  jq -e '(.outputs // []) | type == "array" and length > 0' <<<"$full" >/dev/null \
+    || { ontarch_err "$label: outputs must be a non-empty array"; mfail=1; }
+  _manifest_retention_ok "$full" \
+    || { ontarch_err "$label: retention='$(jq -r '.retention // empty' <<<"$full")' is not a valid retention value"; mfail=1; }
+  _manifest_archive_reason_ok "$full" \
+    || { ontarch_err "$label: archive_reason='$(jq -r '.archive_reason // empty' <<<"$full")' is not in the schema enum"; mfail=1; }
+  return "$mfail"
+}
+
+_selfcheck_manifest_retention() {
+  ontarch_info "manifest retention (selfcheck)"
+  local good_fixed='{"id":"g","workflow":"w","source":"s","created_at":"t","tool":"ontarch","outputs":["o"],"retention":"review-before-delete"}'
+  local good_auto='{"id":"g","workflow":"w","source":"s","created_at":"t","tool":"ontarch","outputs":["o"],"retention":"auto-archive-after:30d"}'
+  local bad_ret='{"id":"g","workflow":"w","source":"s","created_at":"t","tool":"ontarch","outputs":["o"],"retention":"auto-archive-after:NNd"}'
+  local bad_missing='{"id":"g","workflow":"w","source":"s","created_at":"t","tool":"ontarch","outputs":["o"]}'
+  if _manifest_retention_ok "$good_fixed" && _manifest_retention_ok "$good_auto"; then
+    printf '  %sok%s  retention fixed + auto-archive-after:30d accepted\n' "$_C_GREEN" "$_C_RESET"
+  else
+    ontarch_err "manifest retention selfcheck: valid retentions should pass"
+    fail=1
+  fi
+  if _manifest_retention_ok "$bad_ret"; then
+    ontarch_err "manifest retention selfcheck: literal NNd should fail"
+    fail=1
+  else
+    printf '  %sok%s  literal auto-archive-after:NNd rejected\n' "$_C_GREEN" "$_C_RESET"
+  fi
+  if _check_manifest_doc "_missing" "$bad_missing" 2>/dev/null; then
+    ontarch_err "manifest retention selfcheck: missing retention should fail"
+    fail=1
+  else
+    printf '  %sok%s  missing retention rejected\n' "$_C_GREEN" "$_C_RESET"
+  fi
+}
+
+_selfcheck_manifest_archive_reason() {
+  ontarch_info "manifest archive_reason (selfcheck)"
+  local good='{"id":"g","workflow":"w","source":"s","created_at":"t","tool":"ontarch","outputs":["o"],"retention":"review-before-delete","archive_reason":"stale","promoted_to":"Plan/bin/archives/x/"}'
+  local bad='{"id":"g","workflow":"w","source":"s","created_at":"t","tool":"ontarch","outputs":["o"],"retention":"review-before-delete","archive_reason":"yeeted"}'
+  local none='{"id":"g","workflow":"w","source":"s","created_at":"t","tool":"ontarch","outputs":["o"],"retention":"review-before-delete"}'
+  if _check_manifest_doc "_archive_good" "$good" && _manifest_archive_reason_ok "$none"; then
+    printf '  %sok%s  archive_reason=stale + promoted_to + absent reason accepted\n' "$_C_GREEN" "$_C_RESET"
+  else
+    ontarch_err "manifest archive_reason selfcheck: valid archive fields should pass"
+    fail=1
+  fi
+  if _check_manifest_doc "_archive_bad" "$bad" 2>/dev/null; then
+    ontarch_err "manifest archive_reason selfcheck: invalid reason should fail"
+    fail=1
+  else
+    printf '  %sok%s  invalid archive_reason rejected\n' "$_C_GREEN" "$_C_RESET"
+  fi
+}
+
+_validate_manifest() {
+  local schema="$ONTARCH_SCHEMAS/manifest.schema.json"
+  local fixture="$ONTARCH_REGISTRY/fixtures/example-manifest.json"
+  local generated="$ONTARCH_REGISTRY/manifest.json"
+  [ -f "$schema" ] || ontarch_die "missing schema: $schema"
+
+  ontarch_info "manifests (vs schemas/manifest.schema.json)"
+  local mfail=0
+
+  if [ -f "$fixture" ]; then
+    if _check_manifest_doc "fixture" "$(cat "$fixture")"; then
+      printf '  %sok%s  fixtures/example-manifest.json\n' "$_C_GREEN" "$_C_RESET"
+    else
+      mfail=1
+    fi
+  else
+    ontarch_err "manifest fixture missing: $fixture"
+    mfail=1
+  fi
+
+  local archived_fixture="$ONTARCH_REGISTRY/fixtures/example-manifest-archived.json"
+  if [ -f "$archived_fixture" ]; then
+    if _check_manifest_doc "archived-fixture" "$(cat "$archived_fixture")"; then
+      printf '  %sok%s  fixtures/example-manifest-archived.json\n' "$_C_GREEN" "$_C_RESET"
+    else
+      mfail=1
+    fi
+  fi
+
+  if [ -f "$generated" ]; then
+    if _check_manifest_doc "registry/manifest.json" "$(cat "$generated")"; then
+      printf '  %sok%s  registry/manifest.json (workflow=%s)\n' \
+        "$_C_GREEN" "$_C_RESET" "$(jq -r '.workflow' "$generated")"
+    else
+      mfail=1
+    fi
+  else
+    ontarch_warn "registry/manifest.json absent — run 'moon run ontarch:sync' (or scan) first"
+  fi
+
+  [ "$mfail" -eq 0 ] || fail=1
+}
+
+_validate_graph() {
+  local schema="$ONTARCH_GRAPHS/edges.schema.json"
+  local graph="$ONTARCH_REGISTRY/graph.json"
+
+  [ -f "$schema" ] || ontarch_die "missing schema: $schema"
+  [ -f "$graph" ]  || { ontarch_warn "graph.json absent — run 'moon run ontarch:sync' first"; return 0; }
+
+  ontarch_info "graph (vs graphs/edges.schema.json)"
+  local gfail=0
+
+  # required top-level keys
+  jq -e 'has("nodes") and has("edges")' "$graph" >/dev/null \
+    || { ontarch_err "graph: missing required 'nodes' or 'edges'"; gfail=1; }
+
+  # node kind enum
+  local node_kinds
+  node_kinds="$(jq -r '.properties.nodes.items.properties.kind.enum[]' "$schema")"
+  for k in $(jq -r '.nodes[].kind' "$graph" | sort -u); do
+    echo "$node_kinds" | grep -qx "$k" \
+      || { ontarch_err "graph: node kind '$k' not in schema enum"; gfail=1; }
+  done
+
+  # edge rel enum
+  local edge_rels
+  edge_rels="$(jq -r '.properties.edges.items.properties.rel.enum[]' "$schema")"
+  for r in $(jq -r '.edges[].rel' "$graph" | sort -u); do
+    echo "$edge_rels" | grep -qx "$r" \
+      || { ontarch_err "graph: edge rel '$r' not in schema enum"; gfail=1; }
+  done
+
+  # each edge endpoint must reference an existing node
+  local dangling
+  dangling="$(jq -r '
+    [.nodes[].id] as $ids |
+    (.edges | map(.from) + map(.to)) |
+    map(select(. as $e | $ids | index($e) | not)) | unique | .[]
+  ' "$graph" 2>/dev/null)"
+  if [ -n "$dangling" ]; then
+    ontarch_err "graph: dangling edge endpoints: $dangling"
+    gfail=1
+  fi
+
+  local nn en
+  nn=$(jq -r '.nodes | length' "$graph")
+  en=$(jq -r '.edges | length' "$graph")
+
+  if [ "$gfail" -eq 0 ]; then
+    printf '  %sok%s  graph.json (%s nodes, %s edges) — all endpoints resolve\n' \
+      "$_C_GREEN" "$_C_RESET" "$nn" "$en"
+  else
+    fail=1
+  fi
+}
+
+main() {
+  _validate_descriptors
+  _validate_policies
+  _validate_profiles
+  _validate_skills
+  _selfcheck_skillspector_gate
+  _selfcheck_skill_scan_gate
+  _validate_scan
+  _validate_bin_inventory
+  _validate_manifest
+  _selfcheck_manifest_retention
+  _selfcheck_manifest_archive_reason
+  _validate_graph
+  if [ "$fail" -eq 0 ]; then
+    ontarch_ok "ontarch validate: PASS"
+  else
+    ontarch_err "ontarch validate: FAIL"
+  fi
+  exit "$fail"
+}
+
+main "$@"

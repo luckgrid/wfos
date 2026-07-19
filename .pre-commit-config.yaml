@@ -39,7 +39,7 @@ repos:
 
       - id: conventional-commit
         name: conventional commit message
-        entry: packages/archon/hooks/commit-msg
+        entry: packages/ontarch/hooks/commit-msg
         language: system
         stages: [commit-msg]
 

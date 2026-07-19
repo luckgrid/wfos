@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# panoply — native toolchain dispatcher (WfOS Level 0).
+set -uo pipefail
+
+_self="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../lib/common.sh
+source "$_self/../lib/common.sh"
+# shellcheck source=../lib/manifest.sh
+source "$_self/../lib/manifest.sh"
+
+usage() {
+  cat <<EOF
+panoply — WfOS Level 0 native toolchain (manifest v$(panoply_manifest_version))
+
+usage: panoply <command> [args]
+
+commands:
+  doctor [--json] [--no-write]  detect tools, print readiness, write ontarch registry (agent-safe)
+  list [module|--matrix] list modules/tools, or the replaceability matrix (agent-safe)
+  gen <artifact>        derive install artifacts (brewfile|mise) from the manifest (agent-safe)
+  env [--shell|--json]  print the resolved Panoply environment (agent-safe)
+  bootstrap [--dry-run] install missing tools, link configs, wire shell (human-only)
+  version               print manifest version
+  help                  show this help
+
+agent mode: set PANOPLY_AGENT=1 to block mutating commands (bootstrap/installs).
+EOF
+}
+
+cmd_matrix() {
+  printf '%s%-10s %-16s %-14s %s%s\n' "$_C_BOLD" "module" "default" "active" "alternatives" "$_C_RESET"
+  local module def alts active kind tag
+  while IFS=$'\037' read -r module def alts active kind; do
+    [ -n "$module" ] || continue
+    case "$kind" in
+      default)     tag="${_C_GREEN}${active} (default)${_C_RESET}" ;;
+      alternative) tag="${_C_YELLOW}${active} (alt)${_C_RESET}" ;;
+      *)           tag="${_C_RED}none (${def} missing)${_C_RESET}" ;;
+    esac
+    printf '%-10s %-16s %-25s %s%s%s\n' "$module" "$def" "$tag" "$_C_DIM" "$alts" "$_C_RESET"
+  done < <(panoply_role_matrix)
+}
+
+cmd_list() {
+  if [ "${1:-}" = "--matrix" ]; then cmd_matrix; return; fi
+  local filter="${1:-}"
+  local current=""
+  # shellcheck disable=SC2034  # fields bound positionally; not all used here
+  while IFS=$'\037' read -r module id def brew detect agent_safe alts purpose; do
+    [ -n "$id" ] || continue
+    [ -n "$filter" ] && [ "$module" != "$filter" ] && continue
+    if [ "$module" != "$current" ]; then
+      [ -n "$current" ] && echo
+      printf '%s%s%s\n' "$_C_BOLD" "$module" "$_C_RESET"
+      current="$module"
+    fi
+    local tag=""; [ "$def" = "true" ] && tag="${_C_DIM}(default)${_C_RESET}"
+    printf '  %-14s %s %s%s%s\n' "$id" "$tag" "$_C_DIM" "$purpose" "$_C_RESET"
+  done < <(panoply_manifest_tsv)
+}
+
+main() {
+  local cmd="${1:-help}"; shift || true
+  case "$cmd" in
+    doctor)    exec "$_self/panoply-doctor" "$@" ;;
+    bootstrap) exec "$_self/panoply-bootstrap" "$@" ;;
+    env)       exec "$_self/panoply-env" "$@" ;;
+    gen)       exec "$_self/panoply-gen" "$@" ;;
+    list)      cmd_list "${1:-}" ;;
+    version)   panoply_manifest_version ;;
+    help|-h|--help) usage ;;
+    *) panoply_err "unknown command: $cmd"; echo; usage; exit 1 ;;
+  esac
+}
+
+main "$@"

@@ -1,0 +1,51 @@
+{
+  "session_id": "2026-06-26-e05-s1",
+  "epic": "E05",
+  "story": "S1",
+  "title": "Shared profile contract",
+  "status": "done",
+  "started_at": "2026-06-26T00:00:00Z",
+  "ended_at": "2026-06-26T03:00:00Z",
+  "agent": "zed/claude-opus",
+  "profile": "workspace-dev",
+  "loaded_context": [
+    "Build/bin/STATE.md",
+    "Build/bin/SESSIONS.md (tail)",
+    "Build/bin/E05_agent_configs_profiles.md#s1",
+    "Build/bin/2026-06-26-wfos-e05-agent-configs-profiles-sprint.md",
+    "Plan/bin/wfos/lg_wfos_lvl_0_agent_rails.md",
+    "packages/ontarch/registry/sessions/2026-06-25-e04-s5.json",
+    "packages/ontarch/registry/sessions/2026-06-25-e04-s4.json"
+  ],
+  "changed_paths": [
+    "Workstreams/.agents/profiles/docs-only.toml",
+    "Workstreams/.agents/profiles/workspace-dev.toml",
+    "Workstreams/.agents/profiles/agent-safe-maintenance.toml",
+    "Workstreams/.agents/profiles/README.md",
+    "Build/src/workspaces/wfos/packages/ontarch/schemas/profile.schema.json",
+    "Build/src/workspaces/wfos/packages/ontarch/lib/registry.sh",
+    "Build/src/workspaces/wfos/packages/ontarch/bin/ontarch-validate",
+    "Build/src/workspaces/wfos/packages/ontarch/graphs/edges.schema.json",
+    "Build/bin/2026-06-26-wfos-e05-agent-configs-profiles-sprint.md",
+    "Build/bin/STATE.md",
+    "Build/bin/SESSIONS.md"
+  ],
+  "commands_run": [
+    "moon run ontarch:sync",
+    "moon run ontarch:validate",
+    "jq '.profiles[].id' packages/ontarch/registry/profiles.json",
+    "jq '.edges[]|select(.rel==\"selects\")' packages/ontarch/registry/graph.json"
+  ],
+  "outcome": "Shared profile contract stood up. Three tracked TOML profiles under Workstreams/.agents/profiles/ \u2014 docs-only (no-agent-git-push rails, blocked remote, no skills), workspace-dev (panoply.agent rails, local-only remote, loads skills), agent-safe-maintenance (panoply.agent rails, blocked remote, PANOPLY_AGENT=1, loads skills). Each declares the full epic field set: id, purpose, scope.{allowed,blocked}_paths, commands.{allowed,gated,blocked}_commands, policy.{secret_access,remote_write_policy}, validators.required_validators, output.compressor, logs.session_log_target. New profile.schema.json (draft-07: required id+purpose, id pattern, remote_write_policy enum, additionalProperties true). ontarch-validate gains _validate_profiles (required keys from schema + id pattern + non-empty allowed_paths + remote_write_policy enum + secret_access boolean). registry.sh gains ontarch_profile_record (flatten nested TOML tables to a compact record with the exact epic field names) used by ontarch_emit_profiles. Graph extended: profile nodes + profile -selects-> policy edges (edges.schema.json gains profile node kind + selects rel); fixed a jq scoping bug where index(.rails) rebound . to the policy-ids array. profiles/README.md replaced its planned-shape stub with the real contract + field table + app-integration diagram.",
+  "validation": "moon run ontarch:validate PASS \u2014 3 descriptors + 2 policies + 3 profiles + graph (17 nodes, 14 edges, all endpoints resolve). moon run ontarch:sync regenerates profiles.json (3 flattened records) and graph.json with 3 profile->selects->policy edges (agent-safe-maintenance->panoply.agent, docs-only->no-agent-git-push, workspace-dev->panoply.agent).",
+  "decisions": [
+    "Profiles are tracked TOML data (not gitignored); registry/profiles.json stays generated/gitignored \u2014 same split as descriptors vs units.json",
+    "Profile field names match the epic acceptance list exactly, grouped into reader-safe flat tables (scope/commands/policy/validators/output/logs)",
+    "rails references an existing Ontarch policy id; ontarch_emit_graph only emits a selects edge when the policy node exists, so the dangling-endpoint check still passes",
+    "remote_write_policy is a 3-value enum (blocked|local-only|elevated) so E07 can map the git allowlist per profile",
+    "skillspector_scan placed in required_validators only for skill-loading profiles (workspace-dev, agent-safe-maintenance); docs-only loads no skills \u2014 formalized in S4"
+  ],
+  "next": "E05.S2 \u2014 lean AGENTS.md pattern (template + cross-workstream root pointer + agent-configs doc)",
+  "blockers": [],
+  "token_note": "One profile declaration replaces N per-app prose configs: instead of restating scope/commands/secrets/rails as prose in Claude, Cursor, Zed, Factory, and OpenCode configs, an agent (or app renderer) reads one TOML profile (or one record from the generated profiles.json). Shared intent declared once; apps consume it via their own syntax."
+}

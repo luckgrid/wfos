@@ -1,6 +1,6 @@
-# Package translator — Hypercube (planned)
+# Package translator — Polytope (planned)
 
-Hypercube is the language-agnostic high-level-to-low-level package interface (`hqb`). It
+Polytope is the language-agnostic high-level-to-low-level package interface (`cth package`). It
 turns higher-level workflow logic, rules, policies, profiles, and patterns into lower-level
 packages, artifacts, adapters, and runtime contracts.
 
@@ -21,13 +21,13 @@ Owns: package definitions and metadata, interface compilation, artifact packagin
 cross-language package mapping, policy/profile/adapter packaging, WASM/WASI package patterns.
 
 Does **not** own: runtime command orchestration, terminal sessions, machine setup, shell
-execution, tool detection, or session logs — those belong to [Kraken](runtime-controller.md).
+execution, tool detection, or session logs — those belong to [Cthulhu](runtime-controller.md).
 
 ## Workflow
 
 ```mermaid
 flowchart LR
-  A[High-level interface] --> B[Hypercube]
+  A[High-level interface] --> B[Polytope]
   B --> C[Validate schema]
   C --> D[Resolve target]
   D --> E[Rust crate]
@@ -56,18 +56,21 @@ deployment-package  deployment/infrastructure targets (future)
 
 ## Relationship to native package managers
 
-Hypercube does not replace native package managers — it compiles, wraps, links, validates,
+Polytope does not replace native package managers — it compiles, wraps, links, validates,
 and describes packages across systems. A TypeScript target is still installed by
 pnpm/bun/npm; a Rust crate is still built by Cargo; a WASM component is still run by
-[Ether](portable-runtime.md)/Wasmtime. Hypercube packages the system meaning; native tools execute
+[Wisp](portable-component-runtime.md)/Wasmtime. Polytope packages the system meaning; native tools execute
 native responsibilities.
 
 ## Command surface
 
 ```bash
-hqb init        hqb inspect <pkg>    hqb pack <pkg>
-hqb compile     hqb publish local    hqb install <pkg>    hqb link
+cth package validate <pkg>    cth package inspect <pkg>
+cth package project <pkg> --target <typescript|rust|python|wasm|oci>
+cth package build <pkg>       cth package pack <pkg>       cth package publish <pkg>
 ```
 
-[Kraken](runtime-controller.md) may invoke `hqb` during routing; `hqb` is the daily CLI for package and
-interface operations. Package contracts live in [Archon](metadata-plane.md).
+Polytope does not initially need a standalone executable; its functions are exposed through
+[Cthulhu](runtime-controller.md)'s `cth package` surface. The preferred high-level verb is
+`project` — a higher-dimensional package model projected into a target ecosystem. Package
+contracts live in [Ontarch](metadata-plane.md).

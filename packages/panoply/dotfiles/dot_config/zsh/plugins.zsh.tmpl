@@ -1,0 +1,31 @@
+{{- $p := index .profiles .profile -}}
+# ~/.config/zsh/plugins.zsh — managed by chezmoi (WfOS). Profile: {{ .profile }}
+#
+# Bare zsh + standalone plugins: NO Oh My Zsh, NO Powerlevel10k. The prompt stays Starship
+# (initialized in panoply.zsh). Every `source` is GUARDED ([ -f ... ] && source) so a missing plugin
+# never breaks shell startup — mirrors the guarded-activation pattern in panoply.zsh. Plugin INSTALL
+# is owned by `panoply bootstrap` / manifest shell module; this fragment owns the chezmoi integration.
+#
+# Permissive OSS only: zsh-autosuggestions (MIT), zsh-syntax-highlighting (BSD-3),
+# zsh-autocomplete (MIT, optional — can conflict, so opt-in).
+{{ if eq .profile "agent-safe" -}}
+# agent-safe profile: no interactive plugins are loaded (minimal, non-interactive surface).
+{{- else -}}
+_wfos_brew_prefix="${HOMEBREW_PREFIX:-$(brew --prefix 2>/dev/null)}"
+if [ -n "$_wfos_brew_prefix" ]; then
+  # Async command suggestions from history (MIT). Sourced first.
+  [ -f "$_wfos_brew_prefix/share/zsh-autosuggestions/zsh-autosuggestions.zsh" ] && \
+    source "$_wfos_brew_prefix/share/zsh-autosuggestions/zsh-autosuggestions.zsh"
+{{ if ne .profile "headless-dev" }}
+  # Real-time menu completion (MIT) — optional, can conflict; opt in with WFOS_ZSH_AUTOCOMPLETE=1.
+  if [ "${WFOS_ZSH_AUTOCOMPLETE:-0}" = "1" ] && \
+     [ -f "$_wfos_brew_prefix/share/zsh-autocomplete/zsh-autocomplete.plugin.zsh" ]; then
+    source "$_wfos_brew_prefix/share/zsh-autocomplete/zsh-autocomplete.plugin.zsh"
+  fi
+{{ end }}
+  # Real-time syntax highlighting (BSD-3). MUST be sourced LAST to wrap the final widget set.
+  [ -f "$_wfos_brew_prefix/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh" ] && \
+    source "$_wfos_brew_prefix/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
+fi
+unset _wfos_brew_prefix
+{{- end }}
