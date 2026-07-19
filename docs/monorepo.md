@@ -69,14 +69,15 @@ is intentionally not exposed as a task (it is human-only — see [agent-rails.md
 ## Rust workspace (deferred)
 
 There are no Rust crates yet, so there is no root `Cargo.toml`. The Cargo workspace lands
-with the first crate ([Cthulhu](runtime-controller.md)); at that point the root `Cargo.toml` lists
-`packages/cthulhu` as a member, and `.moon/toolchains.yml` already has the rust toolchain
-enabled with `clippy` and `rustfmt`.
+with the first crate (the [runtime controller (Cthulhu)](runtime-controller.md)); at that point
+the root `Cargo.toml` lists `packages/cthulhu` as a member, and `.moon/toolchains.yml` already
+has the rust toolchain enabled with `clippy` and `rustfmt`.
 
-## How Cthulhu relates to moon
+## How the runtime controller relates to moon
 
-[Cthulhu](runtime-controller.md) (`cth`) is the WfOS runtime controller, not a replacement for moon. moon
-is the project-graph and task backend; Cthulhu routes higher-level workflow commands to moon's
-task graph (a compat backend) and to [Panoply](native-toolchain.md) native tools, recording sessions and
-applying policy along the way. Native manifests and the moon graph stay authoritative for
-builds; Cthulhu adds discovery, routing, and rails on top.
+The [runtime controller (Cthulhu)](runtime-controller.md) (`cth`) is the WfOS runtime controller,
+not a replacement for moon. moon is the project-graph and task backend; the runtime controller
+routes higher-level workflow commands to moon's task graph (a compat backend) and to
+[native-toolchain (Panoply)](native-toolchain.md) tools, recording sessions and applying policy
+along the way. Native manifests and the moon graph stay authoritative for builds; the runtime
+controller adds discovery, routing, and rails on top.

@@ -14,10 +14,10 @@ Full documentation lives in [`docs/`](docs/README.md). Start with
 | Archetype | Product | CLI | Role | Status |
 |-----------|---------|-----|------|--------|
 | native-toolchain | Panoply | `panoply` (later `cth native`) | Local Unix/Rust tool execution | implemented |
-| metadata-plane | Ontarch | `ontarch` (later `cth meta`) | Descriptors, registry, schemas, policies | implemented |
-| runtime-controller | Cthulhu | `cth` | Discovery, routing, sessions, rails, integrations (Tendrils) | planned |
+| metadata-plane | Ontarch | build tasks (`ontarch:*`; later `cth meta`) | Descriptors, registry, schemas, policies | implemented |
+| runtime-controller | Cthulhu | `cth` | Discovery, routing, sessions, rails, integrations (`runtime-integration` / Tendril) | planned |
 | package-translator | Polytope | `cth package` | Intent → packages and artifacts | planned |
-| portable-component-runtime | Wisp | `cth portable` | WASM/WASI sandboxed components | planned |
+| portable-component-runtime | Wisp | `cth portable` (planned) | WASM/WASI sandboxed components | planned |
 
 Archetypes are stable roles; products are swappable implementations. Above the filesystem,
 three [interface layers](docs/architecture.md#interface-layers) — toolchain, agent, application
@@ -30,7 +30,7 @@ This workspace is a [moon](https://moonrepo.dev/moon) monorepo with toolchains p
 
 ```bash
 moon run wfos:setup     # proto install — fetch pinned toolchains
-moon run panoply:doctor    # detect tools + write the Ontarch registry (read-only)
+moon run panoply:doctor    # detect tools + write the metadata-plane registry (read-only)
 moon query projects     # inspect the project graph
 ```
 
@@ -63,7 +63,7 @@ Pins live in [`.prototools`](.prototools); graph and tasks in [`.moon/`](.moon/)
 | [monorepo](docs/monorepo.md) | moon + proto graph, tasks, conventions |
 | [native-toolchain](docs/native-toolchain.md) | Native toolchain — tools, modules, config |
 | [metadata-plane](docs/metadata-plane.md) | Metadata plane — descriptors, registry, schemas, policies |
-| [runtime-controller](docs/runtime-controller.md) · [package-translator](docs/package-translator.md) · [portable-component-runtime](docs/portable-component-runtime.md) | Planned products |
+| [runtime-controller](docs/runtime-controller.md) · [package-translator](docs/package-translator.md) · [portable-component-runtime](docs/portable-component-runtime.md) | Planned archetypes / products |
 | [agent-configs](docs/agent-configs.md) | Shared agent profiles and lean AGENTS.md pattern |
 | [agent-skills](docs/agent-skills.md) | On-demand skill registry, templates, load logging |
 | [agent-rails](docs/agent-rails.md) | Agent rails, gates, MCP, skill scanning |
@@ -77,5 +77,5 @@ For agents, see [AGENTS.md](AGENTS.md).
 ## Git
 
 This workspace is its own standalone git repository (`main`), local-first with no required
-remote. Generated, host-specific output (the Ontarch tools registry, `target/`, `.moon/cache`)
-is gitignored; sources, contracts, and docs stay tracked.
+remote. Generated, host-specific output (the metadata-plane tools registry, `target/`,
+`.moon/cache`) is gitignored; sources, contracts, and docs stay tracked.

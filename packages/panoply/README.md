@@ -1,6 +1,6 @@
-# Panoply — native toolchain
+# native-toolchain — Panoply
 
-Panoply is the layer of small native Unix/Rust tools that make the machine usable for developers
+The native-toolchain (Panoply) is the layer of small native Unix/Rust tools that make the machine usable for developers
 and AI agents. It is shell-first and installs tools **globally** (Homebrew + mise); only the
 manifest, scripts, config templates, and metadata live here.
 
@@ -16,13 +16,13 @@ config/                    Brewfile (generated) + shell fragment + tool config t
 moon.yml                   doctor/list/env/gen-check/validate-substrate tasks
 ```
 
-The generated tool registry is written to the [Ontarch](../ontarch/README.md) package
+The generated tool registry is written to the [metadata-plane (Ontarch)](../ontarch/README.md) package
 (`packages/ontarch/registry/tools.json`) — host-specific and gitignored.
 
 ## Quick start
 
 ```bash
-moon run panoply:doctor          # detect + report (read-only); writes the Ontarch registry
+moon run panoply:doctor          # detect + report (read-only); writes the metadata-plane registry
 moon run panoply:list            # list modules and tools
 bin/panoply bootstrap            # install missing tools + wire shell (human-only; --dry-run to preview)
 ```
@@ -61,7 +61,7 @@ savings), swappable via `PANOPLY_RTK` / profile data — see
 
 ## mise / proto coexistence
 
-Panoply standardizes on **mise** for day-to-day runtimes and activates it in
+The native-toolchain standardizes on **mise** for day-to-day runtimes and activates it in
 `config/shell/panoply.zsh`; an existing **proto** setup is left intact. (proto also pins the
 workspace build toolchains — see [`../../docs/monorepo.md`](../../docs/monorepo.md).)
 

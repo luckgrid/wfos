@@ -38,7 +38,7 @@ zola build     # static output in public/
 
 ## `apps/web` — marketing site
 
-A single page to start: tagline, the five products, and links to the docs and repository.
+A single page to start: tagline, the five archetypes/products, and links to the docs and repository.
 Same Zola commands; grows into more pages only if it earns them.
 
 ## Build integration

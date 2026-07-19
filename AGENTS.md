@@ -8,11 +8,11 @@ the source of truth for detailed commands and architecture.
 - **Local-first moonrepo.** Toolchains are pinned in [`.prototools`](.prototools) and installed
   by proto. Install **proto** and **moon** first; on a fresh clone run `moon run wfos:setup`.
 - **Run from the workspace root** unless a package/app README says otherwise.
-- **Native manifests stay authoritative.** Ontarch describes meaning, routing, and policy; it
-  never replaces `Cargo.toml`, `package.json`, `mise.toml`, or lockfiles.
+- **Native manifests stay authoritative.** The metadata-plane (Ontarch) describes meaning,
+  routing, and policy; it never replaces `Cargo.toml`, `package.json`, `mise.toml`, or lockfiles.
 - **Stay within the rails.** Agents run under a profile (`Workstreams/.agents/profiles/`); the
-  profile's `rails` selects the Ontarch policy that bounds scope, commands, and secrets. The
-  default `workspace-dev` profile runs with `PANOPLY_AGENT=1`: read-only commands are allowed;
+  profile's `rails` selects the metadata-plane policy that bounds scope, commands, and secrets.
+  The default `workspace-dev` profile runs with `PANOPLY_AGENT=1`: read-only commands are allowed;
   installs, secret reads, and dotfile edits are blocked. See
   [docs/agent-configs.md](docs/agent-configs.md) and [docs/agent-rails.md](docs/agent-rails.md).
 
@@ -87,20 +87,21 @@ carry `skillspector_scan` in `required_validators`. Optional AI enhancements are
   `moon run panoply:validate-secrets`.
 - Substrate gate: `packages/panoply/bin/validate-substrate.sh` (manifest derivation, doctor JSON,
   env, RTK, replaceability matrix); `moon run panoply:gen-check`, `moon run panoply:validate-substrate`.
-- Ontarch generated registry (`packages/ontarch/registry/*.json`, `graph.dot`, `BIN-INVENTORY.md`)
-  is gitignored; session records and `registry/QUERIES.md` stay tracked.
+- Metadata-plane generated registry (`packages/ontarch/registry/*.json`, `graph.dot`,
+  `BIN-INVENTORY.md`) is gitignored; session records and `registry/QUERIES.md` stay tracked.
 - Session records are `packages/ontarch/registry/sessions/YYYY-MM-DD-eNN-sN.json`; filename dates
   follow the local implementation/completion date established by nested-repo history, not a
   planned session date, document creation date, or the next UTC calendar day.
-- `Workstreams/.agents/` is the operator navigation layer; Ontarch sync writes gitignored
-  `tools/local-toolkit.yml`; Ontarch remains the routing authority.
-- `no-agent-git-push` is Ontarch policy metadata (publish intent); `agent-git` is the cross-cutting
-  git allow/gate/block policy (`applies_to = "agent"`). Profiles keep `panoply.agent` /
-  `no-agent-git-push` as `rails` and must not contradict `agent-git` in `[commands]`. Runtime
-  blocking of `git push`/`reset --hard`/`clean`/`gh` is deferred to Cthulhu, same boundary as
-  direct secret CLI on `PATH`. See [docs/agent-rails.md](docs/agent-rails.md).
+- `Workstreams/.agents/` is the operator navigation layer; metadata-plane sync writes gitignored
+  `tools/local-toolkit.yml`; the metadata-plane remains the routing authority.
+- `no-agent-git-push` is metadata-plane policy metadata (publish intent); `agent-git` is the
+  cross-cutting git allow/gate/block policy (`applies_to = "agent"`). Profiles keep `panoply.agent`
+  / `no-agent-git-push` as `rails` and must not contradict `agent-git` in `[commands]`. Runtime
+  blocking of `git push`/`reset --hard`/`clean`/`gh` is deferred to the runtime-controller
+  (Cthulhu), same boundary as direct secret CLI on `PATH`. See [docs/agent-rails.md](docs/agent-rails.md).
 - Scoped profiles declare `[isolation]` (`worktree`/`branch`, `jj = "opt-in"`); isolation is
-  declarative intent today — agents are not forcibly moved off the main worktree by Ontarch.
+  declarative intent today — agents are not forcibly moved off the main worktree by the
+  metadata-plane.
 - Bin archive lifecycle: `moon run ontarch:bin-report` / `ontarch:bin-cleanup`; profiles select
   `agent-bin` via `rails_bin`; `archive`/`delete-approved` refuse under `PANOPLY_AGENT=1` — real FS
-  mutation deferred to Cthulhu. See [docs/bin-archive.md](docs/bin-archive.md).
+  mutation deferred to the runtime-controller (Cthulhu). See [docs/bin-archive.md](docs/bin-archive.md).

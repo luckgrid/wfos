@@ -20,10 +20,10 @@ From the workspace root:
 
 ```bash
 moon run wfos:setup     # proto install — fetch pinned toolchains (proto, moon, rust)
-moon run panoply:doctor    # detect tools, print readiness, write the Ontarch registry
+moon run panoply:doctor    # detect tools, print readiness, write the metadata-plane registry
 ```
 
-`panoply:doctor` is read-only and safe to run anytime. To install missing Panoply tools and wire
+`panoply:doctor` is read-only and safe to run anytime. To install missing native-toolchain tools and wire
 your shell (human-only):
 
 ```bash
@@ -35,7 +35,7 @@ After `bootstrap`, `panoply` is on `PATH` (symlinked into `~/.local/bin`), so yo
 
 ## PANOPLY_HOME and Workstreams layout
 
-Panoply resolves its package from the script location at runtime (`panoply doctor`, `bootstrap`, etc.).
+The native-toolchain (Panoply) resolves its package from the script location at runtime (`panoply doctor`, `bootstrap`, etc.).
 The shell fragment [`config/shell/panoply.zsh`](../packages/panoply/config/shell/panoply.zsh) also defines a
 **suggested** default when `PANOPLY_HOME` is unset:
 
@@ -61,18 +61,18 @@ and namespace paths are yours to choose.
 
 ## mise / proto coexistence
 
-proto pins the workspace build toolchains (`.prototools`). [Panoply](native-toolchain.md) uses **mise** as
+proto pins the workspace build toolchains (`.prototools`). The [native-toolchain (Panoply)](native-toolchain.md) uses **mise** as
 its runtime manager for day-to-day shells and activates it in `config/shell/panoply.zsh`. The two
-coexist: activation order lets mise manage Panoply-scoped runtimes while proto handles the
+coexist: activation order lets mise manage native-toolchain-scoped runtimes while proto handles the
 workspace. Nothing is removed from your existing setup.
 
 ## Modular adoption
 
 You do not have to take all of WfOS:
 
-- Want just the tool substrate? Use [Panoply](native-toolchain.md) (`panoply doctor` / `bootstrap`) and ignore
+- Want just the tool substrate? Use the [native-toolchain (Panoply)](native-toolchain.md) (`panoply doctor` / `bootstrap`) and ignore
   the rest.
-- Want the metadata contracts? Use [Ontarch](metadata-plane.md) descriptors/policies in your own tooling.
+- Want the metadata contracts? Use the [metadata-plane (Ontarch)](metadata-plane.md) descriptors/policies in your own tooling.
 - Want the monorepo conventions? Use the [moon + proto](monorepo.md) skeleton.
 
 Adopt one piece, keep your own workflow, and grow into more when it earns its place.

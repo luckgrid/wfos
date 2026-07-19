@@ -6,9 +6,9 @@ dotfiles require a human.**
 
 ## How rails work today
 
-[Panoply](native-toolchain.md) reads the `PANOPLY_AGENT` environment variable. When `PANOPLY_AGENT=1`, only
-read-only commands run; mutating ones exit with a non-zero status. The rules live in
-[Ontarch](metadata-plane.md) at `packages/ontarch/policies/panoply.agent.policy.toml`:
+The [native-toolchain (Panoply)](native-toolchain.md) reads the `PANOPLY_AGENT` environment variable. When `PANOPLY_AGENT=1`, only
+read-only commands run; mutating ones exit with a non-zero status. The rules live in the
+[metadata-plane (Ontarch)](metadata-plane.md) at `packages/ontarch/policies/panoply.agent.policy.toml`:
 
 ```toml
 [agent]
@@ -31,16 +31,16 @@ read secrets, or change dotfiles.
 
 ## Publish rails (policy metadata)
 
-Ontarch also records a **no-agent-git-push** policy at
+The metadata-plane (Ontarch) also records a **no-agent-git-push** policy at
 `packages/ontarch/policies/no-agent-git-push.policy.toml`. It states that agents may inspect and
 stage changes (`git status`, `git diff`, `git add`, `git commit`) but must not publish to a
 remote (`git push`, `gh release create`, `gh pr merge`). The policy appears in the generated
 project graph (`agent → blocked-by → policy:no-agent-git-push`) and in agent guides.
 
-At Level 0 this is **policy metadata**, not runtime enforcement in Panoply: an agent can still invoke
-`git push` or `gh` directly on `PATH` unless a future Cthulhu command router blocks it — the same
+At Level 0 this is **policy metadata**, not runtime enforcement in the native-toolchain: an agent can still invoke
+`git push` or `gh` directly on `PATH` unless a future runtime-controller (Cthulhu) command router blocks it — the same
 boundary as secret tools above. Treat the policy as authoritative intent for agent behavior; OS-level
-interception is deferred to Cthulhu.
+interception is deferred to the runtime-controller (Cthulhu).
 
 ## Git command rails (allow / gate / block)
 
@@ -57,7 +57,7 @@ Remote writes require **elevated policy plus human approval** (`[remote] writes 
 `agent-git` is the superset git policy; `no-agent-git-push` remains the publish-specific statement,
 and both appear in the project graph as `agent → blocked-by → policy`. As with the publish rails,
 this is authoritative **intent** and graph metadata at Level 0; OS-level interception of
-`git push`/`reset --hard`/`clean` is deferred to the Cthulhu command router — the same boundary as
+`git push`/`reset --hard`/`clean` is deferred to the runtime-controller (Cthulhu) command router — the same boundary as
 the secret tools below.
 
 ## Bin/archive mutation rails
@@ -74,7 +74,7 @@ select `agent-bin` via an optional `rails_bin` field.
 
 Belt-and-suspenders: `ontarch-bin-cleanup` refuses `archive`/`delete-approved` when `PANOPLY_AGENT=1`,
 and at the draft gateway those modes validate arguments then refuse without calling `rm`/`mv`.
-Runtime interception of bare `rm`/`mv` on `PATH` is deferred to Cthulhu — the same boundary as
+Runtime interception of bare `rm`/`mv` on `PATH` is deferred to the runtime-controller (Cthulhu) — the same boundary as
 git and secret rails. See [bin-archive.md](bin-archive.md).
 
 ## Worktree isolation
@@ -107,26 +107,26 @@ in [`packages/panoply/dotfiles/SECRETS.md`](../packages/panoply/dotfiles/SECRETS
 
 ### Enforcement boundary
 
-The guard applies to **Panoply-owned code paths** that would resolve a secret value (today:
+The guard applies to **native-toolchain-owned code paths** that would resolve a secret value (today:
 `panoply doctor`, validators, and any future substrate command that shells out to a vault tool).
 Agents can still invoke `pass`/`age`/`sops` directly on `PATH` unless a shell wrapper or the
 planned runtime-controller command routing blocks them. Level 0 intentionally stops at policy +
-manifest flags + doctor assertion; broader OS-level interception is deferred to Cthulhu.
+manifest flags + doctor assertion; broader OS-level interception is deferred to the runtime-controller (Cthulhu).
 
 ## Conventions
 
-- **Agent-safe is per-tool.** The Panoply manifest marks each tool `agent_safe`; secrets tooling
+- **Agent-safe is per-tool.** The native-toolchain manifest marks each tool `agent_safe`; secrets tooling
   (`pass`, `age`, `sops`) is never agent-safe.
 - **Apps are build artifacts.** Agents do not start servers or run app builds (`zola serve`,
   long-running dev tasks) without explicit human permission. See [apps.md](apps.md).
 - **Scope down by default.** New agent surfaces start blocked and open up deliberately, with
-  the policy recorded in Ontarch.
+  the policy recorded in the metadata-plane (Ontarch).
 
 ## MCP exposure (planned)
 
-[Cthulhu](runtime-controller.md)'s daemon can embed an MCP server (via
+The [runtime-controller (Cthulhu)](runtime-controller.md) daemon can embed an MCP server (via
 [`rmcp`](https://crates.io/crates/rmcp)) that exposes native commands as standardized LLM
-tools. Every tool call is checked against the same Ontarch policies — the MCP surface is a
+tools. Every tool call is checked against the same metadata-plane (Ontarch) policies — the MCP surface is a
 front door to the rails, not a way around them.
 
 ## Skill security (the SkillSpector gate)

@@ -1,8 +1,9 @@
 # Portable component runtime — Wisp (planned)
 
-Wisp is the WASM/WASI binary interface layer. It makes low-level workflow capabilities
-portable, sandboxed, and componentized. Where [Panoply](native-toolchain.md) is local-native execution,
-Wisp is portable sandboxed execution. Status: **planned.**
+The `portable-component-runtime` (Wisp) is the WASM/WASI binary interface layer. It makes
+low-level workflow capabilities portable, sandboxed, and componentized. Where the
+[native toolchain (Panoply)](native-toolchain.md) is local-native execution, Wisp is portable
+sandboxed execution. Status: **planned.**
 
 ## Scope
 
@@ -12,7 +13,7 @@ portable components · sandboxed command components · capability declarations
 ```
 
 Wisp owns component execution, WASI permissions, WIT contracts, portable workflow modules,
-and language-independent binary interfaces. It does not replace Panoply.
+and language-independent binary interfaces. It does not replace the native toolchain.
 
 ## Capability model
 
@@ -36,18 +37,19 @@ secret_read = false
 write_scope = ["packages/ontarch/registry"]
 ```
 
-Example components: a descriptor validator (checks Ontarch descriptors against schemas), a
-policy checker, a prompt linter, a session summarizer, an asset hasher with provenance.
+Example components: a descriptor validator (checks metadata-plane descriptors against schemas),
+a policy checker, a prompt linter, a session summarizer, an asset hasher with provenance.
 
 ## Relationships
 
 ```txt
-Polytope packages components.   Wisp runs components.
-Cthulhu controls when and how.    Ontarch defines what they may touch.
+package-translator packages components.   portable-component-runtime runs components.
+runtime-controller controls when and how. metadata-plane defines what they may touch.
 ```
 
-The default runtime is [Wasmtime](https://wasmtime.dev/) (the `wisp` Panoply module), invoked
-by [Cthulhu](runtime-controller.md) as `cth portable run <component> --scope <path>`.
+The default runtime is [Wasmtime](https://wasmtime.dev/) (the native-toolchain `wisp` module),
+invoked by the [runtime controller (Cthulhu)](runtime-controller.md) as
+`cth portable run <component> --scope <path>`.
 
 ## Broader WASM landscape
 

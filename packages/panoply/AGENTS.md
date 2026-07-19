@@ -1,4 +1,4 @@
-# Panoply agent guide
+# native-toolchain (Panoply) agent guide
 
 Read-only by default. [`README.md`](README.md) and
 [`../../docs/native-toolchain.md`](../../docs/native-toolchain.md) are the source of truth.
@@ -24,6 +24,6 @@ The policy is `../ontarch/policies/panoply.agent.policy.toml`; gates: `no_global
 ## Editing the substrate
 
 - Add or change a tool only in `manifest/panoply.tools.toml`; derived artifacts (Brewfile, the
-  Ontarch registry, shell activations) follow from it.
+  metadata-plane registry, shell activations) follow from it.
 - Keep scripts POSIX/bash and `shellcheck`-clean. Preserve the guarded-activation pattern in
   `config/shell/panoply.zsh` (safe to source when a tool is absent).

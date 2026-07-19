@@ -1,16 +1,17 @@
 # Runtime controller — Cthulhu (planned)
 
-Cthulhu is the runtime CLI and low-level control interface (`cth`). It is the daily command
-surface that reaches into many tools, libraries, sessions, descriptors, policies, and agents.
-It is **not** the package manager (that is [Polytope](package-translator.md)) and **not** the tools
-themselves (that is [Panoply](native-toolchain.md)) — it discovers, routes, and coordinates.
+The `runtime-controller` (Cthulhu) is the runtime CLI and low-level control interface (`cth`).
+It is the daily command surface that reaches into many tools, libraries, sessions, descriptors,
+policies, and agents. It is **not** the package manager (that is the
+[package translator (Polytope)](package-translator.md)) and **not** the tools themselves (that is
+the [native toolchain (Panoply)](native-toolchain.md)) — it discovers, routes, and coordinates.
 
 Status: **planned.** This guide is the design target; the package starts as a stub.
 
 ## Responsibilities
 
 ```txt
-Discover local resources.      Read Ontarch.            Route commands.
+Discover local resources.      Read metadata plane.     Route commands.
 Prepare environments.          Call native tools.     Run WASM components.
 Manage sessions.               Apply rails and gates.  Expose system context.
 ```
@@ -26,16 +27,16 @@ cth dev|build|check <unit>   route common workflow commands
 cth session      manage local work sessions and logs
 cth tools        detect and report local tools
 cth interfaces   validate descriptors, schemas, policies, registry entries
-cth portable <c> run or inspect portable WASM/WASI components (Wisp)
-cth native <c>   inspect and execute host-native tooling (Panoply)
-cth meta <c>     validate, graph, and query system metadata (Ontarch)
+cth portable <c> run or inspect portable WASM/WASI components (portable-component-runtime / Wisp)
+cth native <c>   inspect and execute host-native tooling (native-toolchain / Panoply)
+cth meta <c>     validate, graph, and query system metadata (metadata-plane / Ontarch)
 cth package …    hand off to the package translator (Polytope)
 cth workstream …   profile-agnostic Workstreams / gateway routing
 cth tendril <c>  list, inspect, attach, and invoke runtime integrations
 cth agent        run scoped agent rails and workflows
 ```
 
-Runtime integrations are Cthulhu-internal units (archetype `runtime-integration`, brand
+Runtime integrations are runtime-controller-internal units (archetype `runtime-integration`, brand
 vocabulary **Tendril**) living under the package's `src/integrations/` namespace — there is no
 separate integration package. See the Level 0 namespace alignment for the contract and
 substructure (`registry/`, `contracts/`, `adapters/`, `connectors/`, `bindings/`, `providers/`).
@@ -46,9 +47,9 @@ id, and the policies applied.
 
 ## Workstream routing
 
-Cthulhu routes into Workstreams namespaces and gateway metadata through a universal
-`cth workstream` surface. Profile shortcuts (`cth plan`, `cth brand`, `cth control`, plus
-`spec` / `qa` / `release` / `agent`) alias into it. Top-level `cth build|dev|check` remain
+The runtime controller routes into Workstreams namespaces and gateway metadata through a
+universal `cth workstream` surface. Profile shortcuts (`cth plan`, `cth brand`, `cth control`,
+plus `spec` / `qa` / `release` / `agent`) alias into it. Top-level `cth build|dev|check` remain
 unit-lifecycle verbs — Build-namespace entry is `cth workstream build`, not `cth build`.
 
 ```txt
@@ -72,7 +73,7 @@ cth build|dev|check <unit>
 
 ```mermaid
 flowchart LR
-  K[Cthulhu cth] --> WF[cth workstream]
+  K["runtime-controller\nCthulhu · cth"] --> WF[cth workstream]
   WF --> PlanNs[Plan]
   WF --> BrandNs[Brand]
   WF --> BuildNs[Build]
@@ -89,10 +90,10 @@ Canon: [architecture.md#workstreams-collection](architecture.md#workstreams-coll
 ```mermaid
 sequenceDiagram
   participant U as User
-  participant K as Cthulhu
-  participant C as Ontarch
-  participant H as Polytope
-  participant D as Panoply
+  participant K as runtime-controller (Cthulhu)
+  participant C as metadata-plane (Ontarch)
+  participant H as package-translator (Polytope)
+  participant D as native-toolchain (Panoply)
   U->>K: cth build <unit>
   K->>C: read descriptor + policy
   C-->>K: unit metadata
@@ -105,7 +106,8 @@ sequenceDiagram
 
 ## CLI foundation
 
-Cthulhu is built on the Rust stack described in [runtime-architecture.md](runtime-architecture.md):
+The runtime controller is built on the Rust stack described in
+[runtime-architecture.md](runtime-architecture.md):
 
 - **[starbase](https://crates.io/crates/starbase)** as the application shell (lifecycle,
   sessions, diagnostics, reactive systems), with **[clap](https://crates.io/crates/clap)** for
@@ -115,23 +117,25 @@ Cthulhu is built on the Rust stack described in [runtime-architecture.md](runtim
   proxying.
 - **[Ratatui](https://crates.io/crates/ratatui)** for the later multi-panel TUI.
 
-It routes to the [moon](monorepo.md) task graph as a compat backend and to [Panoply](native-toolchain.md)
-for native execution. The v0 build is a single-process CLI; the daemon and TUI phases follow
-(see [runtime-architecture.md](runtime-architecture.md#client-daemon-model)).
+It routes to the [moon](monorepo.md) task graph as a compat backend and to the
+[native toolchain (Panoply)](native-toolchain.md) for native execution. The v0 build is a
+single-process CLI; the daemon and TUI phases follow (see
+[runtime-architecture.md](runtime-architecture.md#client-daemon-model)).
 
 ## AI augmentation
 
-Cthulhu is designed for AI augmentation but does not require it. The daemon can embed an MCP
-server (via [`rmcp`](https://crates.io/crates/rmcp)) that exposes commands as gated LLM tools;
-every call is checked against Ontarch policy. Planned assists: command explanation, risk
-detection, workflow suggestions, policy-aware planning, and session summaries. AI assists
-Cthulhu; it does not silently control it. See [agent-rails.md](agent-rails.md).
+The runtime controller is designed for AI augmentation but does not require it. The daemon can
+embed an MCP server (via [`rmcp`](https://crates.io/crates/rmcp)) that exposes commands as gated
+LLM tools; every call is checked against metadata-plane policy. Planned assists: command
+explanation, risk detection, workflow suggestions, policy-aware planning, and session summaries.
+AI assists the runtime controller; it does not silently control it. See
+[agent-rails.md](agent-rails.md).
 
 ## First prototype scope
 
 ```txt
 scan · list · info · doctor · dev · build · check
 session logs · descriptor read · registry write
-hand-off to a Polytope package descriptor and a Wisp hello component
+hand-off to a package-translator descriptor and a portable-component-runtime hello component
 agent hard-block by default (read-only scope)
 ```

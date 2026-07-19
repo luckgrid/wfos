@@ -1,11 +1,13 @@
 # Native toolchain — Panoply
 
-Panoply is the layer of small native Unix/Rust tools that make the machine usable for both
-developers and AI agents. It is shell-first and installs tools **globally** (via Homebrew +
-mise); only the manifest, scripts, config templates, and metadata live in this repo.
+The `native-toolchain` (Panoply) is the layer of small native Unix/Rust tools that make the
+machine usable for both developers and AI agents. It is shell-first and installs tools
+**globally** (via Homebrew + mise); only the manifest, scripts, config templates, and metadata
+live in this repo.
 
-Panoply is where work is physically executed on the machine. [Cthulhu](runtime-controller.md) controls and
-routes; Panoply runs the native commands.
+The native-toolchain is where work is physically executed on the machine. The
+[runtime-controller (Cthulhu)](runtime-controller.md) controls and routes; Panoply runs the
+native commands.
 
 ## What lives in the package
 
@@ -17,17 +19,17 @@ config/                    Brewfile + shell fragment + tool config templates
 moon.yml                   doctor/list/env tasks for the project graph
 ```
 
-The generated tool registry is written to the [Ontarch](metadata-plane.md) package
-(`packages/ontarch/registry/tools.json`) and is host-specific (gitignored).
+The generated tool registry is written to the [metadata-plane (Ontarch)](metadata-plane.md)
+package (`packages/ontarch/registry/tools.json`) and is host-specific (gitignored).
 
 ## Commands
 
 | Command | Mutating | Agent-safe | Purpose |
 |---------|----------|------------|---------|
-| `panoply doctor [--json] [--no-write]` | no | yes | detect tools, print readiness, assert secrets rail, write the Ontarch registry; `--json` emits the registry object to stdout for one-read agent assessment |
+| `panoply doctor [--json] [--no-write]` | no | yes | detect tools, print readiness, assert secrets rail, write the metadata-plane registry; `--json` emits the registry object to stdout for one-read agent assessment |
 | `panoply list [module]` | no | yes | list modules and tools from the manifest |
 | `panoply gen <brewfile\|mise>` | no | yes | derive install artifacts (Brewfile / mise block) from the manifest (dry-run, stdout) |
-| `panoply env [--shell\|--json]` | no | yes | print the resolved Panoply environment (paths, module map, `PANOPLY_AGENT` state); `--shell` prints the activation snippet, `--json` the structured form |
+| `panoply env [--shell\|--json]` | no | yes | print the resolved native-toolchain environment (paths, module map, `PANOPLY_AGENT` state); `--shell` prints the activation snippet, `--json` the structured form |
 | `panoply bootstrap [--dry-run]` | yes | no | install missing tools (brew + mise), symlink configs, wire `~/.zshrc` |
 
 Run them directly or through moon: `moon run panoply:doctor`, `moon run panoply:list`,
@@ -89,9 +91,10 @@ secrets    pass             pass (default) age,sops
 tools      mise             mise (default) proto,asdf
 ```
 
-Alternative ids that are external runtimes (not themselves Panoply tools, e.g. `asdf`, `npm`,
-`yarn`) are reported as informational notes by `validate-substrate.sh`. The runtime controller
-(Cthulhu) reads this matrix to detect and route through whichever member is active.
+Alternative ids that are external runtimes (not themselves native-toolchain tools, e.g. `asdf`,
+`npm`, `yarn`) are reported as informational notes by `validate-substrate.sh`. The
+`runtime-controller` (Cthulhu) reads this matrix to detect and route through whichever member
+is active.
 
 The manifest (`manifest/panoply.tools.toml`) is the authoritative list, with per-tool `brew`,
 `detect`, `agent_safe`, and `alternatives` fields. `doctor` reads it to produce the registry;
@@ -114,7 +117,7 @@ report `installed` without a version string (there is no binary to query).
 
 ## Install model
 
-Panoply installs tools **globally** and keeps only sources of truth in the repo:
+The native-toolchain installs tools **globally** and keeps only sources of truth in the repo:
 
 - Homebrew formulae (`config/Brewfile`)
 - runtimes via mise
@@ -128,30 +131,30 @@ human-only.
 ## Shell activation
 
 `config/shell/panoply.zsh` is sourced from `~/.zshrc`. Every activation is guarded so the file
-is safe to source even when a tool is missing — it puts the Panoply CLI on `PATH` and wires
+is safe to source even when a tool is missing — it puts the `panoply` CLI on `PATH` and wires
 mise, direnv, starship, zoxide, fzf, and modern coreutils aliases (`eza`, `bat`) only when
 each is installed.
 
-**`PANOPLY_HOME`** points at the Panoply package root (manifest, `bin/`, `config/`). If unset,
+**`PANOPLY_HOME`** points at the native-toolchain package root (manifest, `bin/`, `config/`). If unset,
 `panoply.zsh` falls back to a suggested path under `~/Workstreams/Build/src/workspaces/wfos/…`.
 Override with `export PANOPLY_HOME=…` in `~/.zshenv` when your clone lives elsewhere;
 `panoply bootstrap` exports the resolved path from the running package automatically.
 
 ## mise / proto coexistence
 
-Panoply standardizes on **mise** as its runtime manager and activates it in the Panoply shell
-fragment. If a machine already uses **proto**, Panoply does not remove it: activation order lets
-mise manage Panoply-scoped runtimes while proto stays available for existing workflows. To
+The native-toolchain standardizes on **mise** as its runtime manager and activates it in the shell
+fragment. If a machine already uses **proto**, it does not remove it: activation order lets
+mise manage native-toolchain-scoped runtimes while proto stays available for existing workflows. To
 retire proto later, remove its block from `~/.zshrc` and its `PATH` entry. (Note: proto also
 pins the workspace's own build toolchains — see [monorepo.md](monorepo.md).)
 
 ## chezmoi coexistence
 
-Panoply's own config flow stays the default: `bootstrap` symlinks a small set of `~/.config`
+The native-toolchain's own config flow stays the default: `bootstrap` symlinks a small set of `~/.config`
 templates and wires one sourced line into `~/.zshrc`. [chezmoi](https://www.chezmoi.io/) is
 offered as an **optional** tool in the `dotfiles` module for operators who want full
 cross-machine dotfile management (templating, per-host variants, encrypted secrets) on top of
-or instead of the symlink flow. It is never auto-installed and Panoply does not require it.
+or instead of the symlink flow. It is never auto-installed and the native-toolchain does not require it.
 
 A draft chezmoi source tree lives at [`packages/panoply/dotfiles/`](../packages/panoply/dotfiles/README.md).
 It defines four profile classes (`$WFOS_PROFILE`, default `local-macos-full`) that renders a
@@ -197,7 +200,7 @@ the single highest-impact token lever in the substrate. It is **swappable**, not
 
 `panoply` reads the `PANOPLY_AGENT` environment variable. In agent mode, read-only commands
 (`doctor`, `list`, `env`, `version`, `help`) run; mutating ones (`bootstrap`, installs,
-secret reads) are blocked. The rules live in the Ontarch policy
+secret reads) are blocked. The rules live in the metadata-plane (Ontarch) policy
 `packages/ontarch/policies/panoply.agent.policy.toml`; see [agent-rails.md](agent-rails.md).
 
 `panoply doctor` ends with a **secrets rail** assertion: every policy-blocked vault tool

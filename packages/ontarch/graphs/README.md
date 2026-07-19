@@ -1,4 +1,4 @@
-# Ontarch graphs — project relationship graph
+# metadata-plane (Ontarch) graphs — project relationship graph
 
 The project graph: how units, capabilities, and policies relate. This is WfOS's local
 **project graph**, analogous to the dependency graphs monorepo tools expose for AI agent
@@ -45,7 +45,7 @@ jq -r '.edges[] | select(.rel=="requires" and .to=="capability:proto") | .from' 
 dot -Tsvg registry/graph.dot -o graph.svg
 ```
 
-A future Cthulhu `cth graph` (H09) consumes the same artifact.
+A future runtime-controller (Cthulhu) `cth graph` (H09) consumes the same artifact.
 
 ## Related
 

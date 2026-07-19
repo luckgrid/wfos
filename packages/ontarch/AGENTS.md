@@ -1,6 +1,6 @@
-# Ontarch agent guide
+# metadata-plane (Ontarch) agent guide
 
-Ontarch is data and contracts. [`README.md`](README.md) and
+The metadata-plane is data and contracts. [`README.md`](README.md) and
 [`../../docs/metadata-plane.md`](../../docs/metadata-plane.md) are the source of truth.
 
 **Profiles:** agent operating profiles are authored under
@@ -22,12 +22,12 @@ them into `registry/profiles.json`. See [agent-configs.md](../../docs/agent-conf
   `ontarch skills resolve|scan|map` are report-only on-demand tools. See [agent-skills.md](../../docs/agent-skills.md).
   `validate` and `sync` are agent-safe: they read contracts and write only generated output.
 - **Policies define the rails you operate under.** `policies/panoply.agent.policy.toml` is enforced
-  by Panoply when `PANOPLY_AGENT=1` (mutating substrate commands exit non-zero). `policies/no-agent-git-push.policy.toml`
-  is Ontarch policy metadata for publish actions (push, release, merge) — authoritative intent and
-  graph edges today; runtime command blocking deferred to Cthulhu, same boundary as direct `pass`/`git`
+  by the native-toolchain when `PANOPLY_AGENT=1` (mutating substrate commands exit non-zero). `policies/no-agent-git-push.policy.toml`
+  is metadata-plane policy metadata for publish actions (push, release, merge) — authoritative intent and
+  graph edges today; runtime command blocking deferred to the runtime-controller (Cthulhu), same boundary as direct `pass`/`git`
   invocation on `PATH`.
-- **Keep contracts honest.** When adding metadata, follow the Panoply example: a descriptor for
+- **Keep contracts honest.** When adding metadata, follow the native-toolchain example: a descriptor for
   how a product connects, a schema for any generated artifact, a policy for its agent rails.
   Generated output goes under `registry/` (gitignored); contracts and policies stay tracked.
 - **Native manifests stay authoritative** — do not duplicate or override `Cargo.toml`,
-  `package.json`, or lockfile data in Ontarch.
+  `package.json`, or lockfile data in the metadata-plane.

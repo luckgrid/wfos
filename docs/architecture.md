@@ -29,9 +29,10 @@ collapse several archetypes behind one CLI — the archetype ids stay stable in 
 ### Future archetype — `agent-interface`
 
 Outside the current Level 0 package set, WfOS reserves the future archetype
-`agent-interface` for a scoped agent/daemon layer over Cthulhu and Ontarch. No product
-brand is adopted for it yet. See the Level 0 namespace alignment §17 for the conceptual
-surface; do not treat it as a core package, CLI, or repository requirement today.
+`agent-interface` for a scoped agent/daemon layer over the `runtime-controller` (Cthulhu)
+and `metadata-plane` (Ontarch). No product brand is adopted for it yet. See the Level 0
+namespace alignment §17 for the conceptual surface; do not treat it as a core package,
+CLI, or repository requirement today.
 
 ## Interface layers
 
@@ -47,15 +48,15 @@ Application layer (high)  apps, sites, dashboards — minimal path surface
 
 A developer lives mostly in the toolchain layer. An agent operator works through the agent
 layer (scoped skills and tools, not folder trees). A reader of the docs site only sees the
-application layer. [Ontarch](metadata-plane.md) binds these layers to what lives on disk: full
-abstraction for higher levels, direct access for lower levels when needed.
+application layer. The [metadata plane (Ontarch)](metadata-plane.md) binds these layers to what
+lives on disk: full abstraction for higher levels, direct access for lower levels when needed.
 
 ## Workstreams collection
 
 The **`Workstreams/`** tree lives outside this workspace. It organizes work across four
 namespaces — each with its own role, typical artifacts, and promotion gates between them.
-Ontarch registers units from these namespaces so Cthulhu and agents can route without crawling
-raw paths.
+The metadata plane registers units from these namespaces so the runtime controller and agents
+can route without crawling raw paths.
 
 | Namespace | Role | Typical artifacts | Gate to next |
 |-----------|------|-------------------|--------------|
@@ -67,41 +68,42 @@ raw paths.
 **Interface layers and gates.** Content moves through the same three interface layers described
 above (toolchain → agent → application). Promotion between namespaces is gated: Plan content must
 be validated before Build implements it; Brand assets must be approved before they ship; Build
-artifacts must be ship-ready before Control records a release. Cthulhu (`cth`) is the design
-target for exposing these gates as routable commands via `cth workstream` (with profile aliases
-such as `cth plan`, `cth qa`, and `cth release`; Build-namespace entry is
+artifacts must be ship-ready before Control records a release. The `runtime-controller` (Cthulhu,
+`cth`) is the design target for exposing these gates as routable commands via `cth workstream`
+(with profile aliases such as `cth plan`, `cth qa`, and `cth release`; Build-namespace entry is
 `cth workstream build` — top-level `cth build` stays unit lifecycle).
 
 **Filesystem layout.** On a typical machine, Workstreams roots sit alongside each other under
 `~/Workstreams/` (or your chosen mount — the namespace names are conventions, not requirements).
 WfOS itself often lives under `Build/src/workspaces/wfos/` in that layout; if yours differs,
-set `PANOPLY_HOME` to your Panoply package path (see [setup.md](setup.md#panoply_home-and-workstreams-layout)).
+set `PANOPLY_HOME` to your native-toolchain package path (see [setup.md](setup.md#panoply_home-and-workstreams-layout)).
 
 ## System map
 
 ```mermaid
 flowchart TD
-  WS[Workstreams Plan Brand Build Control]
-  Dev[Developer / Agent] --> CTH[Cthulhu cth]
+  WS["Workstreams<br/>Plan · Brand · Build · Control"]
+  Dev[Developer / Agent] --> CTH["runtime-controller\nCthulhu · cth"]
   CTH --> WS
-  CTH --> CX[Ontarch metadata]
-  CTH --> PLT[Polytope cth package]
-  CTH --> PANOPLY[Panoply native tools]
-  CTH --> WSP[Wisp WASM/WASI]
+  CTH --> CX["metadata-plane\nOntarch"]
+  CTH --> PLT["package-translator\nPolytope · cth package"]
+  CTH --> PANOPLY["native-toolchain\nPanoply"]
+  CTH --> WSP["portable-component-runtime\nWisp"]
   PLT --> CX
   PANOPLY --> CX
   WS --> CX
   CX --> Reg[registry + descriptors + policies]
 ```
 
-Cthulhu reads Ontarch, routes commands, runs native tools through Panoply and portable components
-through Wisp, and asks Polytope to translate higher-level intent into packages. Ontarch is
-the shared meaning underneath all of it.
+The runtime controller reads the metadata plane, routes commands, runs native tools through the
+native toolchain and portable components through the portable-component runtime, and asks the
+package translator to turn higher-level intent into packages. The metadata plane is the shared
+meaning underneath all of it.
 
 ## Principles
 
-- **Native manifests stay authoritative.** Ontarch describes meaning, routing, policy, and
-  relationships; it never replaces `Cargo.toml`, `package.json`, `mise.toml`, or a lockfile.
+- **Native manifests stay authoritative.** The metadata plane describes meaning, routing, policy,
+  and relationships; it never replaces `Cargo.toml`, `package.json`, `mise.toml`, or a lockfile.
 - **Swappable by default.** fzf ↔ skim, tmux ↔ zellij, mise ↔ proto, git ↔ jj. Nothing
   hard-locks a workflow; the controller detects and routes.
 - **Local-first scope.** Everything works offline. Remotes, sync, and federation are layers

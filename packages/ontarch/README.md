@@ -1,6 +1,6 @@
-# Ontarch — metadata plane
+# metadata-plane — Ontarch
 
-Ontarch stores the machine-readable meaning of the system: **descriptors, registry, schemas,
+The metadata-plane (Ontarch) stores the machine-readable meaning of the system: **descriptors, registry, schemas,
 policies, graphs, models, and package contracts**. It exposes no end-user runtime CLI — it is
 data and contracts the other products read and write, plus two build-time metadata tasks that
 generate and validate the registry from those contracts.
@@ -25,7 +25,7 @@ generated output under `registry/` — agent-safe.
 | `schemas/unit.schema.json` | schema | contract for unit descriptors (canon §10.1) |
 | `schemas/policy.schema.json` | schema | contract for policies (agent-rails + command styles) |
 | `schemas/panoply.tools.schema.json` | schema | contract for the generated tools registry |
-| `policies/panoply.agent.policy.toml` | policy | Panoply agent rails (allow/block, gates) |
+| `policies/panoply.agent.policy.toml` | policy | native-toolchain agent rails (allow/block, gates) |
 | `policies/no-agent-git-push.policy.toml` | policy | agents never push or publish (human-only) |
 | `graphs/edges.schema.json` | schema | contract for the project graph (nodes + directed edges, canon §10.5) |
 | `lib/`, `bin/ontarch{,-sync,-validate}` | code | the registry generator + validator (bash/awk/jq) |
@@ -44,16 +44,16 @@ Schemas      define contracts.
 Policies     define rules — including agent rails and gates.
 Graphs       define relationships — project deps + capability + policy edges.
 Models       define machine-readable domain meaning (planned).
-Packages     define Polytope-managed deliverable interfaces (planned).
+Packages     define package-translator (Polytope)-managed deliverable interfaces (planned).
 ```
 
 ## Relationships
 
-- **[Panoply](../panoply/README.md)** produces the registry (`panoply doctor`) and is governed by the
-  agent policy here. Today Ontarch + Panoply are the implemented pair.
-- **Cthulhu** (`cth`) and **Polytope** (`cth package`) will read and operate on Ontarch metadata when
+- **[native-toolchain (Panoply)](../panoply/README.md)** produces the registry (`panoply doctor`) and is governed by the
+  agent policy here. Today the metadata-plane + native-toolchain are the implemented pair.
+- **runtime-controller (Cthulhu)** (`cth`) and **package-translator (Polytope)** (`cth package`) will read and operate on metadata-plane data when
   implemented.
-- **Native manifests stay authoritative** — Ontarch describes meaning, routing, policy, and
+- **Native manifests stay authoritative** — the metadata-plane describes meaning, routing, policy, and
   relationships; it does not replace `Cargo.toml`, `package.json`, `mise.toml`, or lockfiles.
 
 ## Interface-layer exposure

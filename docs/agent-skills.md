@@ -57,7 +57,7 @@ moon run ontarch:skills-map                             # same as map
 Load logs append to `packages/ontarch/registry/sessions/skill-loads.jsonl` with
 `{skill_id, ts, caller, body_ref, scan_status}`.
 
-Runtime fetch-on-call interception is deferred to Cthulhu — same boundary as git-push blocking
+Runtime fetch-on-call interception is deferred to the runtime-controller (Cthulhu) — same boundary as git-push blocking
 in [agent-rails.md](agent-rails.md).
 
 ## Templates
@@ -73,7 +73,7 @@ entries (`source=fabric`). They stay unscanned and out of `allowed_skill_ids` un
 and scanned. `ontarch skills resolve` refuses absent bodies with an install-Fabric message.
 
 Fabric and SkillSpector are optional tools — see [tool-catalog.md](tool-catalog.md). Gate
-structure lands in Ontarch; scanner execution is install-time.
+structure lands in the metadata-plane (Ontarch); scanner execution is install-time.
 
 ## Graph
 

@@ -14,7 +14,7 @@ remote-write policy, an `[isolation]` field (worktree/branch scope + jj opt-in),
 validators, an output compressor, and a session-log target. Apps consume the shared intent through
 their own (chezmoi-rendered) config syntax — they never become a second policy source of truth.
 
-[Ontarch](metadata-plane.md) policies remain the enforcement authority. A profile *selects* a
+[metadata-plane (Ontarch)](metadata-plane.md) policies remain the enforcement authority. A profile *selects* a
 policy through its `rails` field and *scopes* it. The cross-cutting
 [`agent-git`](../packages/ontarch/policies/agent-git.policy.toml) policy (`applies_to = "agent"`)
 governs git allow/gate/block via the graph; profiles keep `panoply.agent` / `no-agent-git-push` as
@@ -28,7 +28,7 @@ governs git allow/gate/block via the graph; profiles keep `panoply.agent` / `no-
 
 ```mermaid
 flowchart TD
-  Pol[Ontarch policies] -->|selected via rails| Reg[.agents/profiles]
+  Pol["metadata-plane (Ontarch) policies"] -->|selected via rails| Reg[.agents/profiles]
   Reg --> Cursor[Cursor]
   Reg --> Zed[Zed]
   Reg --> Factory[Factory]
@@ -61,7 +61,7 @@ WfOS carries **two** profile concepts. They answer different questions and must 
 
 | Layer | Home | Question it answers | Consumed by |
 |-------|------|-------------------|-------------|
-| **Agent operating profile** | `Workstreams/.agents/profiles/*.toml` | What may this agent session touch? (scope, commands, rails, validators, compressor intent) | Agents, Ontarch (`ontarch validate` / `ontarch sync` → `profiles.json`), app renderers that read registry data |
+| **Agent operating profile** | `Workstreams/.agents/profiles/*.toml` | What may this agent session touch? (scope, commands, rails, validators, compressor intent) | Agents, metadata-plane (`ontarch validate` / `ontarch sync` → `profiles.json`), app renderers that read registry data |
 | **Machine / chezmoi profile** | `packages/panoply/dotfiles/.chezmoidata/profiles.toml` | What config targets render on this host? (GUI, secrets, `rtk` shell hook) | chezmoi at render time (`local-macos-full`, `agent-safe`, …) |
 
 ```mermaid
@@ -116,5 +116,5 @@ prompt, and a lean `AGENTS.md` keeps per-workspace instructions short. Shared pr
 ## Related
 
 - [Agent rails and gates](agent-rails.md) — the rails, gates, and the SkillSpector skill gate.
-- [Metadata plane](metadata-plane.md) — Ontarch descriptors, policies, registry, and graph.
+- [Metadata plane](metadata-plane.md) — descriptors, policies, registry, and graph.
 - [`.agents/profiles/README.md`](../../../../../.agents/profiles/README.md) — the profile contract.

@@ -231,18 +231,18 @@ Restore where you left off — windows, tabs, apps, and terminal context — acr
 | [Freeter](https://freeter.io/) | organize tools and resources per workflow | optional |
 | Decks | bring scattered knowledge back together | reference |
 | [Spaces](https://spacesformac.xyz/) | per-context window and app layouts | reference |
-| [tmux](https://github.com/tmux/tmux) / [zellij](https://github.com/zellij-org/zellij) | persistent terminal sessions (Panoply `session` module) | core |
+| [tmux](https://github.com/tmux/tmux) / [zellij](https://github.com/zellij-org/zellij) | persistent terminal sessions (native-toolchain `session` module) | core |
 | [Kilo Code](https://github.com/Kilo-Org/kilocode) | reference for context/session storage and knowledge transfer between sessions/agents | reference |
 
-Terminal sessions are already part of the Panoply [`session` module](native-toolchain.md#modules); GUI
-window/space restoration is handled by the apps above today and is a candidate for future Cthulhu
+Terminal sessions are already part of the native-toolchain [`session` module](native-toolchain.md#modules); GUI
+window/space restoration is handled by the apps above today and is a candidate for future runtime-controller (Cthulhu)
 session management.
 
 ---
 
 ## Relationship to WfOS
 
-- These apps are **documented recommendations**, not Panoply-managed tools — install them yourself.
+- These apps are **documented recommendations**, not native-toolchain-managed tools — install them yourself.
 - The markdown directory is the contract; editors and AI engines are swappable layers over it.
 - The deeper idea-capture → spec planning-capture concept is intentionally decoupled and lives
   in the Workstreams Plan workstream as an archived concept. WfOS is not coupled to it now.

@@ -25,7 +25,7 @@ The report walks every namespace `bin/<workflow>/` under the Workstreams root
 | `manifest_present` | Whether any `manifest.json` exists under the tree |
 | `manifest_count` | How many `manifest.json` files were found |
 
-Outputs land in the Ontarch registry (host-specific, gitignored):
+Outputs land in the metadata-plane (Ontarch) registry (host-specific, gitignored):
 
 - `packages/ontarch/registry/bin-inventory.json` — machine-readable
 - `packages/ontarch/registry/BIN-INVENTORY.md` — RTK-compressible table
@@ -34,10 +34,10 @@ The inventory is **read-only**: it never writes under `bin/`, never deletes, and
 
 ## Manifests
 
-Every non-trivial Ontarch-generated run carries a `manifest.json` beside its outputs. Day-one
-scope is Ontarch's own generated artifacts (`registry/*.json`, scan, graph). Other `bin/`
+Every non-trivial metadata-plane-generated run carries a `manifest.json` beside its outputs. Day-one
+scope is the metadata-plane's own generated artifacts (`registry/*.json`, scan, graph). Other `bin/`
 writers are advised to emit the same shape; the schema validates any manifest that exists
-but does not require one outside Ontarch.
+but does not require one outside the metadata-plane (Ontarch).
 
 Required fields: `id`, `workflow`, `source`, `created_at`, `tool`, `outputs`, `retention`.
 
@@ -70,7 +70,7 @@ manifest, deleting `lib/` or `src/` material, deleting anything with `retention:
 
 At the current draft gateway, `archive` and `delete-approved` validate arguments and then
 refuse (no filesystem mutation). Agents under `PANOPLY_AGENT=1` are refused those modes
-outright. Real archive/delete execution is deferred to later automation (Cthulhu / H12).
+outright. Real archive/delete execution is deferred to later automation (runtime-controller (Cthulhu) / H12).
 
 ## Archive reasons and promotion
 
@@ -98,6 +98,6 @@ manifest records the destination when applicable:
 ## Agent rails
 
 Report-only inventory is agent-safe. Cleanup mutation (`archive`, `delete-approved`) is
-human-only. The `agent-bin` Ontarch policy records allow/gate/block tiers for bin/archive
+human-only. The `agent-bin` metadata-plane (Ontarch) policy records allow/gate/block tiers for bin/archive
 commands; see [agent-rails.md](agent-rails.md). Runtime command interception is deferred to
-Cthulhu — the same boundary as git and secret rails.
+the runtime-controller (Cthulhu) — the same boundary as git and secret rails.

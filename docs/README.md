@@ -5,7 +5,7 @@ control layer over the tools you already use. It is modular and non-disruptive �
 one package, keep your own shell and editor, and grow into the rest when it earns its place.
 
 This folder is the self-contained reference for the workspace. Start with
-[architecture](architecture.md), then read the guide for whichever product you are touching.
+[architecture](architecture.md), then read the guide for whichever archetype or product you are touching.
 
 ## Reference matrix
 
@@ -37,13 +37,14 @@ This folder is the self-contained reference for the workspace. Start with
 | runtime-controller | Cthulhu | `cth` | Discovery, routing, sessions, agent rails |
 | package-translator | Polytope | `cth package` | Intent → packages and artifacts |
 | native-toolchain | Panoply | `panoply` | Local Unix/Rust tool execution |
-| portable-component-runtime | Wisp | — | WASM/WASI sandboxed components |
-| metadata-plane | Ontarch | — | Descriptors, registry, schemas, policies |
+| portable-component-runtime | Wisp | `cth portable` (planned) | WASM/WASI sandboxed components |
+| metadata-plane | Ontarch | — (build tasks; later `cth meta`) | Descriptors, registry, schemas, policies |
 
 Archetypes are stable roles; products are the implementations shipped here. Any product is
 swappable — the archetype id is what other layers depend on.
 
 ## Status
 
-Implemented today: **Panoply** (native toolchain) and **Ontarch** (metadata plane).
-Planned: **Cthulhu**, **Polytope**, **Wisp**. See each guide for scope and roadmap.
+Implemented today: **`native-toolchain` (Panoply)** and **`metadata-plane` (Ontarch)**.
+Planned: **`runtime-controller` (Cthulhu)**, **`package-translator` (Polytope)**,
+**`portable-component-runtime` (Wisp)**. See each guide for scope and roadmap.

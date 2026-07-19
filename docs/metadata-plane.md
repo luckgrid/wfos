@@ -1,10 +1,10 @@
 # Metadata plane — Ontarch
 
-Ontarch stores the machine-readable meaning of the system: **descriptors, registry, schemas,
-policies, graphs, models, and package contracts**. It exposes no end-user runtime CLI — it is
-data and contracts that the other products read and write, plus two build-time metadata tasks
-(`moon run ontarch:validate`, `moon run ontarch:sync`) that validate those contracts and generate
-the registry from them.
+The `metadata-plane` (Ontarch) stores the machine-readable meaning of the system:
+**descriptors, registry, schemas, policies, graphs, models, and package contracts**. It exposes
+no end-user runtime CLI — it is data and contracts that the other products read and write, plus
+two build-time metadata tasks (`moon run ontarch:validate`, `moon run ontarch:sync`) that
+validate those contracts and generate the registry from them.
 
 Ontarch is delivered as a package (`packages/ontarch/`). It is the shared substrate the
 [interface layers](architecture.md#interface-layers) sit on: profiles and policies decide how
@@ -19,7 +19,7 @@ Schemas       define contracts for generated data
 Policies      define rules — including agent rails and gates
 Graphs        define relationships — capability, policy, and unit dependency edges (generated)
 Models        define machine-readable domain meaning (planned)
-Packages      define Polytope-managed deliverable interfaces (planned)
+Packages      define package-translator-managed deliverable interfaces (planned)
 ```
 
 ## What lives here now
@@ -40,8 +40,9 @@ Packages      define Polytope-managed deliverable interfaces (planned)
 | `registry/QUERIES.md`, `registry/queries/*.jq` | query | jq cookbook over the registry |
 | `registry/sessions/*.json` | record | build-session records (tracked for provenance) |
 
-Panoply produces `tools.json` (`panoply doctor`) and is governed by the agent policy here; `ontarch
-sync` reads it and the descriptors/policies to emit the rest of the registry.
+The native toolchain produces `tools.json` (`panoply doctor`) and is governed by the agent
+policy here; `ontarch sync` reads it and the descriptors/policies to emit the rest of the
+registry.
 
 ## Generation and queries
 
@@ -74,8 +75,8 @@ cheaper to read than the source it summarizes. See
 
 ## Interface-layer exposure
 
-Ontarch materializes cross-layer contracts so each [interface layer](architecture.md#interface-layers)
-sees the right amount:
+The metadata plane materializes cross-layer contracts so each
+[interface layer](architecture.md#interface-layers) sees the right amount:
 
 ```txt
 Toolchain layer (low)     paths, native manifests, adapter contracts, registry scans
@@ -85,26 +86,28 @@ Application layer (high)  workflow intent, domain/system labels — minimal path
 
 ## Stream metadata
 
-Domain data, stream classification, and privacy policy are Ontarch metadata — not a folder.
-A stream's classification tier runs `private → internal → restricted → shared → public →
+Domain data, stream classification, and privacy policy are metadata-plane metadata — not a
+folder. A stream's classification tier runs `private → internal → restricted → shared → public →
 federated`, and promotion scope is the abstract **Leader** policy. Optional domain libraries
 can appear on disk only when filesystem expression is actually needed.
 
 ## Relationships
 
-- **Panoply** (native toolchain) produces the registry (`panoply doctor`) and is governed by the
-  agent policy here.
-- **Cthulhu** (`cth`) and **Polytope** (`cth package`) will read and operate on Ontarch metadata when
-  implemented — discovery, routing, sessions, and package translation.
-- **Native manifests stay authoritative.** Ontarch describes meaning, routing, policy, and
-  relationships; it does not replace `Cargo.toml`, `package.json`, `mise.toml`, or lockfiles.
+- **`native-toolchain` (Panoply)** produces the registry (`panoply doctor`) and is governed by
+  the agent policy here.
+- **`runtime-controller` (Cthulhu, `cth`)** and **`package-translator` (Polytope, `cth package`)**
+  will read and operate on metadata-plane data when implemented — discovery, routing, sessions,
+  and package translation.
+- **Native manifests stay authoritative.** The metadata plane describes meaning, routing,
+  policy, and relationships; it does not replace `Cargo.toml`, `package.json`, `mise.toml`, or
+  lockfiles.
 
 ## Adding metadata
 
-Each product contributes its own descriptor, schema(s), and policy following the Panoply
+Each product contributes its own descriptor, schema(s), and policy following the native-toolchain
 example: a descriptor for how it connects, a schema for any generated artifact, and a policy
 for its agent rails. Agent operating profiles are authored under `Workstreams/.agents/profiles/`
-and validated/indexed by Ontarch (see [agent-configs.md](agent-configs.md)). Generated,
+and validated/indexed by the metadata plane (see [agent-configs.md](agent-configs.md)). Generated,
 host-specific output goes under `registry/` and is gitignored; contracts and policies are tracked.
 
 See [native-toolchain.md](native-toolchain.md) for the producer side and [agent-rails.md](agent-rails.md) for how
