@@ -2,7 +2,7 @@
 
 Structured, machine-parseable session records, one JSON file per build session
 (`<session_id>.json`). Written by the agent at session close per the
-[session record schema](../../../../../../../Plan/bin/lg_wfos_session_memory_workflow.md#33-session-record-schema).
+[session record schema](../../../../../../../../Plan/bin/lg_wfos_session_memory_workflow.md#33-session-record-schema).
 
 **Filename / `session_id` date rule:** use
 `YYYY-MM-DD-eNN-sN` where `YYYY-MM-DD` is the **local (PDT) implementation/completion
@@ -10,10 +10,10 @@ date** for that story (anchored by nested-repo git history). Do **not** derive t
 from a planned sprint date, document mtime, or the next UTC calendar day when
 `started_at`/`ended_at` cross midnight. Keep `started_at`/`ended_at` as true UTC instants;
 only the filename and `session_id` use the local completion day. The ledger row in
-[`Build/bin/SESSIONS.md`](../../../../../../bin/SESSIONS.md) must use the same `session_id`.
+[`Build/bin/wfos/SESSIONS.md`](../../../../../../../bin/wfos/SESSIONS.md) must use the same `session_id`.
 
 These are the durable, queryable twin of the human-readable ledger
-[`Build/bin/SESSIONS.md`](../../../../../../bin/SESSIONS.md). A resuming agent reads the **tail** of
+[`Build/bin/wfos/SESSIONS.md`](../../../../../../../bin/wfos/SESSIONS.md). A resuming agent reads the **tail** of
 the ledger (last 1–3 rows) or queries these records with `jq`; it never replays the full history.
 
 ```bash

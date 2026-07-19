@@ -9,9 +9,9 @@
   "agent": "factory/claude-opus-4.8",
   "profile": "workspace-dev",
   "loaded_context": [
-    "Build/bin/STATE.md",
-    "Build/bin/SESSIONS.md (tail)",
-    "Build/bin/E02_secrets_and_vaults.md#s2",
+    "Build/bin/wfos/STATE.md",
+    "Build/bin/wfos/SESSIONS.md (tail)",
+    "Build/bin/wfos/E02_secrets_and_vaults.md#s2",
     "Plan/bin/wfos/lg_wfos_lvl_0_agent_rails.md"
   ],
   "changed_paths": [

@@ -9,9 +9,9 @@
   "agent": "zed/claude-opus-4.8",
   "profile": "workspace-dev",
   "loaded_context": [
-    "Build/bin/STATE.md",
-    "Build/bin/SESSIONS.md (tail)",
-    "Build/bin/E01_dotfiles_shell_substrate.md#s4"
+    "Build/bin/wfos/STATE.md",
+    "Build/bin/wfos/SESSIONS.md (tail)",
+    "Build/bin/wfos/E01_dotfiles_shell_substrate.md#s4"
   ],
   "changed_paths": [
     "Build/src/workspaces/wfos/packages/panoply/dotfiles/.chezmoidata/routing.toml",

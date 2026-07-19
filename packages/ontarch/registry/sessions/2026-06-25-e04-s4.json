@@ -9,15 +9,15 @@
   "agent": "factory/claude-opus-4.8",
   "profile": "workspace-dev",
   "loaded_context": [
-    "Build/bin/STATE.md",
-    "Build/bin/SESSIONS.md (tail)",
-    "Build/bin/E04_metadata_plane_registries.md#s4",
-    "Build/bin/E04_PROGRESS_NOTES.md",
+    "Build/bin/wfos/STATE.md",
+    "Build/bin/wfos/SESSIONS.md (tail)",
+    "Build/bin/wfos/E04_metadata_plane_registries.md#s4",
+    "Build/bin/wfos/E04_PROGRESS_NOTES.md",
     "packages/ontarch/registry/sessions/2026-06-25-e04-s3.json",
     "Plan/bin/wfos/lg_wfos_lvl_0_metadata_plane.md#104-policies"
   ],
   "changed_paths": [
-    "Build/bin/E04_PROGRESS_NOTES.md",
+    "Build/bin/wfos/E04_PROGRESS_NOTES.md",
     "Build/src/workspaces/wfos/packages/ontarch/policies/no-agent-git-push.policy.toml",
     "Build/src/workspaces/wfos/packages/ontarch/schemas/policy.schema.json",
     "Build/src/workspaces/wfos/packages/ontarch/graphs/edges.schema.json",
@@ -35,7 +35,7 @@
     "moon run panoply:validate-substrate",
     "shellcheck --severity=warning bin/ontarch bin/ontarch-sync bin/ontarch-validate lib/common.sh lib/descriptor.sh lib/registry.sh"
   ],
-  "outcome": "Policy and graph descriptors. Authored no-agent-git-push.policy.toml (agents never push/publish: [block] commands git push variants + tools gh release/merge; [allow] commands status/diff/log/fetch/add/commit; [rationale]) and policy.schema.json (draft-07, permissive — accepts both agent-rails style [agent]/[gates]/[secrets] and command style [block]/[allow], required: id+version, id pattern enforced). Graph: edges.schema.json (draft-07, nodes id+kind enum, edges from+rel enum+to) + graphs/README.md (directory contract). lib/registry.sh gains ontarch_emit_graph (derives graph.json from unit capabilities + policy applies_to: unit-provides-capability, unit-requires-capability, unit-governed-by-policy, agent-blocked-by-policy; 14 nodes, 11 edges) and ontarch_emit_graph_dot (Graphviz DOT rendering). bin/ontarch-sync emits graph.json + graph.dot after units/policies are written. bin/ontarch-validate extended with _validate_policies (required keys + id pattern vs policy.schema.json) and _validate_graph (required keys, node kind enum, edge rel enum, dangling endpoint check vs edges.schema.json). Docs updated: metadata-plane.md, ontarch README, ontarch AGENTS. Also wrote Build/bin/E04_PROGRESS_NOTES.md documenting S1-S3 detail + S4 + remaining plan.",
+  "outcome": "Policy and graph descriptors. Authored no-agent-git-push.policy.toml (agents never push/publish: [block] commands git push variants + tools gh release/merge; [allow] commands status/diff/log/fetch/add/commit; [rationale]) and policy.schema.json (draft-07, permissive — accepts both agent-rails style [agent]/[gates]/[secrets] and command style [block]/[allow], required: id+version, id pattern enforced). Graph: edges.schema.json (draft-07, nodes id+kind enum, edges from+rel enum+to) + graphs/README.md (directory contract). lib/registry.sh gains ontarch_emit_graph (derives graph.json from unit capabilities + policy applies_to: unit-provides-capability, unit-requires-capability, unit-governed-by-policy, agent-blocked-by-policy; 14 nodes, 11 edges) and ontarch_emit_graph_dot (Graphviz DOT rendering). bin/ontarch-sync emits graph.json + graph.dot after units/policies are written. bin/ontarch-validate extended with _validate_policies (required keys + id pattern vs policy.schema.json) and _validate_graph (required keys, node kind enum, edge rel enum, dangling endpoint check vs edges.schema.json). Docs updated: metadata-plane.md, ontarch README, ontarch AGENTS. Also wrote Build/bin/wfos/E04_PROGRESS_NOTES.md documenting S1-S3 detail + S4 + remaining plan.",
   "validation": "GATE moon run ontarch:validate PASS — 3 descriptors + 2 policies (panoply.agent, no-agent-git-push) + graph (14 nodes, 11 edges, all endpoints resolve, no dangling). moon run ontarch:sync PASS (graph.json + graph.dot generated). Regression: moon run panoply:validate-substrate exit 0. shellcheck --severity=warning CLEAN on all 6 bash files.",
   "decisions": [
     "graph is fully derived (not hand-authored) from descriptor capabilities + policy applies_to — the emitter reads units.json + policies.json that sync already generated",

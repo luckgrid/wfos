@@ -9,7 +9,7 @@
   "agent": "cursor/auto",
   "profile": "workspace-dev",
   "loaded_context": [
-    "Build/bin/2026-06-27-wfos-e06-skills-and-commands-sprint.md#e06s5",
+    "Build/bin/wfos/2026-06-27-wfos-e06-skills-and-commands-sprint.md#e06s5",
     "packages/ontarch/registry/sessions/2026-06-27-e06-s4.json",
     "Build/src/workspaces/wfos/docs/agent-rails.md"
   ],
@@ -17,8 +17,8 @@
     "Build/src/workspaces/wfos/packages/ontarch/bin/ontarch-validate",
     "Build/src/workspaces/wfos/packages/ontarch/bin/ontarch-skills",
     "Build/src/workspaces/wfos/docs/agent-rails.md",
-    "Build/bin/STATE.md",
-    "Build/bin/SESSIONS.md"
+    "Build/bin/wfos/STATE.md",
+    "Build/bin/wfos/SESSIONS.md"
   ],
   "commands_run": [
     "moon run ontarch:validate",

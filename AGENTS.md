@@ -62,7 +62,7 @@ carry `skillspector_scan` in `required_validators`. Optional AI enhancements are
 
 ## Learned User Preferences
 
-- WfOS public docs and READMEs must be self-contained: do not link to Build/bin or Plan/bin spec
+- WfOS public docs and READMEs must be self-contained: do not link to Build/bin/wfos or Plan/bin spec
   files; cite in-repo paths, published URLs, or conceptual namespace names only (session JSON
   provenance may keep bin refs).
 - In user-facing wfos docs, replace epic IDs (E01, E02, etc.) with wfos-native terms (secrets
@@ -70,7 +70,7 @@ carry `skillspector_scan` in `required_validators`. Optional AI enhancements are
 - Suggested Workstreams layout paths in docs, descriptors, and shell defaults are conventions
   only; document override points (`PANOPLY_HOME`, mount points), never imply one canonical filesystem
   layout.
-- When verifying epic or story completion, compare the repo to Build/bin specs and
+- When verifying epic or story completion, compare the repo to Build/bin/wfos specs and
   `packages/ontarch/registry/sessions`; consult Plan/bin only for extra context.
 
 ## Learned Workspace Facts

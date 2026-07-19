@@ -9,10 +9,10 @@
   "agent": "cursor/auto",
   "profile": "workspace-dev",
   "loaded_context": [
-    "Build/bin/STATE.md",
-    "Build/bin/SESSIONS.md (tail)",
-    "Build/bin/E06_skills_and_commands.md#s1",
-    "Build/bin/2026-06-27-wfos-e06-skills-and-commands-sprint.md",
+    "Build/bin/wfos/STATE.md",
+    "Build/bin/wfos/SESSIONS.md (tail)",
+    "Build/bin/wfos/E06_skills_and_commands.md#s1",
+    "Build/bin/wfos/2026-06-27-wfos-e06-skills-and-commands-sprint.md",
     "Plan/bin/wfos/lg_wfos_lvl_0_agent_rails.md",
     "packages/ontarch/registry/sessions/2026-06-26-e05-s4.json"
   ],

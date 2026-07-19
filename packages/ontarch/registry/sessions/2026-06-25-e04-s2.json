@@ -9,9 +9,9 @@
   "agent": "factory/claude-opus-4.8",
   "profile": "workspace-dev",
   "loaded_context": [
-    "Build/bin/STATE.md",
-    "Build/bin/SESSIONS.md (tail)",
-    "Build/bin/E04_metadata_plane_registries.md#s2",
+    "Build/bin/wfos/STATE.md",
+    "Build/bin/wfos/SESSIONS.md (tail)",
+    "Build/bin/wfos/E04_metadata_plane_registries.md#s2",
     "packages/ontarch/registry/sessions/2026-06-25-e04-s1.json"
   ],
   "changed_paths": [

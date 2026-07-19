@@ -9,10 +9,10 @@
   "agent": "zed/claude-opus",
   "profile": "workspace-dev",
   "loaded_context": [
-    "Build/bin/STATE.md",
-    "Build/bin/SESSIONS.md (tail)",
-    "Build/bin/E05_agent_configs_profiles.md#s4",
-    "Build/bin/2026-06-26-wfos-e05-agent-configs-profiles-sprint.md",
+    "Build/bin/wfos/STATE.md",
+    "Build/bin/wfos/SESSIONS.md (tail)",
+    "Build/bin/wfos/E05_agent_configs_profiles.md#s4",
+    "Build/bin/wfos/2026-06-26-wfos-e05-agent-configs-profiles-sprint.md",
     "Plan/bin/wfos/lg_wfos_lvl_0_agent_rails.md",
     "packages/ontarch/registry/sessions/2026-06-26-e05-s3.json",
     "Build/src/workspaces/wfos/docs/agent-rails.md"
@@ -26,8 +26,8 @@
     "Build/src/workspaces/wfos/packages/ontarch/lib/registry.sh",
     "Build/src/workspaces/wfos/packages/ontarch/bin/ontarch-validate",
     "Build/src/workspaces/wfos/docs/agent-rails.md",
-    "Build/bin/STATE.md",
-    "Build/bin/SESSIONS.md"
+    "Build/bin/wfos/STATE.md",
+    "Build/bin/wfos/SESSIONS.md"
   ],
   "commands_run": [
     "moon run ontarch:sync",

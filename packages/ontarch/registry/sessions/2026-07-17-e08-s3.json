@@ -9,7 +9,7 @@
   "agent": "cursor/composer",
   "profile": "workspace-dev",
   "loaded_context": [
-    "Build/bin/2026-07-17-wfos-e08-bin-archive-lifecycle-sprint.md#e08s3",
+    "Build/bin/wfos/2026-07-17-wfos-e08-bin-archive-lifecycle-sprint.md#e08s3",
     "packages/ontarch/registry/sessions/2026-07-17-e08-s2.json",
     "packages/ontarch/registry/sessions/2026-07-17-e08-s1.json"
   ],

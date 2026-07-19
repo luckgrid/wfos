@@ -9,7 +9,7 @@
   "agent": "cursor/auto",
   "profile": "workspace-dev",
   "loaded_context": [
-    "Build/bin/2026-06-27-wfos-e06-skills-and-commands-sprint.md#e06s4",
+    "Build/bin/wfos/2026-06-27-wfos-e06-skills-and-commands-sprint.md#e06s4",
     "packages/ontarch/registry/sessions/2026-06-27-e06-s3.json",
     "Build/src/workspaces/wfos/docs/tool-catalog.md"
   ],

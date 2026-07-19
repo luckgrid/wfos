@@ -9,8 +9,8 @@
   "agent": "cursor/auto",
   "profile": "workspace-dev",
   "loaded_context": [
-    "Build/bin/STATE.md",
-    "Build/bin/2026-06-27-wfos-e06-skills-and-commands-sprint.md#e06s2",
+    "Build/bin/wfos/STATE.md",
+    "Build/bin/wfos/2026-06-27-wfos-e06-skills-and-commands-sprint.md#e06s2",
     "packages/ontarch/registry/sessions/2026-06-27-e06-s1.json"
   ],
   "changed_paths": [

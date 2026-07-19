@@ -9,9 +9,9 @@
   "agent": "zed/claude-opus-4.8",
   "profile": "workspace-dev",
   "loaded_context": [
-    "Build/bin/STATE.md",
-    "Build/bin/01_build_session_protocol.md",
-    "Build/bin/E01_dotfiles_shell_substrate.md#s1",
+    "Build/bin/wfos/STATE.md",
+    "Build/bin/wfos/01_build_session_protocol.md",
+    "Build/bin/wfos/E01_dotfiles_shell_substrate.md#s1",
     "Plan/bin/wfos/lg_wfos_lvl_0_unix_substrate.md",
     "Plan/bin/lg_wfos_session_memory_workflow.md#33-session-record-schema"
   ],

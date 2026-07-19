@@ -9,8 +9,8 @@
   "agent": "factory/droid-opus",
   "profile": "workspace-dev",
   "loaded_context": [
-    "Build/bin/2026-07-17-wfos-e07-git-hygiene-workspaces-sprint.md#e07s1",
-    "Build/bin/STATE.md",
+    "Build/bin/wfos/2026-07-17-wfos-e07-git-hygiene-workspaces-sprint.md#e07s1",
+    "Build/bin/wfos/STATE.md",
     "packages/ontarch/registry/sessions/2026-06-27-e06-s5.json"
   ],
   "changed_paths": [

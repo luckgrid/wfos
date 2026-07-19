@@ -9,9 +9,9 @@
   "agent": "factory/claude-opus-4.8",
   "profile": "workspace-dev",
   "loaded_context": [
-    "Build/bin/STATE.md",
-    "Build/bin/SESSIONS.md (tail)",
-    "Build/bin/E03_native_toolchain.md#s1",
+    "Build/bin/wfos/STATE.md",
+    "Build/bin/wfos/SESSIONS.md (tail)",
+    "Build/bin/wfos/E03_native_toolchain.md#s1",
     "Plan/bin/wfos/lg_wfos_lvl_0_native_toolchain.md"
   ],
   "changed_paths": [

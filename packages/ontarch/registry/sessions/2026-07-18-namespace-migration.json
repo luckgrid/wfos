@@ -10,8 +10,8 @@
   "profile": "workspace-dev",
   "loaded_context": [
     "Plan/bin/wfos/lg_wfos_lvl_0_namespace_alignments.md",
-    "Build/bin/STATE.md",
-    "Build/bin/01_build_session_protocol.md",
+    "Build/bin/wfos/STATE.md",
+    "Build/bin/wfos/01_build_session_protocol.md",
     "Build/src/workspaces/wfos/AGENTS.md",
     "packages/ontarch/registry/sessions/2026-07-17-e08-s5.json"
   ],
@@ -26,8 +26,8 @@
     "Build/src/workspaces/wfos/packages/ontarch/registry/sessions/*.json (30+ historical records, content rewritten to new names)",
     "Workstreams/AGENTS.md",
     "Workstreams/.agents/{README, profiles/*.toml, profiles/README, graphs/README, tools/README, skills/README}",
-    "Build/bin/{E03, H09, H11, H12, 2026-06-23-epic-3-*}.md (file renames)",
-    "Build/bin/*.md (all epic/sprint/roadmap/SESSIONS/STATE content swept)",
+    "Build/bin/wfos/{E03, H09, H11, H12, 2026-06-23-epic-3-*}.md (file renames)",
+    "Build/bin/wfos/*.md (all epic/sprint/roadmap/SESSIONS/STATE content swept)",
     "Plan/bin/wfos/{lg_wfos_lvl_0_native_substrate→native_toolchain, lg_wfos_lvl_0_portable_runtime→portable_component_runtime}.md",
     "Plan/bin/wfos/lg_wfos_prod_mindflow.md → Plan/bin/archives/lg_wfos_prod_mindflow.md (archived; brand retired per §18)",
     "Plan/bin/{wfos/*, toolkit/*, workstreams/*, root docs}.md (content sweep + mindflow retirement notes)"
