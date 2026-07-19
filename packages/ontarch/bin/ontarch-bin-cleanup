@@ -216,7 +216,7 @@ _refuse_mutation() {
     printf 'would-be plan:\n'
     _emit_plan_lines archive
   fi
-  ontarch_err "mode=$mode deferred at draft gateway — no archive/delete executed (see docs/bin-archive.md; H12/Cthulhu)"
+  ontarch_err "mode=$mode deferred at draft gateway — no archive/delete executed (see docs/bin-archive.md; E12/Cthulhu)"
   exit 1
 }
 
