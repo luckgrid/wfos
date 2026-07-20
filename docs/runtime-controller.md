@@ -1,4 +1,4 @@
-# Runtime controller — Takogami (planned)
+# Runtime controller — Takogami 🐙 (planned)
 
 The `runtime-controller` (Takogami) is the runtime CLI and low-level control interface (`takogami`).
 It is the daily command surface that reaches into many tools, libraries, sessions, descriptors,

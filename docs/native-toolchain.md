@@ -1,4 +1,4 @@
-# Native toolchain — Panoply
+# Native toolchain — Panoply 🧰
 
 The `native-toolchain` (Panoply) is the layer of small native Unix/Rust tools that make the
 machine usable for both developers and AI agents. It is shell-first and installs tools

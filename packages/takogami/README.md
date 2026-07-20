@@ -1,4 +1,4 @@
-# runtime-controller — Takogami (planned)
+# `runtime-controller` — Takogami 🐙 (planned)
 
 The runtime-controller (Takogami) is the WfOS runtime CLI and low-level control interface (`takogami`): discovery, routing,
 sessions, and agent rails. It is not the package manager ([package-translator (Polytope)](../polytope/README.md))

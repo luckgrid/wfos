@@ -1,4 +1,4 @@
-# portable-component-runtime — Wisp (planned)
+# `portable-component-runtime` — Wisp 🫧 (planned)
 
 The portable-component-runtime (Wisp) is the WASM/WASI binary interface layer: portable, sandboxed, componentized execution.
 Where the [native-toolchain (Panoply)](../panoply/README.md) is local-native execution, Wisp is portable sandboxed

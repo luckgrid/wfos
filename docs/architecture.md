@@ -17,11 +17,11 @@ implementations in this workspace and their CLIs.
 
 | Archetype id | Purpose | Product | CLI |
 |--------------|---------|---------|-----|
-| `runtime-controller` | Discovery, routing, sessions, rails | Takogami | `takogami` |
-| `package-translator` | High-level intent → packages, artifacts | Polytope | `takogami package` |
-| `native-toolchain` | Native Unix/Rust tools and scripts | Panoply | `panoply` |
-| `portable-component-runtime` | WASM/WASI sandboxed components | Wisp | — |
-| `metadata-plane` | Descriptors, registry, schemas, policies | Ontarch | — |
+| `runtime-controller` | Discovery, routing, sessions, rails | Takogami 🐙 | `takogami` |
+| `package-translator` | High-level intent → packages, artifacts | Polytope 📦 | `takogami package` |
+| `native-toolchain` | Native Unix/Rust tools and scripts | Panoply 🧰 | `panoply` |
+| `portable-component-runtime` | WASM/WASI sandboxed components | Wisp 🫧 | — |
+| `metadata-plane` | Descriptors, registry, schemas, policies | Ontarch 📐 | — |
 
 Another configuration could implement `runtime-controller` with a different product or
 collapse several archetypes behind one CLI — the archetype ids stay stable in metadata.

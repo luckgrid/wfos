@@ -1,4 +1,4 @@
-# package-translator — Polytope (planned)
+# `package-translator` — Polytope 📦 (planned)
 
 The package-translator (Polytope) is the language-agnostic high-level-to-low-level package interface (`takogami package`): it turns
 workflow logic, rules, policies, profiles, and patterns into packages, artifacts, adapters,

@@ -34,11 +34,11 @@ This folder is the self-contained reference for the workspace. Start with
 
 | Archetype | Product | CLI | Role |
 |-----------|---------|-----|------|
-| runtime-controller | Takogami | `takogami` | Discovery, routing, sessions, agent rails |
-| package-translator | Polytope | `takogami package` | Intent → packages and artifacts |
-| native-toolchain | Panoply | `panoply` | Local Unix/Rust tool execution |
-| portable-component-runtime | Wisp | `takogami portable` (planned) | WASM/WASI sandboxed components |
-| metadata-plane | Ontarch | — (build tasks; later `takogami meta`) | Descriptors, registry, schemas, policies |
+| `runtime-controller` | Takogami 🐙 | `takogami` | Discovery, routing, sessions, agent rails |
+| `package-translator` | Polytope 📦 | `takogami package` | Intent → packages and artifacts |
+| `native-toolchain` | Panoply 🧰 | `panoply` | Local Unix/Rust tool execution |
+| `portable-component-runtime` | Wisp 🫧 | `takogami portable` (planned) | WASM/WASI sandboxed components |
+| `metadata-plane` | Ontarch 📐 | — (build tasks; later `takogami meta`) | Descriptors, registry, schemas, policies |
 
 Archetypes are stable roles; products are the implementations shipped here. Any product is
 swappable — the archetype id is what other layers depend on.

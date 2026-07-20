@@ -13,11 +13,11 @@ Full documentation lives in [`docs/`](docs/README.md). Start with
 
 | Archetype | Product | CLI | Role | Status |
 |-----------|---------|-----|------|--------|
-| native-toolchain | Panoply | `panoply` (later `takogami native`) | Local Unix/Rust tool execution | implemented |
-| metadata-plane | Ontarch | build tasks (`ontarch:*`; later `takogami meta`) | Descriptors, registry, schemas, policies | implemented |
-| runtime-controller | Takogami | `takogami` | Discovery, routing, sessions, rails, integrations (`runtime-integration` / Tendril) | planned |
-| package-translator | Polytope | `takogami package` | Intent → packages and artifacts | planned |
-| portable-component-runtime | Wisp | `takogami portable` (planned) | WASM/WASI sandboxed components | planned |
+| `native-toolchain` | Panoply 🧰 | `panoply` (later `takogami native`) | Local Unix/Rust tool execution | implemented |
+| `metadata-plane` | Ontarch 📐 | build tasks (`ontarch:*`; later `takogami meta`) | Descriptors, registry, schemas, policies | implemented |
+| `runtime-controller` | Takogami 🐙 | `takogami` | Discovery, routing, sessions, rails, integrations (`runtime-integration` / Tendril) | planned |
+| `package-translator` | Polytope 📦 | `takogami package` | Intent → packages and artifacts | planned |
+| `portable-component-runtime` | Wisp 🫧 | `takogami portable` (planned) | WASM/WASI sandboxed components | planned |
 
 Archetypes are stable roles; products are swappable implementations. Above the filesystem,
 three [interface layers](docs/architecture.md#interface-layers) — toolchain, agent, application

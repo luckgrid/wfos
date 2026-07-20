@@ -1,4 +1,4 @@
-# Portable component runtime — Wisp (planned)
+# Portable component runtime — Wisp 🫧 (planned)
 
 The `portable-component-runtime` (Wisp) is the WASM/WASI binary interface layer. It makes
 low-level workflow capabilities portable, sandboxed, and componentized. Where the

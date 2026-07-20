@@ -1,4 +1,4 @@
-# metadata-plane — Ontarch
+# `metadata-plane` — Ontarch 📐
 
 The metadata-plane (Ontarch) stores the machine-readable meaning of the system: **descriptors, registry, schemas,
 policies, graphs, models, and package contracts**. It exposes no end-user runtime CLI — it is

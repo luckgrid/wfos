@@ -1,4 +1,4 @@
-# native-toolchain (Panoply) agent guide
+# `native-toolchain` (Panoply 🧰) agent guide
 
 Read-only by default. [`README.md`](README.md) and
 [`../../docs/native-toolchain.md`](../../docs/native-toolchain.md) are the source of truth.

@@ -1,4 +1,4 @@
-# metadata-plane (Ontarch) agent guide
+# `metadata-plane` (Ontarch 📐) agent guide
 
 The metadata-plane is data and contracts. [`README.md`](README.md) and
 [`../../docs/metadata-plane.md`](../../docs/metadata-plane.md) are the source of truth.
