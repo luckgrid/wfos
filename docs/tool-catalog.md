@@ -62,7 +62,7 @@ small, composable, dotfile-friendly.
 |------|--------|------|
 | [proto](https://moonrepo.dev/proto) | core | pins and installs workspace toolchains (`.prototools`) |
 | [moon](https://moonrepo.dev/moon) | core | project graph, task running, caching |
-| [starbase](https://github.com/moonrepo/starbase) | planned | Rust framework for the runtime-controller (Takogami) CLI |
+| [starbase](https://github.com/moonrepo/starbase) | in use (takogami v0) | Rust framework for the runtime-controller (Takogami) CLI |
 | [mise](https://mise.jdx.dev/) | core | runtime/version manager (native-toolchain default) |
 
 See [monorepo.md](monorepo.md).
@@ -73,10 +73,10 @@ The engine under the [runtime-controller (Takogami)](runtime-controller.md); see
 
 | Crate / spec | Status | Role |
 |--------------|--------|------|
-| [Tokio](https://crates.io/crates/tokio) | planned | async runtime + subprocess proxying |
-| [clap](https://crates.io/crates/clap) | planned | CLI argument/command parsing |
+| [Tokio](https://crates.io/crates/tokio) | in use (takogami v0) | async runtime + subprocess proxying |
+| [clap](https://crates.io/crates/clap) | in use (takogami v0) | CLI argument/command parsing |
 | [Ratatui](https://crates.io/crates/ratatui) | planned | terminal UI (TUI phase) |
-| [Serde](https://crates.io/crates/serde) | planned | config/profile parsing (TOML-first) |
+| [Serde](https://crates.io/crates/serde) | in use (takogami v0) | config/profile parsing (TOML-first) |
 | [Orka](https://crates.io/crates/orka) | planned | pluggable async DAG workflow engine (candidate) |
 | [Zenoh](https://crates.io/crates/zenoh) | planned | pub/sub data fabric (federation/multi-process) |
 | [rmcp](https://crates.io/crates/rmcp) / [MCP](https://modelcontextprotocol.io) | planned | expose native commands as LLM tools |

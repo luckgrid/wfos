@@ -16,7 +16,7 @@ This folder is the self-contained reference for the workspace. Start with
 | [monorepo.md](monorepo.md) | moon project graph + proto toolchains, tasks, conventions |
 | [native-toolchain.md](native-toolchain.md) | Native toolchain — Unix/Rust tools, modules, config templates |
 | [metadata-plane.md](metadata-plane.md) | Metadata plane — descriptors, registry, schemas, policies |
-| [runtime-controller.md](runtime-controller.md) | Runtime controller (`takogami`) — discovery, routing, sessions (planned) |
+| [runtime-controller.md](runtime-controller.md) | Runtime controller (`takogami`) — in progress; discovery, routing, sessions |
 | [package-translator.md](package-translator.md) | Package translator (`takogami package`) — intent → packages (planned) |
 | [portable-component-runtime.md](portable-component-runtime.md) | Portable component runtime — WASM/WASI components (planned) |
 | [agent-configs.md](agent-configs.md) | Shared agent profiles, app-integration pattern, lean AGENTS.md |
@@ -46,5 +46,7 @@ swappable — the archetype id is what other layers depend on.
 ## Status
 
 Implemented today: **`native-toolchain` (Panoply)** and **`metadata-plane` (Ontarch)**.
-Planned: **`runtime-controller` (Takogami)**, **`package-translator` (Polytope)**,
-**`portable-component-runtime` (Wisp)**. See each guide for scope and roadmap.
+In progress: **`runtime-controller` (Takogami)**.
+Planned: **`package-translator` (Polytope)**, **`portable-component-runtime` (Wisp)**.
+See each guide for scope and roadmap; build position lives in `Build/bin/wfos/STATE.md`
+and `SESSIONS.md`.

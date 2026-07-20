@@ -51,8 +51,10 @@ Packages     define package-translator (Polytope)-managed deliverable interfaces
 
 - **[native-toolchain (Panoply)](../panoply/README.md)** produces the registry (`panoply doctor`) and is governed by the
   agent policy here. Today the metadata-plane + native-toolchain are the implemented pair.
-- **runtime-controller (Takogami)** (`takogami`) and **package-translator (Polytope)** (`takogami package`) will read and operate on metadata-plane data when
-  implemented.
+- **runtime-controller (Takogami)** (`takogami`) is **in progress** — descriptor, schemas,
+  projection, and Rust contracts ship today; discovery/routing/sessions are still ahead.
+  **package-translator (Polytope)** (`takogami package`) remains planned and will read metadata-plane
+  data when implemented.
 - **Native manifests stay authoritative** — the metadata-plane describes meaning, routing, policy, and
   relationships; it does not replace `Cargo.toml`, `package.json`, `mise.toml`, or lockfiles.
 

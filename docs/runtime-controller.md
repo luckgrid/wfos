@@ -1,4 +1,4 @@
-# Runtime controller — Takogami 🐙 (planned)
+# Runtime controller — Takogami 🐙
 
 The `runtime-controller` (Takogami) is the runtime CLI and low-level control interface (`takogami`).
 It is the daily command surface that reaches into many tools, libraries, sessions, descriptors,
@@ -6,7 +6,12 @@ policies, and agents. It is **not** the package manager (that is the
 [package translator (Polytope)](package-translator.md)) and **not** the tools themselves (that is
 the [native toolchain (Panoply)](native-toolchain.md)) — it discovers, routes, and coordinates.
 
-Status: **planned.** This guide is the design target; the package starts as a stub.
+Status: **in progress.** The crate ships with the MVP command tree; only `doctor` is
+implemented today, and other commands return structured `not_implemented`. Metadata and
+runtime contracts (descriptor, schemas, Ontarch projection, Rust types) are in place.
+Discovery, routing, policy execution, and operational sessions are still ahead. See
+[`packages/takogami/README.md`](../packages/takogami/README.md) for the proved surface;
+build position lives in `Build/bin/wfos/STATE.md` and `SESSIONS.md`.
 
 ## Responsibilities
 

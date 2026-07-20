@@ -98,9 +98,10 @@ can appear on disk only when filesystem expression is actually needed.
 
 - **`native-toolchain` (Panoply)** produces the registry (`panoply doctor`) and is governed by
   the agent policy here.
-- **`runtime-controller` (Takogami, `takogami`)** and **`package-translator` (Polytope, `takogami package`)**
-  will read and operate on metadata-plane data when implemented — discovery, routing, sessions,
-  and package translation.
+- **`runtime-controller` (Takogami, `takogami`)** is **in progress** — descriptor, schemas,
+  Ontarch projection, and Rust contracts ship today; full discovery, routing, policy
+  execution, and operational sessions are still ahead. **`package-translator` (Polytope,
+  `takogami package`)** remains planned and will read metadata-plane data when implemented.
 - **Native manifests stay authoritative.** The metadata plane describes meaning, routing,
   policy, and relationships; it does not replace `Cargo.toml`, `package.json`, `mise.toml`, or
   lockfiles.

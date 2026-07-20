@@ -15,7 +15,7 @@ Full documentation lives in [`docs/`](docs/README.md). Start with
 |-----------|---------|-----|------|--------|
 | `native-toolchain` | Panoply 🧰 | `panoply` (later `takogami native`) | Local Unix/Rust tool execution | implemented |
 | `metadata-plane` | Ontarch 📐 | build tasks (`ontarch:*`; later `takogami meta`) | Descriptors, registry, schemas, policies | implemented |
-| `runtime-controller` | Takogami 🐙 | `takogami` | Discovery, routing, sessions, rails, integrations (`runtime-integration` / Tendril) | planned |
+| `runtime-controller` | Takogami 🐙 | `takogami` | Discovery, routing, sessions, rails, integrations (`runtime-integration` / Tendril) | in progress |
 | `package-translator` | Polytope 📦 | `takogami package` | Intent → packages and artifacts | planned |
 | `portable-component-runtime` | Wisp 🫧 | `takogami portable` (planned) | WASM/WASI sandboxed components | planned |
 
@@ -45,7 +45,7 @@ Pins live in [`.prototools`](.prototools); graph and tasks in [`.moon/`](.moon/)
 | [`panoply/`](packages/panoply/README.md) | native toolchain — global low-level tools | implemented |
 | [`wisp/`](packages/wisp/README.md) | portable component runtime (WASM/WASI) | planned |
 | [`polytope/`](packages/polytope/README.md) | package translator (`takogami package`) | planned |
-| [`takogami/`](packages/takogami/README.md) | runtime controller (`takogami`) | planned |
+| [`takogami/`](packages/takogami/README.md) | runtime controller (`takogami`) | in progress |
 
 ## Apps
 
@@ -63,7 +63,7 @@ Pins live in [`.prototools`](.prototools); graph and tasks in [`.moon/`](.moon/)
 | [monorepo](docs/monorepo.md) | moon + proto graph, tasks, conventions |
 | [native-toolchain](docs/native-toolchain.md) | Native toolchain — tools, modules, config |
 | [metadata-plane](docs/metadata-plane.md) | Metadata plane — descriptors, registry, schemas, policies |
-| [runtime-controller](docs/runtime-controller.md) · [package-translator](docs/package-translator.md) · [portable-component-runtime](docs/portable-component-runtime.md) | Planned archetypes / products |
+| [runtime-controller](docs/runtime-controller.md) · [package-translator](docs/package-translator.md) · [portable-component-runtime](docs/portable-component-runtime.md) | Runtime controller in progress; Polytope/Wisp still planned |
 | [agent-configs](docs/agent-configs.md) | Shared agent profiles and lean AGENTS.md pattern |
 | [agent-skills](docs/agent-skills.md) | On-demand skill registry, templates, load logging |
 | [agent-rails](docs/agent-rails.md) | Agent rails, gates, MCP, skill scanning |

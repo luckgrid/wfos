@@ -66,12 +66,13 @@ is intentionally not exposed as a task (it is human-only — see [agent-rails.md
   follow the standard `build` / `test` / `lint` (`cargo clippy -D warnings`) /
   `format-check` (`cargo fmt --check`) task set.
 
-## Rust workspace (deferred)
+## Rust workspace
 
-There are no Rust crates yet, so there is no root `Cargo.toml`. The Cargo workspace lands
-with the first crate (the [runtime controller (Takogami)](runtime-controller.md)); at that point
-the root `Cargo.toml` lists `packages/takogami` as a member, and `.moon/toolchains.yml` already
-has the rust toolchain enabled with `clippy` and `rustfmt`.
+The Cargo workspace landed with E09.S1. Root `Cargo.toml` lists `packages/takogami` as the
+member crate; `Cargo.lock` is committed. `.moon/toolchains.yml` already enables the rust
+toolchain with `clippy` and `rustfmt`. See the [runtime controller (Takogami)](runtime-controller.md)
+guide and [`packages/takogami/README.md`](../packages/takogami/README.md) for the current
+proved surface (discovery/routing still ahead).
 
 ## How the runtime controller relates to moon
 
