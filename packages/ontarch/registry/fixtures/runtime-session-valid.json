@@ -1,0 +1,42 @@
+{
+  "schema_version": "0.1.0",
+  "session_id": "sess-fixture-001",
+  "started_at": "2026-07-19T12:00:00Z",
+  "ended_at": "2026-07-19T12:00:01Z",
+  "actor": "agent",
+  "profile_id": "workspace-dev",
+  "request": {
+    "command": "build",
+    "unit_id": "takogami",
+    "verb": "build",
+    "flags": ["--explain"]
+  },
+  "policy_decision": {
+    "outcome": "deny",
+    "policy_id": "agent-git",
+    "rule_id": "block-push",
+    "reason": "remote writes blocked in agent mode"
+  },
+  "execution": {
+    "started": false,
+    "outcome": "denied"
+  },
+  "source_fingerprints": [
+    {
+      "path": "packages/ontarch/descriptors/takogami.descriptor.toml",
+      "algorithm": "sha256",
+      "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "output_summary": {
+    "stdout_bytes": 0,
+    "stderr_bytes": 0,
+    "truncated": false,
+    "encoding": "utf-8",
+    "compressor": "none"
+  },
+  "error": {
+    "code": "policy_deny",
+    "message": "remote writes blocked in agent mode"
+  }
+}

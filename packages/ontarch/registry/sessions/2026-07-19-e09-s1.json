@@ -1,0 +1,53 @@
+{
+  "session_id": "2026-07-19-e09-s1",
+  "epic": "E09",
+  "story": "S1",
+  "title": "Rust workspace and takogami CLI foundation",
+  "status": "done",
+  "started_at": "2026-07-20T02:00:00Z",
+  "ended_at": "2026-07-20T03:15:00Z",
+  "agent": "cursor/composer",
+  "profile": "workspace-dev",
+  "loaded_context": [
+    "Build/bin/wfos/STATE.md",
+    "Build/bin/wfos/E09_runtime_controller.md (S1 block + frontmatter)",
+    "Build/src/workspaces/wfos/docs/runtime-architecture.md",
+    "Build/src/workspaces/wfos/docs/monorepo.md",
+    "packages/ontarch/registry/sessions/2026-07-19-takogami-brand-migration.json",
+    "packages/ontarch/registry/sessions/2026-07-18-namespace-migration.json"
+  ],
+  "changed_paths": [
+    "Build/src/workspaces/wfos/Cargo.toml",
+    "Build/src/workspaces/wfos/Cargo.lock",
+    "Build/src/workspaces/wfos/rust-toolchain.toml",
+    "Build/src/workspaces/wfos/.moon/workspace.yml",
+    "Build/src/workspaces/wfos/packages/takogami/Cargo.toml",
+    "Build/src/workspaces/wfos/packages/takogami/moon.yml",
+    "Build/src/workspaces/wfos/packages/takogami/README.md",
+    "Build/src/workspaces/wfos/packages/takogami/src/{lib,main,app,cli,doctor,error,exit_codes,output}.rs",
+    "Build/src/workspaces/wfos/packages/takogami/tests/cli_smoke.rs",
+    "Build/bin/wfos/STATE.md",
+    "Build/bin/wfos/SESSIONS.md"
+  ],
+  "commands_run": [
+    "cargo build -p takogami",
+    "cargo test -p takogami",
+    "moon run takogami:build",
+    "moon run takogami:test",
+    "moon run takogami:lint",
+    "moon run takogami:format-check"
+  ],
+  "outcome": "Created the Rust workspace (root Cargo.toml + lockfile, rust-toolchain 1.96) and registered packages/takogami in moon. Implemented starbase application shell with clap MVP command tree, stable controller exit codes, minimal JSON error envelopes, doctor build-toolchain skeleton (cargo/rustc/moon PATH checks), and hermetic CLI smoke tests. Unimplemented commands return not_implemented (exit 10) in human and --json modes without panic.",
+  "validation": "moon run takogami:build/test/lint/format-check PASS. Cargo.lock excludes banned v0 deps (orka, zenoh, ratatui, rmcp, petgraph, daggy). 10 tests PASS (1 unit + 9 integration).",
+  "decisions": [
+    "Library + bin split (lib.rs) so integration tests and starbase session share modules.",
+    "starbase 0.13 with miette + tracing features; thin app.rs boundary for framework churn.",
+    "Doctor returns exit 1 when required build tools missing; tests inject fake PATH entries hermetically.",
+    "Minimal S1 JSON envelope (schema_version/command/status/exit_code/diagnostics) — full CommandEnvelope deferred to S2."
+  ],
+  "next": "E09.S2",
+  "blockers": [
+    "ontarch:secrets-scan detect mode still reports pre-existing age-secret-key in git history (commit a3a4978) — unchanged; out of E09.S1 scope."
+  ],
+  "token_note": "Loaded STATE + E09.S1 + 2 canon refs + 2 session records vs full E09 epic and Plan/bin collection."
+}

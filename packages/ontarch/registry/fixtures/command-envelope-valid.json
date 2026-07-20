@@ -1,0 +1,16 @@
+{
+  "schema_version": "0.1.0",
+  "command": "doctor",
+  "status": "ok",
+  "exit_code": 0,
+  "diagnostics": [],
+  "data": {
+    "scope": "build_toolchain_skeleton",
+    "ready": true
+  },
+  "metrics": {
+    "registry_cache": "unavailable",
+    "output_bytes": 0,
+    "compressor": "none"
+  }
+}

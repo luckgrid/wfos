@@ -1,22 +1,70 @@
-# `runtime-controller` — Takogami 🐙 (planned)
+# `runtime-controller` — Takogami
 
-The runtime-controller (Takogami) is the WfOS runtime CLI and low-level control interface (`takogami`): discovery, routing,
-sessions, and agent rails. It is not the package manager ([package-translator (Polytope)](../polytope/README.md))
-and not the tools themselves ([native-toolchain (Panoply)](../panoply/README.md)) — it coordinates them.
+The runtime-controller (Takogami) is the WfOS runtime CLI (`takogami`): discovery, routing,
+policy, sessions, and explain output. It coordinates the [native-toolchain (Panoply)](../panoply/README.md)
+and [metadata-plane (Ontarch)](../ontarch/README.md); it does not replace them.
 
-**Status: planned.** This is a placeholder; no crate exists yet.
+**Status: E09.S2 — metadata and runtime contracts.** The binary builds and exposes the full
+MVP command tree; only `doctor` is implemented. Other commands return a structured
+`not_implemented` error (human + `--json`). Typed contracts for envelopes, sessions,
+resolved commands, policy decisions, legacy entrypoints, fingerprints, and state-home
+precedence are in place for later stories.
 
-## Plan
+## Build
 
-- Built on [starbase](https://github.com/moonrepo/starbase) (app shell) + `clap` (parsing),
-  with Tokio for native tool proxying and Ratatui for a later TUI.
-- Routes to the [moon](../../docs/monorepo.md) task graph and [native-toolchain (Panoply)](../panoply/README.md) for
-  execution; reads [metadata-plane (Ontarch)](../ontarch/README.md) for metadata and policy.
-- The Cargo workspace (`Cargo.toml`) and a `moon.yml` land with this crate; add `takogami` to
-  `.moon/workspace.yml` `projects.sources` at that point.
-- Runtime integrations (archetype `runtime-integration`, brand vocabulary **Tendril**) live
-  inside this package under `src/integrations/` — there is no separate integration package;
-  `wfos-takogami` is the sole distribution unit.
+From the workspace root:
+
+```bash
+moon run takogami:build
+moon run takogami:test
+moon run takogami:lint
+moon run takogami:format-check
+```
+
+## Command surface
+
+```txt
+takogami --version | --help
+takogami doctor [--json]
+takogami scan | list | info | tools | interfaces | dev | build | check | graph | bin | session …
+  → not_implemented (exit 10) until later E09 stories
+```
+
+Global flags: `--json`, `--profile`, `--state-home`, `--no-color`, `--verbose`.
+
+`takogami build <unit>` is the unit lifecycle verb. A separate `workstream` namespace is
+post-MVP.
+
+## Controller exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | Internal error |
+| 2 | Usage (invalid flags / unknown command) |
+| 3 | Contract / schema-version failure |
+| 4 | Resolution failure (reserved) |
+| 5 | Policy deny (reserved) |
+| 6 | Policy gate (reserved) |
+| 10 | Not implemented |
+
+Native child exit codes pass through unchanged in later stories (S6).
+
+## Contracts (S2)
+
+Machine contracts live under `src/contracts/` and Ontarch schemas:
+
+- `packages/ontarch/schemas/command-output.schema.json` — `CommandEnvelope`
+- `packages/ontarch/schemas/runtime-session.schema.json` — operational `RuntimeSession`
+- Structured lifecycle entrypoints in `unit.schema.json` (legacy strings still accepted)
+- Operational state home: `--state-home` → `TAKOGAMI_STATE_HOME` → profile
+  `[runtime] session_state_home` → XDG → `~/.local/state/takogami/sessions`
+- `logs.session_log_target` remains tracked build-session provenance only
+
+## Doctor (S1 skeleton)
+
+Checks only that `cargo`, `rustc`, and `moon` are on `PATH`. Does **not** claim registry,
+session-store, or RTK readiness (those arrive in E09.S3).
 
 Design: [`../../docs/runtime-controller.md`](../../docs/runtime-controller.md) ·
 engine: [`../../docs/runtime-architecture.md`](../../docs/runtime-architecture.md).

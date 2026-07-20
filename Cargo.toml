@@ -1,0 +1,8 @@
+[workspace]
+resolver = "2"
+members = ["packages/takogami"]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.96"
+license = "MIT"

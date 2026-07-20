@@ -59,6 +59,8 @@ _ontarch_scope_object() {
 }
 
 # Convert a descriptor TOML file to a full nested JSON object (compact).
+# Flat tables (`[cli]`) become nested objects. Dotted tables (`[entrypoints.dev]`)
+# nest via JSON path so structured lifecycle entrypoints survive projection.
 ontarch_descriptor_json() {
   local f="$1" stream out scopes s nested
   stream="$(ontarch_descriptor_stream "$f")"
@@ -66,7 +68,16 @@ ontarch_descriptor_json() {
   scopes="$(printf '%s\n' "$stream" | awk -F'\037' '$1!="." {print $1}' | sort -u)"
   for s in $scopes; do
     nested="$(_ontarch_scope_object "$stream" "$s")"
-    out="$(jq -c --arg k "$s" --argjson v "$nested" '. + {($k): $v}' <<<"$out")"
+    if [[ "$s" == *.* ]]; then
+      out="$(jq -c --arg path "$s" --argjson v "$nested" '
+        ($path | split(".")) as $parts |
+        setpath($parts; ((getpath($parts) // {}) + $v))
+      ' <<<"$out")"
+    else
+      out="$(jq -c --arg k "$s" --argjson v "$nested" '
+        . + {($k): ((.[$k] // {}) + $v)}
+      ' <<<"$out")"
+    fi
   done
   printf '%s' "$out"
 }
@@ -92,6 +103,8 @@ ontarch_find_descriptors() {
 }
 
 # Project a full descriptor JSON into a compact registry unit record.
+# Routing-relevant entrypoints (string or structured) and CLI metadata must survive
+# so a ResolvedCommand can be constructed without re-reading the TOML source.
 # Args: <full-json> <source: colocated|central>
 ontarch_unit_record() {
   jq -c --arg source "$2" '{
@@ -101,6 +114,10 @@ ontarch_unit_record() {
     path: (.paths.root // null),
     native_manifests: (.native.manifests // []),
     entrypoints: (.entrypoints // {}),
+    cli: (if .cli then {
+      entry: (.cli.entry // null),
+      commands: (.cli.commands // [])
+    } else null end),
     provides: (.capabilities.provides // []),
     requires: (.capabilities.requires // []),
     policy: (.policy // {}),

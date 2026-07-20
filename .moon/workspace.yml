@@ -6,6 +6,7 @@ projects:
     wfos: "."
     panoply: "packages/panoply"
     ontarch: "packages/ontarch"
+    takogami: "packages/takogami"
 
 vcs:
   defaultBranch: main

@@ -105,7 +105,21 @@
       "type": "object",
       "additionalProperties": true,
       "properties": {
-        "session_log_target": { "type": "string" }
+        "session_log_target": {
+          "type": "string",
+          "description": "Tracked Ontarch build-session provenance target (e.g. registry/sessions/). Never reused as the operational Takogami runtime-session state home."
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Optional runtime-controller (Takogami) settings. Distinct from logs.session_log_target.",
+      "properties": {
+        "session_state_home": {
+          "type": "string",
+          "description": "Optional override for operational runtime-session records. Precedence: CLI --state-home → TAKOGAMI_STATE_HOME → this field → XDG_STATE_HOME/takogami/sessions → ~/.local/state/takogami/sessions. Must not point at logs.session_log_target."
+        }
       }
     }
   }

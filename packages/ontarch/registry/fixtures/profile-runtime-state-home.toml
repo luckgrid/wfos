@@ -1,0 +1,10 @@
+# Fixture profile fragment — proves [runtime] session_state_home is accepted.
+# Not a live agent profile; validated as a schema/projection fixture only.
+id = "runtime-state-home-fixture"
+purpose = "Fixture for optional runtime session_state_home"
+
+[scope]
+allowed_paths = ["Workstreams/Build/src/workspaces/wfos/**"]
+
+[runtime]
+session_state_home = "/tmp/takogami-sessions-fixture"

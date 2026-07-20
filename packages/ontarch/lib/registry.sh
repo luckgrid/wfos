@@ -301,7 +301,8 @@ ontarch_profile_record() {
     allowed_skill_ids: (.skills.allowed_skill_ids // []),
     required_validators: (.validators.required_validators // []),
     output_compressor: (.output.compressor // null),
-    session_log_target: (.logs.session_log_target // null)
+    session_log_target: (.logs.session_log_target // null),
+    session_state_home: (.runtime.session_state_home // null)
   }' <<<"$1"
 }
 

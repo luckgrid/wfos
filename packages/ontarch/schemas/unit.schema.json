@@ -58,7 +58,34 @@
     },
     "entrypoints": {
       "type": "object",
-      "additionalProperties": { "type": "string" }
+      "description": "Lifecycle verb → command. Prefer structured objects (program/args/...). Legacy plain strings remain valid for existing descriptors and produce a deprecation diagnostic when parsed by the runtime controller.",
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "string",
+            "description": "Legacy shell-free argv string. Compatibility only; prefer structured entrypoints."
+          },
+          {
+            "type": "object",
+            "required": ["program"],
+            "additionalProperties": false,
+            "properties": {
+              "program": { "type": "string", "minLength": 1 },
+              "args": { "type": "array", "items": { "type": "string" } },
+              "cwd": { "type": "string" },
+              "env_keys": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Environment key names only — never values."
+              },
+              "backend": { "type": "string" },
+              "adapter": { "type": "string" },
+              "source_manifests": { "type": "array", "items": { "type": "string" } },
+              "required_policies": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        ]
+      }
     },
     "cli": {
       "type": "object",

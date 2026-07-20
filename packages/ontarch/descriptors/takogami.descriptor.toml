@@ -1,0 +1,64 @@
+# Ontarch descriptor — Takogami runtime controller (WfOS Level 0).
+id = "takogami"
+kind = "runtime-controller"
+title = "Takogami — Runtime Controller"
+status = "active"
+archetype = "runtime-controller"
+brand = "takogami"
+version = "0.1.0"
+summary = "Local-first runtime controller over the metadata plane, native toolchain, profiles, and rails."
+
+system_space = "luckgrid"
+domain = "luckgrid"
+layer = "toolchain"
+system = "wfos"
+
+[paths]
+root = "Build/src/workspaces/wfos/packages/takogami"
+package = "Build/src/workspaces/wfos/packages/takogami"
+note = "Paths are suggested layout hints for Ontarch routing, not hard requirements."
+
+[native]
+manifests = ["Cargo.toml", "moon.yml"]
+
+[cli]
+entry = "takogami"
+commands = ["scan", "list", "info", "doctor", "tools", "interfaces", "dev", "build", "check", "graph", "bin", "session"]
+
+[entrypoints.dev]
+program = "moon"
+args = ["run", "takogami:build"]
+cwd = "Build/src/workspaces/wfos"
+env_keys = ["PATH"]
+backend = "moon"
+adapter = "moon-task"
+source_manifests = ["moon.yml"]
+required_policies = ["panoply.agent"]
+
+[entrypoints.build]
+program = "moon"
+args = ["run", "takogami:build"]
+cwd = "Build/src/workspaces/wfos"
+env_keys = ["PATH"]
+backend = "moon"
+adapter = "moon-task"
+source_manifests = ["Cargo.toml", "moon.yml"]
+required_policies = ["panoply.agent"]
+
+[entrypoints.check]
+program = "moon"
+args = ["run", "takogami:test"]
+cwd = "Build/src/workspaces/wfos"
+env_keys = ["PATH"]
+backend = "moon"
+adapter = "moon-task"
+source_manifests = ["Cargo.toml", "moon.yml"]
+required_policies = ["panoply.agent"]
+
+[capabilities]
+provides = ["runtime.control", "command.routing", "session.operational"]
+requires = ["metadata.plane", "native.toolchain"]
+
+[policy]
+allow_git_push = false
+allow_secret_read = false

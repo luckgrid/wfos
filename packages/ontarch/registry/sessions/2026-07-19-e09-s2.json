@@ -1,0 +1,62 @@
+{
+  "session_id": "2026-07-19-e09-s2",
+  "epic": "E09",
+  "story": "S2",
+  "title": "Metadata and runtime contracts",
+  "status": "done",
+  "started_at": "2026-07-20T03:10:00Z",
+  "ended_at": "2026-07-20T04:20:00Z",
+  "agent": "cursor/composer",
+  "profile": "workspace-dev",
+  "loaded_context": [
+    "Build/bin/wfos/STATE.md",
+    "Build/bin/wfos/E09_runtime_controller.md (S2 block + frontmatter + locked decisions)",
+    "Plan/bin/wfos/lg_wfos_lvl_0_metadata_plane.md",
+    "Build/src/workspaces/wfos/docs/metadata-plane.md",
+    "Plan/bin/lg_wfos_session_memory_workflow.md",
+    "packages/ontarch/registry/sessions/2026-07-19-e09-s1.json",
+    "packages/ontarch/registry/sessions/2026-07-19-takogami-brand-migration.json"
+  ],
+  "changed_paths": [
+    "Build/src/workspaces/wfos/packages/takogami/src/contracts/",
+    "Build/src/workspaces/wfos/packages/takogami/src/{lib,error,exit_codes,output}.rs",
+    "Build/src/workspaces/wfos/packages/takogami/Cargo.toml",
+    "Build/src/workspaces/wfos/packages/takogami/Cargo.lock (workspace)",
+    "Build/src/workspaces/wfos/packages/takogami/tests/contracts_roundtrip.rs",
+    "Build/src/workspaces/wfos/packages/takogami/tests/fixtures/contracts/",
+    "Build/src/workspaces/wfos/packages/takogami/README.md",
+    "Build/src/workspaces/wfos/packages/ontarch/descriptors/takogami.descriptor.toml",
+    "Build/src/workspaces/wfos/packages/ontarch/schemas/{unit,profile,command-output,runtime-session}.schema.json",
+    "Build/src/workspaces/wfos/packages/ontarch/graphs/edges.schema.json",
+    "Build/src/workspaces/wfos/packages/ontarch/lib/{descriptor,registry}.sh",
+    "Build/src/workspaces/wfos/packages/ontarch/bin/ontarch-validate",
+    "Build/src/workspaces/wfos/packages/ontarch/registry/fixtures/",
+    "Build/src/workspaces/wfos/docs/metadata-plane.md",
+    "Workstreams/.agents/profiles/README.md",
+    "Build/bin/wfos/STATE.md",
+    "Build/bin/wfos/SESSIONS.md"
+  ],
+  "commands_run": [
+    "cargo test -p takogami",
+    "moon run takogami:build",
+    "moon run takogami:test",
+    "moon run takogami:lint",
+    "moon run takogami:format-check",
+    "moon run ontarch:sync",
+    "moon run ontarch:validate"
+  ],
+  "outcome": "Defined runtime-controller metadata and machine contracts: structured lifecycle entrypoints in unit.schema.json, takogami.descriptor.toml (kind=runtime-controller), graph node-kind enum expansion, Ontarch projection retaining entrypoints+cli, profile [runtime] session_state_home, command-output and runtime-session schemas/fixtures, Rust Serde contracts (ResolvedCommand/PolicyDecision/CommandEnvelope/RuntimeSession), legacy argv parser with deprecation, SHA-256 fingerprints, and state-home precedence. S1 CLI behavior preserved.",
+  "validation": "moon run takogami:build/test/lint/format-check PASS (35 tests). moon run ontarch:sync PASS (4 units incl. takogami; graph 34/32). moon run ontarch:validate PASS (routing projection + runtime contract fixtures). Cargo.lock excludes banned v0 deps.",
+  "decisions": [
+    "Extend unit.schema.json in place (no split entrypoint.schema.json).",
+    "Dotted TOML tables [entrypoints.dev] nested via setpath in descriptor reader.",
+    "Keep schema_version 0.1.0; mismatch is typed contract error (exit 3).",
+    "Operational state home never falls back to logs.session_log_target; profile fixture under registry/fixtures proves [runtime] projection.",
+    "jsonschema as test-only dep for draft-07 fixture validation; sha2 for fingerprints."
+  ],
+  "next": "E09.S3",
+  "blockers": [
+    "ontarch:secrets-scan detect mode still reports pre-existing age-secret-key in git history (commit a3a4978) — unchanged; out of E09.S2 scope."
+  ],
+  "token_note": "Loaded STATE + E09.S2 + 3 canon refs + 2 session records vs full E09 epic and Plan/bin collection."
+}

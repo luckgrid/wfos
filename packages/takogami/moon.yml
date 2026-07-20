@@ -1,0 +1,33 @@
+layer: library
+language: rust
+
+project:
+  name: "takogami"
+  description: "Runtime controller — discovery, routing, policy, sessions, and explain output."
+
+tasks:
+  build:
+    command: "cargo"
+    args: ["build"]
+    options:
+      cache: false
+
+  test:
+    command: "cargo"
+    args: ["test"]
+    deps:
+      - "build"
+    options:
+      cache: false
+
+  lint:
+    command: "cargo"
+    args: ["clippy", "--", "-D", "warnings"]
+    options:
+      cache: false
+
+  format-check:
+    command: "cargo"
+    args: ["fmt", "--check"]
+    options:
+      cache: false

@@ -19,12 +19,21 @@
           "kind": {
             "type": "string",
             "enum": [
-              "native-toolchain",
               "workspace",
+              "native-toolchain",
+              "metadata-plane",
+              "runtime-controller",
+              "package-translator",
+              "portable-component-runtime",
               "package",
               "app",
-              "capability",
+              "site",
+              "pattern",
+              "tool",
+              "runtime",
+              "agent",
               "policy",
+              "capability",
               "actor",
               "profile",
               "skill"

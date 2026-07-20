@@ -27,14 +27,17 @@ Packages      define package-translator-managed deliverable interfaces (planned)
 | Path | Kind | Purpose |
 |------|------|---------|
 | `descriptors/*.descriptor.toml` | descriptor | central unit descriptors (`panoply`, planned `ds`); colocated descriptors live beside their units (e.g. `wfos.descriptor.toml`) |
-| `schemas/unit.schema.json` | schema | contract for unit descriptors (id, kind, paths, capabilities, policy) |
+| `schemas/unit.schema.json` | schema | contract for unit descriptors (id, kind, paths, structured/legacy entrypoints, capabilities, policy) |
 | `schemas/policy.schema.json` | schema | contract for policies (agent-rails + command styles) |
-| `schemas/profile.schema.json` | schema | contract for agent operating profiles (scope, commands, validators; authored under `Workstreams/.agents/profiles/`) |
+| `schemas/profile.schema.json` | schema | contract for agent operating profiles (scope, commands, validators, optional `[runtime] session_state_home`) |
 | `schemas/skill.schema.json` | schema | contract for curated skill/template/pattern records (authored under `Workstreams/.agents/skills/`) |
+| `schemas/command-output.schema.json` | schema | Takogami `--json` `CommandEnvelope` contract |
+| `schemas/runtime-session.schema.json` | schema | operational Takogami runtime-session contract (distinct from build-session records) |
 | `schemas/panoply.tools.schema.json` | schema | contract for the generated tools registry |
 | `policies/panoply.agent.policy.toml` | policy | Panoply agent rails (allow/block, gates) |
 | `policies/no-agent-git-push.policy.toml` | policy | agents never push or publish (human-only) |
 | `graphs/edges.schema.json` | schema | contract for the project graph (nodes + directed edges) |
+| `descriptors/takogami.descriptor.toml` | descriptor | runtime-controller unit (`kind = "runtime-controller"`) |
 | `registry/{units,skills,profiles,policies,tools}.json` | registry | generated indexes (gitignored — host-specific) |
 | `registry/graph.{json,dot}` | registry | generated project graph (gitignored — host-specific) |
 | `registry/QUERIES.md`, `registry/queries/*.jq` | query | jq cookbook over the registry |

@@ -1,0 +1,177 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "wfos/ontarch/schemas/command-output.schema.json",
+  "title": "Takogami command output envelope",
+  "description": "Versioned machine contract for `takogami --json` stdout. One envelope per invocation; never RTK-compressed. Child streams are bounded and summarized; secret values and inherited environment dumps are forbidden.",
+  "type": "object",
+  "required": ["schema_version", "command", "status", "exit_code", "diagnostics"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "0.1.0",
+      "description": "Mismatched schema_version is a typed contract error; never silently coerced."
+    },
+    "command": { "type": "string", "minLength": 1 },
+    "session_id": { "type": "string" },
+    "status": {
+      "type": "string",
+      "enum": ["ok", "error"]
+    },
+    "exit_code": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 255,
+      "description": "Controller exit code. Spawned child exit codes pass through unchanged and are recorded under execution, not redefined here."
+    },
+    "data": {},
+    "explanation": {},
+    "diagnostics": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/diagnostic" }
+    },
+    "child": { "$ref": "#/definitions/child_output" },
+    "metrics": { "$ref": "#/definitions/metrics" }
+  },
+  "definitions": {
+    "diagnostic": {
+      "type": "object",
+      "required": ["code", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "type": "string", "minLength": 1 },
+        "message": { "type": "string" }
+      }
+    },
+    "child_output": {
+      "type": "object",
+      "required": ["truncated", "encoding"],
+      "additionalProperties": false,
+      "properties": {
+        "stdout": { "type": "string" },
+        "stderr": { "type": "string" },
+        "truncated": { "type": "boolean" },
+        "encoding": { "type": "string", "enum": ["utf-8", "lossy-utf-8", "binary"] }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "required": ["registry_cache", "output_bytes", "compressor"],
+      "additionalProperties": false,
+      "properties": {
+        "registry_cache": {
+          "type": "string",
+          "enum": ["hit", "miss", "stale", "unavailable"]
+        },
+        "output_bytes": { "type": "integer", "minimum": 0 },
+        "compressor": {
+          "type": "string",
+          "enum": ["none", "rtk", "disabled", "unsupported", "unavailable", "failed"]
+        },
+        "gain": { "type": "number" }
+      }
+    },
+    "resolved_command": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "session_id",
+        "unit_id",
+        "verb",
+        "descriptor_path",
+        "descriptor_fingerprint",
+        "native_manifests",
+        "backend",
+        "adapter",
+        "program",
+        "argv",
+        "cwd",
+        "env_keys",
+        "profile_id",
+        "policy_ids",
+        "registry_generation"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": { "type": "string", "const": "0.1.0" },
+        "session_id": { "type": "string" },
+        "unit_id": { "type": "string" },
+        "verb": { "type": "string" },
+        "descriptor_path": { "type": "string" },
+        "descriptor_fingerprint": { "type": "string" },
+        "native_manifests": { "type": "array", "items": { "type": "string" } },
+        "backend": { "type": "string" },
+        "adapter": { "type": "string" },
+        "program": { "type": "string" },
+        "argv": { "type": "array", "items": { "type": "string" } },
+        "cwd": { "type": "string" },
+        "env_keys": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Environment key names only — never values."
+        },
+        "profile_id": { "type": "string" },
+        "policy_ids": { "type": "array", "items": { "type": "string" } },
+        "registry_generation": { "$ref": "#/definitions/registry_generation" }
+      }
+    },
+    "registry_generation": {
+      "type": "object",
+      "required": ["generated_at", "source_fingerprints"],
+      "additionalProperties": false,
+      "properties": {
+        "generated_at": { "type": "string" },
+        "source_fingerprints": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/source_fingerprint" }
+        }
+      }
+    },
+    "source_fingerprint": {
+      "type": "object",
+      "required": ["path", "algorithm", "digest"],
+      "additionalProperties": false,
+      "properties": {
+        "path": { "type": "string" },
+        "algorithm": { "type": "string", "const": "sha256" },
+        "digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    },
+    "policy_decision": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["outcome", "matched_rules"],
+          "additionalProperties": false,
+          "properties": {
+            "outcome": { "const": "allow" },
+            "matched_rules": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["outcome", "policy_id", "rule_id", "reason", "required_approval"],
+          "additionalProperties": false,
+          "properties": {
+            "outcome": { "const": "gate" },
+            "policy_id": { "type": "string" },
+            "rule_id": { "type": "string" },
+            "reason": { "type": "string" },
+            "required_approval": { "type": "string" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["outcome", "policy_id", "rule_id", "reason"],
+          "additionalProperties": false,
+          "properties": {
+            "outcome": { "const": "deny" },
+            "policy_id": { "type": "string" },
+            "rule_id": { "type": "string" },
+            "reason": { "type": "string" }
+          }
+        }
+      ]
+    }
+  }
+}
