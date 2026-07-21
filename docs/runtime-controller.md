@@ -6,13 +6,14 @@ policies, and agents. It is **not** the package manager (that is the
 [package translator (Polytope)](package-translator.md)) and **not** the tools themselves (that is
 the [native toolchain (Panoply)](native-toolchain.md)) — it discovers, routes, and coordinates.
 
-It does **not** own persistent terminal PTYs or desktop window restore. Those belong to
-optional providers (tmux / Herdr for terminals; Hammerspoon and others for desktop layout). See
-[native-toolchain.md](native-toolchain.md) and the Plan tool-composition addendum.
+It does **not** own persistent terminal PTYs, desktop window restore, or messaging channels.
+Those belong to optional providers (tmux / Herdr for terminals; Hammerspoon and others for
+desktop layout; an external gateway such as Push for message/schedule ingress). See
+[native-toolchain.md](native-toolchain.md).
 
-Status: **in progress (E09.S3).** Discovery, list/info/tools/interfaces, and complete doctor
-are implemented with registry freshness (`hit`/`miss`/`stale`). Lifecycle routing, policy,
-execution, and **command execution records** remain ahead. See
+Status: **in progress; E09.S4 is next.** Discovery, list/info/tools/interfaces, complete doctor,
+and the command-record contract correction are implemented. Lifecycle resolution, policy,
+execution, and persisted **command execution records** remain ahead. See
 [`packages/takogami/README.md`](../packages/takogami/README.md) for the proved surface;
 build position lives in `Build/bin/wfos/STATE.md` and `SESSIONS.md`.
 
@@ -60,9 +61,8 @@ takogami work-session … composed multi-provider restore (post-E09)
 ```
 
 Optional `integrations/` modules under the runtime-controller package are an implementation
-layout for `runtime-integration` units — not a separate product. Unadopted brand candidates
-(Tendril, Casper, etc.) are recorded only in Plan
-[`lg_wfos_lvl_0_speculative_concepts.md`](../../../../../Plan/bin/wfos/lg_wfos_lvl_0_speculative_concepts.md).
+layout for `runtime-integration` units — not a separate product. Unadopted brand candidates do
+not belong in package names or the live command surface.
 
 Every MVP command should be explainable: `takogami <cmd> --explain` prints the unit, the
 descriptor and native manifest it resolved, the runtime/package adapter, the native command,
@@ -106,6 +106,12 @@ owner.
 | Lightweight terminal persistence | tmux (default) |
 | Rich agent workspaces | Herdr (optional additive; not required for doctor) |
 | Desktop window geometry | Desktop providers (post-E09) |
+| Message/schedule ingress to an existing agent | Push or another narrow gateway (optional; post-E09) |
+
+A gateway authenticates who may ask an agent to act; it does not authorize the resulting WfOS
+operation. The spawned agent must use the same profile-bound CLI/MCP surface as a local caller.
+Remote messages cannot satisfy Gate or override Deny. Push's unattended job mode remains outside
+the supported path until policy-bound execution and constrained automation are proved.
 
 ## CLI foundation
 
