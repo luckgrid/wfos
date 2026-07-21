@@ -21,7 +21,7 @@ a long-running local daemon for resource allocation, cross-provider coordination
 That daemon is **not** a PTY multiplexer — use Herdr or tmux for persistent terminals.
 
 ```mermaid
-flowchart LR
+flowchart TD
   CLI[takogami CLI] -->|cmd| D[Local daemon optional]
   D --> PR[tokio::process pool]
   PR --> NT["native-toolchain\nPanoply"]
@@ -40,6 +40,35 @@ v0   single-process CLI — clap commands, direct tokio::process calls (E09)
 v1   daemon-backed       — only if cross-provider coordination/policy needs it
 v2   multi-panel TUI     — optional operator UI; not a Herdr workspace clone
 ```
+
+## External agent ingress
+
+An optional gateway such as [Push](https://github.com/owainlewis/push) sits outside the engine.
+It receives an approved private message or schedule, starts an existing Claude/Codex/Pi agent,
+and delivers the result. The agent—not the gateway—uses the WfOS MCP or CLI surface.
+
+```mermaid
+flowchart TD
+  Operator["Operator<br/>private message or schedule"]
+  Gateway["Push<br/>optional gateway"]
+  Agent["Existing coding agent"]
+  Interface["MCP or Takogami CLI"]
+  Engine["Takogami policy + execution"]
+  Operator --> Gateway
+  Gateway --> Agent
+  Agent --> Interface
+  Interface --> Engine
+```
+
+This boundary keeps channel state, assistant history, and delivery outside Takogami. Every WfOS
+action re-binds a profile and re-evaluates metadata-plane policy. A channel allowlist authenticates
+the requester but never mints approval, satisfies Gate, or overrides Deny.
+
+Push chat turns preserve the configured backend's permission behavior. Its scheduled jobs run
+unattended and can bypass interactive backend approvals, so WfOS does not support freeform Push
+jobs until controller enforcement and constrained workflow-automation gates are complete. Any
+later schedule should invoke a versioned deterministic recipe or an agent that re-enters through
+the same policy boundary.
 
 ## The Rust stack
 
@@ -146,6 +175,7 @@ Orka                  https://crates.io/crates/orka
 Zenoh                 https://crates.io/crates/zenoh
 MCP (spec)            https://modelcontextprotocol.io
 rmcp (Rust SDK)       https://crates.io/crates/rmcp
+Push gateway          https://github.com/owainlewis/push
 ```
 
 See [runtime-controller.md](runtime-controller.md) for the command surface and [monorepo.md](monorepo.md) for how
