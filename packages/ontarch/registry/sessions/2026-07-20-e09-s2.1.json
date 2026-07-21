@@ -1,0 +1,55 @@
+{
+  "session_id": "2026-07-20-e09-s2.1",
+  "epic": "E09",
+  "story": "S2.1",
+  "title": "Command-record contract correction",
+  "status": "done",
+  "started_at": "2026-07-21T04:00:00Z",
+  "ended_at": "2026-07-21T04:20:00Z",
+  "agent": "cursor/composer",
+  "profile": "workspace-dev",
+  "loaded_context": [
+    "Build/bin/wfos/STATE.md",
+    "Build/bin/wfos/E09_runtime_controller.md (S2.1 block + frontmatter + locked decisions)",
+    "Build/bin/wfos/2026-07-20-wfos-e09-s2-command-record-contract-delta.md",
+    "Plan/bin/wfos/lg_wfos_e09_runtime_controller_tool_composition_addendum.md §§2.2–3",
+    "packages/ontarch/registry/sessions/2026-07-20-e09-s3.json",
+    "packages/ontarch/registry/sessions/2026-07-19-e09-s2.json"
+  ],
+  "changed_paths": [
+    "Build/bin/wfos/2026-07-20-wfos-e09-s2.1-command-record-cursor-plan.md",
+    "Build/bin/wfos/E09_runtime_controller.md",
+    "Build/bin/wfos/STATE.md",
+    "Build/bin/wfos/SESSIONS.md",
+    "Build/src/workspaces/wfos/packages/takogami/src/contracts/",
+    "Build/src/workspaces/wfos/packages/takogami/tests/contracts_roundtrip.rs",
+    "Build/src/workspaces/wfos/packages/takogami/tests/fixtures/contracts/",
+    "Build/src/workspaces/wfos/packages/takogami/README.md",
+    "Build/src/workspaces/wfos/packages/ontarch/schemas/runtime-command-record.schema.json",
+    "Build/src/workspaces/wfos/packages/ontarch/schemas/profile.schema.json",
+    "Build/src/workspaces/wfos/packages/ontarch/registry/fixtures/runtime-command-record-valid.json",
+    "Build/src/workspaces/wfos/packages/ontarch/bin/ontarch-validate",
+    "Build/src/workspaces/wfos/docs/metadata-plane.md"
+  ],
+  "commands_run": [
+    "moon run takogami:build",
+    "moon run takogami:test",
+    "moon run takogami:lint",
+    "moon run takogami:format-check",
+    "moon run ontarch:sync",
+    "moon run ontarch:validate"
+  ],
+  "outcome": "E09.S2.1 command-record rename: RuntimeSession → RuntimeCommandRecord; runtime-command-record.schema.json with required record_kind=command_execution and optional work_session_id/runtime_context; deleted runtime-session schema; fixtures + redaction tests; ontarch-validate updated. CLI session * names unchanged. Gates: takogami:build/test/lint/format-check + ontarch:sync/validate PASS.",
+  "validation": "moon run takogami:build/test/lint/format-check PASS (21 lib + 17 cli_smoke + 15 contracts). moon run ontarch:sync/validate PASS (runtime-command-record fixture).",
+  "decisions": [
+    "Keep schema_version 0.1.0 (pre-S6; no external consumers).",
+    "Delete runtime-session.schema.json after migration (no thin redirect).",
+    "Keep takogami session * CLI names and …/takogami/sessions state path.",
+    "Do not implement S4 resolution or S6 persistence in this session; next_session = E09.S4."
+  ],
+  "next": "E09.S4",
+  "blockers": [
+    "ontarch:secrets-scan detect mode still reports pre-existing age-secret-key in git history (commit a3a4978) — unchanged; out of E09.S2.1 scope."
+  ],
+  "token_note": "Loaded STATE + E09.S2.1 + delta + tool-composition addendum §§2.2–3 + 2 session records vs full E09 epic and Plan/bin collection."
+}

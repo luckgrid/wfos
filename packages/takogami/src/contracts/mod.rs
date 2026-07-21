@@ -13,6 +13,6 @@ pub use fingerprint::{SourceFingerprint, fingerprint_bytes, fingerprint_file};
 pub use state::{StateHomeInputs, resolve_session_state_home};
 pub use types::{
     ChildOutput, CommandEnvelope, DiagnosticRecord, EnvelopeMetrics, ExecutionRecord,
-    OutputSummary, PolicyDecision, RegistryGeneration, RequestRecord, ResolvedCommand,
-    RuntimeSession, SCHEMA_VERSION,
+    OutputSummary, PolicyDecision, RECORD_KIND_COMMAND_EXECUTION, RegistryGeneration,
+    RequestRecord, ResolvedCommand, RuntimeCommandRecord, RuntimeContext, SCHEMA_VERSION,
 };

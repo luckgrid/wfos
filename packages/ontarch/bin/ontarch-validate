@@ -535,11 +535,45 @@ _selfcheck_routing_projection() {
   fi
 }
 
+# Registry generation fingerprints must be present on units.json after sync (FR-14 / E09.S3).
+_selfcheck_registry_generation() {
+  ontarch_info "registry generation (selfcheck)"
+  local tmp gen units
+  tmp="$(mktemp)"
+  printf 'fixture-bytes\n' >"$tmp"
+  gen="$(ontarch_registry_generation "$tmp")"
+  rm -f "$tmp"
+  if ! jq -e '
+    (.generated_at | type == "string")
+    and (.source_fingerprints | type == "array")
+    and (.source_fingerprints | length) >= 1
+    and .source_fingerprints[0].algorithm == "sha256"
+    and (.source_fingerprints[0].digest | length) == 64
+  ' <<<"$gen" >/dev/null; then
+    ontarch_err "registry generation selfcheck: ontarch_registry_generation shape invalid"
+    fail=1
+  else
+    printf '  %sok%s  ontarch_registry_generation helper shape\n' "$_C_GREEN" "$_C_RESET"
+  fi
+  units="$ONTARCH_REGISTRY/units.json"
+  if [ -f "$units" ]; then
+    if ! jq -e '
+      (.registry_generation.generated_at | type == "string")
+      and (.registry_generation.source_fingerprints | type == "array")
+    ' "$units" >/dev/null; then
+      ontarch_err "units.json missing registry_generation — run ontarch sync"
+      fail=1
+    else
+      printf '  %sok%s  units.json registry_generation present\n' "$_C_GREEN" "$_C_RESET"
+    fi
+  fi
+}
+
 _validate_runtime_schemas() {
   local out_schema="$ONTARCH_SCHEMAS/command-output.schema.json"
-  local sess_schema="$ONTARCH_SCHEMAS/runtime-session.schema.json"
+  local sess_schema="$ONTARCH_SCHEMAS/runtime-command-record.schema.json"
   local out_fix="$ONTARCH_REGISTRY/fixtures/command-envelope-valid.json"
-  local sess_fix="$ONTARCH_REGISTRY/fixtures/runtime-session-valid.json"
+  local sess_fix="$ONTARCH_REGISTRY/fixtures/runtime-command-record-valid.json"
   local profile_fix="$ONTARCH_REGISTRY/fixtures/profile-runtime-state-home.toml"
   ontarch_info "runtime contracts (schemas present + fixtures)"
   local sfail=0
@@ -554,9 +588,9 @@ _validate_runtime_schemas() {
     sfail=1
   fi
   if [ -f "$sess_fix" ]; then
-    jq -e '.schema_version == "0.1.0" and .session_id and .execution.outcome' "$sess_fix" >/dev/null \
-      || { ontarch_err "runtime-session fixture missing required fields"; sfail=1; }
-    printf '  %sok%s  fixtures/runtime-session-valid.json\n' "$_C_GREEN" "$_C_RESET"
+    jq -e '.schema_version == "0.1.0" and .record_kind == "command_execution" and .session_id and .execution.outcome' "$sess_fix" >/dev/null \
+      || { ontarch_err "runtime-command-record fixture missing required fields"; sfail=1; }
+    printf '  %sok%s  fixtures/runtime-command-record-valid.json\n' "$_C_GREEN" "$_C_RESET"
   else
     ontarch_err "missing $sess_fix"
     sfail=1
@@ -683,6 +717,7 @@ main() {
   _selfcheck_skillspector_gate
   _selfcheck_skill_scan_gate
   _selfcheck_routing_projection
+  _selfcheck_registry_generation
   _validate_scan
   _validate_bin_inventory
   _validate_manifest

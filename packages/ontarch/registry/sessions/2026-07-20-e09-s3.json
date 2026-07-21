@@ -1,0 +1,56 @@
+{
+  "session_id": "2026-07-20-e09-s3",
+  "epic": "E09",
+  "story": "S3",
+  "title": "Discovery, queries, and doctor",
+  "status": "done",
+  "started_at": "2026-07-21T02:50:00Z",
+  "ended_at": "2026-07-21T04:30:00Z",
+  "agent": "cursor/composer",
+  "profile": "workspace-dev",
+  "loaded_context": [
+    "Build/bin/wfos/STATE.md",
+    "Build/bin/wfos/E09_runtime_controller.md (S3 block + frontmatter + locked decisions)",
+    "Build/bin/wfos/2026-07-20-wfos-e09-tool-composition-amendment.md",
+    "Plan/bin/wfos/lg_wfos_lvl_0_runtime_controller.md §§6.1–6.3",
+    "Build/src/workspaces/wfos/docs/metadata-plane.md",
+    "packages/ontarch/registry/sessions/2026-07-19-e09-s2.json",
+    "packages/ontarch/registry/sessions/2026-07-19-e09-s1.json"
+  ],
+  "changed_paths": [
+    "Build/bin/wfos/2026-07-20-wfos-e09-s3-discovery-queries-doctor-cursor-plan.md",
+    "Build/bin/wfos/E09_runtime_controller.md",
+    "Build/bin/wfos/STATE.md",
+    "Build/bin/wfos/SESSIONS.md",
+    "Build/src/workspaces/wfos/packages/takogami/src/registry/",
+    "Build/src/workspaces/wfos/packages/takogami/src/{commands,doctor,app,error,lib}.rs",
+    "Build/src/workspaces/wfos/packages/takogami/src/{cli,output}/",
+    "Build/src/workspaces/wfos/packages/takogami/tests/cli_smoke.rs",
+    "Build/src/workspaces/wfos/packages/takogami/README.md",
+    "Build/src/workspaces/wfos/packages/ontarch/lib/registry.sh",
+    "Build/src/workspaces/wfos/packages/ontarch/bin/ontarch-validate",
+    "Build/src/workspaces/wfos/docs/{runtime-controller,metadata-plane}.md"
+  ],
+  "commands_run": [
+    "moon run takogami:build",
+    "moon run takogami:test",
+    "moon run takogami:lint",
+    "moon run takogami:format-check",
+    "moon run ontarch:sync",
+    "moon run ontarch:validate"
+  ],
+  "outcome": "E09.S3 discovery/queries/doctor: Ontarch emits registry_generation+source_fingerprints on units.json/scan.json; Takogami registry readers with hit/miss/stale freshness; scan/list/info/tools/interfaces + expanded doctor (required vs optional; Herdr never required). Session* remains not_implemented. Hermetic fixture matrix covers current/missing/stale/malformed/unknown/ambiguous/invalid-filter/descriptor-less/JSON purity.",
+  "validation": "moon run takogami:build/test/lint/format-check PASS (21 lib + 17 cli_smoke + 11 contracts). moon run ontarch:sync/validate PASS (registry_generation selfcheck).",
+  "decisions": [
+    "Embed registry_generation on Ontarch units/scan emits; missing generation ⇒ stale.",
+    "TAKOGAMI_ONTARCH_REGISTRY + TAKOGAMI_WORKSPACE_ROOT for hermetic fixtures.",
+    "list --filter is clap global on list so `list units --filter` works.",
+    "Source-fallback uses TOML-subset string extract (ponytail); upgrade path = toml crate.",
+    "Do not implement S2.1 rename in this session; next_session = E09.S2.1."
+  ],
+  "next": "E09.S2.1",
+  "blockers": [
+    "ontarch:secrets-scan detect mode still reports pre-existing age-secret-key in git history (commit a3a4978) — unchanged; out of E09.S3 scope."
+  ],
+  "token_note": "Loaded STATE + E09.S3 + composition amendment + runtime-controller §§6.1–6.3 + 2 session records vs full E09 epic and Plan/bin collection."
+}

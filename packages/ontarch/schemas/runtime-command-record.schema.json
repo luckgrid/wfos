@@ -1,11 +1,12 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "wfos/ontarch/schemas/runtime-session.schema.json",
-  "title": "Takogami operational runtime session",
-  "description": "Operational records written under the resolved Takogami state home (default XDG state). Distinct from tracked Ontarch build-session provenance under logs.session_log_target / registry/sessions/. Secret values and full inherited environment dumps are forbidden.",
+  "$id": "wfos/ontarch/schemas/runtime-command-record.schema.json",
+  "title": "Takogami command execution record",
+  "description": "Operational command execution records written under the resolved Takogami state home (default XDG state). Distinct from tracked Ontarch build-session provenance under logs.session_log_target / registry/sessions/, and from composed work-session manifests. Secret values, full inherited environment dumps, provider socket paths, and pane scrollback are forbidden.",
   "type": "object",
   "required": [
     "schema_version",
+    "record_kind",
     "session_id",
     "started_at",
     "actor",
@@ -23,8 +24,34 @@
       "const": "0.1.0",
       "description": "Mismatched schema_version is a typed contract error; never silently coerced."
     },
+    "record_kind": {
+      "type": "string",
+      "const": "command_execution",
+      "description": "Labels this record as a command execution audit record, not a composed work session."
+    },
     "session_id": { "type": "string", "minLength": 1 },
     "parent_session_id": { "type": "string" },
+    "work_session_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional link to a composed work-session manifest. Opaque ID only."
+    },
+    "runtime_context": {
+      "type": "object",
+      "required": ["provider"],
+      "additionalProperties": false,
+      "description": "Optional provider-neutral terminal runtime link. Opaque IDs only — never socket paths or scrollback.",
+      "properties": {
+        "provider": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Terminal runtime provider (e.g. herdr, tmux, direct)."
+        },
+        "workspace_id": { "type": "string" },
+        "tab_id": { "type": "string" },
+        "pane_id": { "type": "string" }
+      }
+    },
     "started_at": { "type": "string", "minLength": 1 },
     "ended_at": { "type": "string" },
     "actor": { "type": "string", "const": "agent" },

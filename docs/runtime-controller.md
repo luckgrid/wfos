@@ -10,10 +10,9 @@ It does **not** own persistent terminal PTYs or desktop window restore. Those be
 optional providers (tmux / Herdr for terminals; Hammerspoon and others for desktop layout). See
 [native-toolchain.md](native-toolchain.md) and the Plan tool-composition addendum.
 
-Status: **in progress.** The crate ships with the MVP command tree; only `doctor` is
-implemented today, and other commands return structured `not_implemented`. Metadata and
-runtime contracts (descriptor, schemas, Ontarch projection, Rust types) are in place.
-Discovery, routing, policy, execution, and **command execution records** are still ahead. See
+Status: **in progress (E09.S3).** Discovery, list/info/tools/interfaces, and complete doctor
+are implemented with registry freshness (`hit`/`miss`/`stale`). Lifecycle routing, policy,
+execution, and **command execution records** remain ahead. See
 [`packages/takogami/README.md`](../packages/takogami/README.md) for the proved surface;
 build position lives in `Build/bin/wfos/STATE.md` and `SESSIONS.md`.
 

@@ -4,9 +4,8 @@ use starbase::{App, AppResult, AppSession, MainResult};
 use tracing::Level;
 
 use crate::cli::Cli;
-use crate::doctor;
+use crate::commands;
 use crate::error::ControllerError;
-use crate::exit_codes::SUCCESS;
 use crate::output::OutputSink;
 
 #[derive(Clone)]
@@ -72,29 +71,21 @@ async fn dispatch(session: TakogamiSession) -> AppResult<ControllerError> {
     };
 
     if command.is_implemented() {
-        return run_doctor_command(&sink).await;
-    }
-
-    let qualified = command.qualified_name();
-    let error = ControllerError::not_implemented(&qualified);
-    let code = sink
-        .emit_error(command.name(), &error)
-        .map_err(|err| ControllerError::internal(err.to_string()))?;
-    Ok(Some(code))
-}
-
-async fn run_doctor_command(sink: &OutputSink) -> AppResult<ControllerError> {
-    let (checks, ready) = doctor::run_doctor();
-    if sink.json {
-        sink.emit_doctor_json(&checks, ready)
-            .map_err(|err| ControllerError::internal(err.to_string()))?;
+        match commands::dispatch_implemented(&command, &sink, session.cli.state_home.as_deref()) {
+            Ok(code) => Ok(Some(code)),
+            Err(error) => {
+                let code = sink
+                    .emit_error(command.name(), &error)
+                    .map_err(|err| ControllerError::internal(err.to_string()))?;
+                Ok(Some(code))
+            }
+        }
     } else {
-        sink.emit_doctor_human(&checks, ready)
+        let qualified = command.qualified_name();
+        let error = ControllerError::not_implemented(&qualified);
+        let code = sink
+            .emit_error(command.name(), &error)
             .map_err(|err| ControllerError::internal(err.to_string()))?;
+        Ok(Some(code))
     }
-    Ok(Some(if ready {
-        SUCCESS
-    } else {
-        crate::exit_codes::INTERNAL
-    }))
 }

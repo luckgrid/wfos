@@ -1,4 +1,4 @@
-//! Operational session state-home resolution.
+//! Operational command-record state-home resolution.
 //!
 //! Precedence: `--state-home` → `TAKOGAMI_STATE_HOME` → profile `[runtime] session_state_home`
 //! → `$XDG_STATE_HOME/takogami/sessions` → `~/.local/state/takogami/sessions`.
@@ -16,7 +16,7 @@ pub struct StateHomeInputs<'a> {
     pub home_dir: Option<&'a Path>,
 }
 
-/// Resolve the operational runtime-session directory.
+/// Resolve the operational command-record directory (MVP path still ends in `sessions`).
 pub fn resolve_session_state_home(inputs: StateHomeInputs<'_>) -> PathBuf {
     if let Some(path) = inputs.cli_state_home {
         return path.to_path_buf();

@@ -32,7 +32,7 @@ Packages      define package-translator-managed deliverable interfaces (planned)
 | `schemas/profile.schema.json` | schema | contract for agent operating profiles (scope, commands, validators, optional `[runtime] session_state_home`) |
 | `schemas/skill.schema.json` | schema | contract for curated skill/template/pattern records (authored under `Workstreams/.agents/skills/`) |
 | `schemas/command-output.schema.json` | schema | Takogami `--json` `CommandEnvelope` contract |
-| `schemas/runtime-session.schema.json` | schema | operational Takogami runtime-session contract (distinct from build-session records) |
+| `schemas/runtime-command-record.schema.json` | schema | operational Takogami command-execution record contract (distinct from build-session records) |
 | `schemas/panoply.tools.schema.json` | schema | contract for the generated tools registry |
 | `policies/panoply.agent.policy.toml` | policy | Panoply agent rails (allow/block, gates) |
 | `policies/no-agent-git-push.policy.toml` | policy | agents never push or publish (human-only) |
@@ -61,6 +61,12 @@ SkillSpector gate and `allowed_skill_ids` cross-ref), **curated skill records**
 scan gate), and the graph against its schema, reading the required keys and enums from
 the schema itself so the schema stays the single source of truth. Both run on bash + `awk` + `jq`
 (no new dependencies) and are agent-safe.
+
+Generated `units.json` and `scan.json` include a `registry_generation` object
+(`generated_at` + `source_fingerprints[]` over authored inputs). The runtime controller
+(`takogami`) labels reads `hit` / `miss` / `stale` by recomputing those fingerprints; refresh
+requires explicit consent (`takogami scan --refresh` → Ontarch scan/sync), never as a side
+effect of a read-only query.
 
 The registry is a **pre-computed context cache**. One filtered query answers what a repo scan
 otherwise would:

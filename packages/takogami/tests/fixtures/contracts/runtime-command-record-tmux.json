@@ -1,0 +1,36 @@
+{
+  "schema_version": "0.1.0",
+  "record_kind": "command_execution",
+  "session_id": "sess-fixture-tmux-001",
+  "runtime_context": {
+    "provider": "tmux",
+    "workspace_id": "wfos",
+    "tab_id": "0",
+    "pane_id": "%3"
+  },
+  "started_at": "2026-07-20T13:00:00Z",
+  "actor": "agent",
+  "profile_id": "workspace-dev",
+  "request": {
+    "command": "dev",
+    "unit_id": "takogami",
+    "verb": "dev",
+    "flags": ["--explain"]
+  },
+  "policy_decision": {
+    "outcome": "allow",
+    "matched_rules": []
+  },
+  "execution": {
+    "started": false,
+    "outcome": "pending"
+  },
+  "source_fingerprints": [],
+  "output_summary": {
+    "stdout_bytes": 0,
+    "stderr_bytes": 0,
+    "truncated": false,
+    "encoding": "utf-8",
+    "compressor": "none"
+  }
+}

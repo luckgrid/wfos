@@ -48,14 +48,14 @@ pub enum Command {
         target: ListTarget,
 
         /// Filter projected fields, e.g. kind=package.
-        #[arg(long = "filter", value_name = "FIELD=VALUE")]
+        #[arg(long = "filter", value_name = "FIELD=VALUE", global = true)]
         filters: Vec<String>,
     },
 
     /// Show bounded metadata for one unit.
     Info { unit: String },
 
-    /// Check controller build toolchain readiness (skeleton).
+    /// Check controller readiness (build tools, registry, state home).
     Doctor,
 
     /// List native-toolchain tools (via Panoply surfaces in S3).
@@ -234,7 +234,15 @@ impl Command {
     }
 
     pub fn is_implemented(&self) -> bool {
-        matches!(self, Self::Doctor)
+        matches!(
+            self,
+            Self::Doctor
+                | Self::Scan { .. }
+                | Self::List { .. }
+                | Self::Info { .. }
+                | Self::Tools
+                | Self::Interfaces { .. }
+        )
     }
 }
 

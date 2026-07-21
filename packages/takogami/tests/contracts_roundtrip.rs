@@ -1,4 +1,4 @@
-//! Contract round-trip and schema validation tests (E09.S2).
+//! Contract round-trip and schema validation tests (E09.S2 / S2.1).
 //!
 //! NOTE: these tests document behavior before relying on later stories.
 //! They validate wire contracts only — no discovery, resolution, spawn, or session I/O.
@@ -7,11 +7,14 @@ use jsonschema::Validator;
 use serde_json::Value;
 use std::fs;
 use std::path::PathBuf;
-use takogami::contracts::types::{SCHEMA_VERSION, require_schema_version};
+use takogami::contracts::types::{
+    RECORD_KIND_COMMAND_EXECUTION, SCHEMA_VERSION, require_schema_version,
+};
 use takogami::contracts::{
     ChildOutput, CommandEnvelope, EnvelopeMetrics, ExecutionRecord, OutputSummary, PolicyDecision,
-    RegistryGeneration, RequestRecord, ResolvedCommand, RuntimeSession, SourceFingerprint,
-    StateHomeInputs, fingerprint_bytes, parse_legacy_entrypoint, resolve_session_state_home,
+    RegistryGeneration, RequestRecord, ResolvedCommand, RuntimeCommandRecord, RuntimeContext,
+    SourceFingerprint, StateHomeInputs, fingerprint_bytes, parse_legacy_entrypoint,
+    resolve_session_state_home,
 };
 
 fn ontarch_schema(name: &str) -> PathBuf {
@@ -49,6 +52,48 @@ fn assert_invalid(validator: &Validator, value: &Value) {
     );
 }
 
+fn minimal_record(outcome: &str) -> RuntimeCommandRecord {
+    RuntimeCommandRecord {
+        schema_version: SCHEMA_VERSION.into(),
+        record_kind: RECORD_KIND_COMMAND_EXECUTION.into(),
+        session_id: "s".into(),
+        parent_session_id: None,
+        work_session_id: None,
+        runtime_context: None,
+        started_at: "2026-07-19T00:00:00Z".into(),
+        ended_at: Some("2026-07-19T00:00:01Z".into()),
+        actor: "agent".into(),
+        profile_id: "workspace-dev".into(),
+        request: RequestRecord {
+            command: "build".into(),
+            unit_id: Some("takogami".into()),
+            verb: Some("build".into()),
+            flags: vec![],
+        },
+        resolution: None,
+        policy_decision: PolicyDecision::Allow {
+            matched_rules: vec![],
+        },
+        execution: ExecutionRecord {
+            started: false,
+            pid: None,
+            exit_code: None,
+            signal: None,
+            outcome: outcome.into(),
+        },
+        source_fingerprints: vec![],
+        output_summary: OutputSummary {
+            stdout_bytes: 0,
+            stderr_bytes: 0,
+            truncated: false,
+            encoding: "utf-8".into(),
+            compressor: "none".into(),
+        },
+        validation: None,
+        error: None,
+    }
+}
+
 #[test]
 fn command_envelope_fixture_round_trips_and_validates() {
     let validator = compile_schema("command-output.schema.json");
@@ -63,20 +108,83 @@ fn command_envelope_fixture_round_trips_and_validates() {
 }
 
 #[test]
-fn runtime_session_fixture_round_trips_and_validates() {
-    let validator = compile_schema("runtime-session.schema.json");
-    let value = load_json(&fixture("runtime-session-valid.json"));
+fn command_record_fixture_round_trips_and_validates() {
+    let validator = compile_schema("runtime-command-record.schema.json");
+    let value = load_json(&fixture("runtime-command-record-valid.json"));
     assert_valid(&validator, &value);
-    let session: RuntimeSession = serde_json::from_value(value.clone()).expect("deserialize");
-    assert_eq!(session.actor, "agent");
+    let record: RuntimeCommandRecord = serde_json::from_value(value.clone()).expect("deserialize");
+    assert_eq!(record.record_kind, RECORD_KIND_COMMAND_EXECUTION);
+    assert_eq!(record.actor, "agent");
+    assert!(record.runtime_context.is_none());
     assert!(matches!(
-        session.policy_decision,
+        record.policy_decision,
         PolicyDecision::Deny { .. }
     ));
-    assert_eq!(session.execution.outcome, "denied");
-    assert!(session.execution.pid.is_none());
-    let again = serde_json::to_value(&session).expect("serialize");
+    assert_eq!(record.execution.outcome, "denied");
+    assert!(record.execution.pid.is_none());
+    let again = serde_json::to_value(&record).expect("serialize");
     assert_valid(&validator, &again);
+}
+
+#[test]
+fn command_record_herdr_and_tmux_runtime_context_validate() {
+    let validator = compile_schema("runtime-command-record.schema.json");
+    for name in [
+        "runtime-command-record-herdr.json",
+        "runtime-command-record-tmux.json",
+    ] {
+        let value = load_json(&fixture(name));
+        assert_valid(&validator, &value);
+        let record: RuntimeCommandRecord =
+            serde_json::from_value(value.clone()).expect("deserialize");
+        assert_eq!(record.record_kind, RECORD_KIND_COMMAND_EXECUTION);
+        assert!(record.runtime_context.is_some());
+        let again = serde_json::to_value(&record).expect("serialize");
+        assert_valid(&validator, &again);
+    }
+}
+
+#[test]
+fn command_record_missing_or_wrong_record_kind_fails_schema() {
+    let validator = compile_schema("runtime-command-record.schema.json");
+    let mut missing = load_json(&fixture("runtime-command-record-valid.json"));
+    missing.as_object_mut().unwrap().remove("record_kind");
+    assert_invalid(&validator, &missing);
+
+    let mut wrong = load_json(&fixture("runtime-command-record-valid.json"));
+    wrong["record_kind"] = Value::String("work_session".into());
+    assert_invalid(&validator, &wrong);
+}
+
+#[test]
+fn command_record_rejects_socket_path_and_scrollback() {
+    let validator = compile_schema("runtime-command-record.schema.json");
+    let mut with_socket = load_json(&fixture("runtime-command-record-valid.json"));
+    with_socket["socket_path"] = Value::String("/tmp/herdr.sock".into());
+    assert_invalid(&validator, &with_socket);
+
+    let mut with_scrollback = load_json(&fixture("runtime-command-record-valid.json"));
+    with_scrollback["scrollback"] = Value::String("pane output blob".into());
+    assert_invalid(&validator, &with_scrollback);
+
+    let mut nested = load_json(&fixture("runtime-command-record-herdr.json"));
+    nested["runtime_context"]["socket_path"] = Value::String("/var/run/herdr.sock".into());
+    assert_invalid(&validator, &nested);
+}
+
+#[test]
+fn command_record_schema_omits_sensitive_property_names() {
+    let schema = load_json(&ontarch_schema("runtime-command-record.schema.json"));
+    let props = schema["properties"].as_object().expect("properties");
+    assert!(!props.contains_key("socket_path"));
+    assert!(!props.contains_key("scrollback"));
+    assert!(!props.contains_key("HERDR_SOCKET_PATH"));
+    let ctx_props = schema["properties"]["runtime_context"]["properties"]
+        .as_object()
+        .expect("runtime_context.properties");
+    assert!(!ctx_props.contains_key("socket_path"));
+    assert!(!ctx_props.contains_key("scrollback"));
+    assert!(ctx_props.contains_key("provider"));
 }
 
 #[test]
@@ -201,6 +309,7 @@ fn bounded_child_output_and_terminal_outcomes() {
     let validator = compile_schema("command-output.schema.json");
     assert_valid(&validator, &serde_json::to_value(&envelope).unwrap());
 
+    let record_validator = compile_schema("runtime-command-record.schema.json");
     for outcome in [
         "completed",
         "denied",
@@ -211,45 +320,20 @@ fn bounded_child_output_and_terminal_outcomes() {
         "abandoned",
         "pending",
     ] {
-        let session = RuntimeSession {
-            schema_version: SCHEMA_VERSION.into(),
-            session_id: "s".into(),
-            parent_session_id: None,
-            started_at: "2026-07-19T00:00:00Z".into(),
-            ended_at: Some("2026-07-19T00:00:01Z".into()),
-            actor: "agent".into(),
-            profile_id: "workspace-dev".into(),
-            request: RequestRecord {
-                command: "build".into(),
-                unit_id: Some("takogami".into()),
-                verb: Some("build".into()),
-                flags: vec![],
-            },
-            resolution: None,
-            policy_decision: PolicyDecision::Allow {
-                matched_rules: vec![],
-            },
-            execution: ExecutionRecord {
-                started: false,
-                pid: None,
-                exit_code: None,
-                signal: None,
-                outcome: outcome.into(),
-            },
-            source_fingerprints: vec![],
-            output_summary: OutputSummary {
-                stdout_bytes: 0,
-                stderr_bytes: 0,
-                truncated: false,
-                encoding: "utf-8".into(),
-                compressor: "none".into(),
-            },
-            validation: None,
-            error: None,
-        };
-        let validator = compile_schema("runtime-session.schema.json");
-        assert_valid(&validator, &serde_json::to_value(&session).unwrap());
+        let record = minimal_record(outcome);
+        assert_valid(&record_validator, &serde_json::to_value(&record).unwrap());
     }
+
+    // RuntimeContext round-trip stays opaque (no socket fields).
+    let mut linked = minimal_record("completed");
+    linked.work_session_id = Some("ws_test".into());
+    linked.runtime_context = Some(RuntimeContext {
+        provider: "direct".into(),
+        workspace_id: None,
+        tab_id: None,
+        pane_id: None,
+    });
+    assert_valid(&record_validator, &serde_json::to_value(&linked).unwrap());
 }
 
 #[test]

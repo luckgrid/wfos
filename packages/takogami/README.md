@@ -7,12 +7,11 @@ policy, command execution records, and explain output. It coordinates the
 
 It does not own persistent terminal PTYs (tmux / optional Herdr) or desktop window restore.
 
-**Status: E09.S2 — metadata and runtime contracts.** The binary builds and exposes the full
-MVP command tree; only `doctor` is implemented. Other commands return a structured
-`not_implemented` error (human + `--json`). Typed contracts for envelopes, operational records
-(today `RuntimeSession`; rename to `RuntimeCommandRecord` in E09.S2.1), resolved commands,
-policy decisions, legacy entrypoints, fingerprints, and state-home precedence are in place for
-later stories. Next implementation story: **E09.S3** discovery/queries/complete doctor.
+**Status: E09.S2.1 — command-record contract.** Public type/schema is
+`RuntimeCommandRecord` / `runtime-command-record.schema.json` with
+`record_kind: command_execution`. S3 discovery/queries/doctor remain. Lifecycle
+resolve/execute, policy, graph/bin, and `session *` remain `not_implemented`
+until later stories. Next: **E09.S4** (deterministic resolution).
 
 ## Build
 
@@ -30,11 +29,18 @@ moon run takogami:format-check
 ```txt
 takogami --version | --help
 takogami doctor [--json]
-takogami scan | list | info | tools | interfaces | dev | build | check | graph | bin | session …
+takogami scan [--refresh] [--json]
+takogami list units|tools [--filter FIELD=VALUE] [--json]
+takogami info <unit> [--json]
+takogami tools [--json]
+takogami interfaces [--validate] [--json]
+takogami dev|build|check|graph|bin|session …
   → not_implemented (exit 10) until later E09 stories
 ```
 
 Global flags: `--json`, `--profile`, `--state-home`, `--no-color`, `--verbose`.
+
+Registry override for tests/fixtures: `TAKOGAMI_ONTARCH_REGISTRY`, `TAKOGAMI_WORKSPACE_ROOT`.
 
 `takogami build <unit>` is the unit lifecycle verb. A separate `workstream` namespace is
 post-MVP. `takogami session *` (S6) reads **command execution records**, not composed work
@@ -45,33 +51,26 @@ sessions.
 | Code | Meaning |
 |------|---------|
 | 0 | Success |
-| 1 | Internal error |
-| 2 | Usage (invalid flags / unknown command) |
-| 3 | Contract / schema-version failure |
+| 1 | Internal / unavailable source |
+| 2 | Usage (invalid flags, not-found, ambiguous, invalid-filter) |
+| 3 | Contract / invalid-registry |
 | 4 | Resolution failure (reserved) |
 | 5 | Policy deny (reserved) |
 | 6 | Policy gate (reserved) |
 | 10 | Not implemented |
 
-Native child exit codes pass through unchanged in later stories (S6).
+## Freshness (S3)
 
-## Contracts (S2)
+Reads of `units.json` / `scan.json` compare embedded `registry_generation.source_fingerprints`
+to current source bytes → `hit` / `miss` / `stale`. Missing generation metadata is `stale`.
+`--refresh` on `scan` invokes Ontarch scan explicitly; read-only queries never refresh as a
+side effect. Envelope `metrics.registry_cache` carries the label in JSON mode.
 
-Machine contracts live under `src/contracts/` and Ontarch schemas:
+## Doctor (S3)
 
-- `packages/ontarch/schemas/command-output.schema.json` — `CommandEnvelope`
-- `packages/ontarch/schemas/runtime-session.schema.json` — operational record (S2 name;
-  **E09.S2.1** renames to `runtime-command-record.schema.json` / `RuntimeCommandRecord`)
-- Structured lifecycle entrypoints in `unit.schema.json` (legacy strings still accepted)
-- Operational state home: `--state-home` → `TAKOGAMI_STATE_HOME` → profile
-  `[runtime] session_state_home` → XDG → `~/.local/state/takogami/sessions`
-- `logs.session_log_target` remains tracked build-session provenance only
-
-## Doctor (S1 skeleton)
-
-Checks only that `cargo`, `rustc`, and `moon` are on `PATH`. Does **not** claim registry,
-command-record store, or RTK readiness (those arrive in E09.S3). Missing optional tools such as
-Herdr must not fail the base doctor once S3 lands.
+Required: `cargo` / `rustc` / `moon` on PATH, registry contract readability, state-home
+writability (probe only — no command record). Optional: `rtk`, `tmux`, `herdr` — missing Herdr
+never fails base doctor.
 
 Design: [`../../docs/runtime-controller.md`](../../docs/runtime-controller.md) ·
 engine: [`../../docs/runtime-architecture.md`](../../docs/runtime-architecture.md).

@@ -1,0 +1,38 @@
+{
+  "schema_version": "0.1.0",
+  "record_kind": "command_execution",
+  "session_id": "sess-fixture-herdr-001",
+  "work_session_id": "ws_2026-07-20_backend-architecture",
+  "runtime_context": {
+    "provider": "herdr",
+    "workspace_id": "w1",
+    "tab_id": "w1:t1",
+    "pane_id": "w1:p2"
+  },
+  "started_at": "2026-07-20T12:00:00Z",
+  "ended_at": "2026-07-20T12:00:01Z",
+  "actor": "agent",
+  "profile_id": "workspace-dev",
+  "request": {
+    "command": "check",
+    "unit_id": "takogami",
+    "verb": "check",
+    "flags": []
+  },
+  "policy_decision": {
+    "outcome": "allow",
+    "matched_rules": ["panoply.agent:allow-moon"]
+  },
+  "execution": {
+    "started": false,
+    "outcome": "pending"
+  },
+  "source_fingerprints": [],
+  "output_summary": {
+    "stdout_bytes": 0,
+    "stderr_bytes": 0,
+    "truncated": false,
+    "encoding": "utf-8",
+    "compressor": "none"
+  }
+}

@@ -1,4 +1,4 @@
-//! Typed wire records for command envelopes, policy decisions, and runtime sessions.
+//! Typed wire records for command envelopes, policy decisions, and command execution records.
 
 use serde::{Deserialize, Serialize};
 
@@ -175,12 +175,30 @@ pub struct OutputSummary {
     pub compressor: String,
 }
 
+/// Provider-neutral link to a terminal runtime (Herdr/tmux/direct). Opaque IDs only.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RuntimeContext {
+    pub provider: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub workspace_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tab_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pane_id: Option<String>,
+}
+
+/// Operational command execution audit record (not a composed work session).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct RuntimeSession {
+pub struct RuntimeCommandRecord {
     pub schema_version: String,
+    pub record_kind: String,
     pub session_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_session_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub work_session_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub runtime_context: Option<RuntimeContext>,
     pub started_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ended_at: Option<String>,
@@ -198,3 +216,6 @@ pub struct RuntimeSession {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<DiagnosticRecord>,
 }
+
+/// Const value for [`RuntimeCommandRecord::record_kind`].
+pub const RECORD_KIND_COMMAND_EXECUTION: &str = "command_execution";

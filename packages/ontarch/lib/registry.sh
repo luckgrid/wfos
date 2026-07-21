@@ -8,12 +8,43 @@ _ontarch_now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 # Join a compact JSON array into a single inline `a,b,c` string (empty if no elements).
 _ontarch_inline() { jq -c '.[]' <<<"$1" | paste -sd, -; }
 
+# SHA-256 hex digest of a file's raw bytes (macOS shasum or sha256sum).
+_ontarch_sha256_file() {
+  local f="$1"
+  [ -f "$f" ] || return 1
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$f" | awk '{print $1}'
+  else
+    sha256sum "$f" | awk '{print $1}'
+  fi
+}
+
+# Build registry_generation JSON from authored source file paths.
+# Prints: { generated_at, source_fingerprints: [{path, algorithm, digest}, ...] }
+ontarch_registry_generation() {
+  local ts="$(_ontarch_now)"
+  local fps='[]' f rel digest
+  for f in "$@"; do
+    [ -f "$f" ] || continue
+    digest="$(_ontarch_sha256_file "$f")" || continue
+    rel="${f#"$WS_ROOT"/}"
+    [ "$rel" = "$f" ] && rel="$f"
+    fps="$(jq -c --arg path "$rel" --arg digest "$digest" \
+      '. + [{path: $path, algorithm: "sha256", digest: $digest}]' <<<"$fps")"
+  done
+  fps="$(jq -c 'sort_by(.path)' <<<"$fps")"
+  jq -nc --arg ts "$ts" --argjson fps "$fps" \
+    '{generated_at: $ts, source_fingerprints: $fps}'
+}
+
 # units.json — colocated-first discovery, central overrides colocated for a shared id.
 ontarch_emit_units() {
   local units='[]' f src full id rec
   local -A from_central=()
+  local -a source_files=()
   while IFS=$'\037' read -r f src; do
     [ -n "$f" ] || continue
+    source_files+=("$f")
     full="$(ontarch_descriptor_json "$f")"
     id="$(jq -r '.id' <<<"$full")"
     rec="$(ontarch_unit_record "$full" "$src")"
@@ -26,14 +57,18 @@ ontarch_emit_units() {
   done < <(ontarch_find_descriptors)
 
   units="$(jq -c 'sort_by(.id)' <<<"$units")"
-  local summary inline
+  local summary gen
   summary="$(jq -c '{
     total: length,
     by_kind: (group_by(.kind) | map({key: .[0].kind, value: length}) | from_entries)
   }' <<<"$units")"
-  inline="$(_ontarch_inline "$units")"
-  printf '{\n  "generated_at": "%s",\n  "summary": %s,\n  "units": [%s]\n}\n' \
-    "$(_ontarch_now)" "$summary" "$inline"
+  gen="$(ontarch_registry_generation "${source_files[@]}")"
+  jq -n --argjson gen "$gen" --argjson summary "$summary" --argjson units "$units" '{
+    generated_at: $gen.generated_at,
+    registry_generation: $gen,
+    summary: $summary,
+    units: $units
+  }'
 }
 
 # policies.json — index every policy TOML (parsed via the descriptor reader) with its source.
@@ -157,14 +192,19 @@ ontarch_emit_scan() {
   done
 
   arr="$(jq -c 'sort_by(.path)' <<<"$arr")"
-  local total clean dirty
+  local total clean dirty gen
   total="$(jq 'length' <<<"$arr")"
   clean="$(jq '[.[] | select(.worktree_status.state == "clean")] | length' <<<"$arr")"
   dirty="$(jq '[.[] | select(.worktree_status.state == "dirty")] | length' <<<"$arr")"
+  # Fingerprint authored inputs that feed the scan report (units + profiles registries).
+  gen="$(ontarch_registry_generation "$units" "$profiles")"
   jq -n --arg ts "$(_ontarch_now)" --arg root "$WORKSPACES_DIR" \
+    --argjson gen "$gen" \
     --argjson total "$total" --argjson clean "$clean" --argjson dirty "$dirty" \
     --argjson ws "$arr" '{
-      generated_at: $ts, root: $root,
+      generated_at: $ts,
+      registry_generation: $gen,
+      root: $root,
       summary: {total: $total, clean: $clean, dirty: $dirty},
       workspaces: $ws
     }'

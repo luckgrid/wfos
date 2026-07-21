@@ -1,5 +1,6 @@
 {
   "schema_version": "0.1.0",
+  "record_kind": "command_execution",
   "session_id": "sess-fixture-001",
   "started_at": "2026-07-19T12:00:00Z",
   "ended_at": "2026-07-19T12:00:01Z",
