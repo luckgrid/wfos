@@ -30,9 +30,13 @@ collapse several archetypes behind one CLI — the archetype ids stay stable in 
 
 Outside the current Level 0 package set, WfOS reserves the future archetype
 `agent-interface` for a scoped agent/daemon layer over the `runtime-controller` (Takogami)
-and `metadata-plane` (Ontarch). No product brand is adopted for it yet. See the Level 0
-namespace alignment §17 for the conceptual surface; do not treat it as a core package,
-CLI, or repository requirement today.
+and `metadata-plane` (Ontarch). No product brand is adopted for it yet; do not treat it as a
+core package, CLI, or repository requirement today.
+
+An external message/schedule gateway is not this archetype. A narrow gateway such as
+[Push](https://github.com/owainlewis/push) may trigger an existing Claude/Codex/Pi agent; that
+agent then uses the profile-bound agent-interface/MCP or Takogami CLI. The gateway remains
+optional and cannot bypass policy or provide WfOS approval.
 
 ## Interface layers
 
@@ -112,6 +116,7 @@ set `PANOPLY_HOME` to your native-toolchain package path (see [setup.md](setup.m
 ```mermaid
 flowchart TD
   WS["Workstreams<br/>Plan · Brand · Build · Control"]
+  Gateway["Optional message/schedule gateway"] -. trigger .-> Dev
   Dev[Developer / Agent] --> TKO["runtime-controller\nTakogami · takogami"]
   TKO --> WS
   TKO --> CX["metadata-plane\nOntarch"]
@@ -127,7 +132,8 @@ flowchart TD
 The runtime controller reads the metadata plane, routes commands, runs native tools through the
 native toolchain and portable components through the portable-component runtime, and asks the
 package translator to turn higher-level intent into packages. The metadata plane is the shared
-meaning underneath all of it.
+meaning underneath all of it. Optional gateways terminate at an existing agent; they do not call
+the execution layer as a privileged side door.
 
 ## Principles
 
