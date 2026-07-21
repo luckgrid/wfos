@@ -110,10 +110,13 @@ required for WfOS to be useful.
 | [Handy](https://github.com/cjpais/Handy) | optional | free, offline, extensible speech-to-text |
 | [improve](https://github.com/shadcn/improve) | optional | survey a codebase and produce prioritized, self-contained improvement plans |
 | [OpenRouter](https://openrouter.ai/) | optional | low-level model-adapter / AI-routing layer for building tools (not a high-level agent UI) |
+| [Push](https://github.com/owainlewis/push) | planned | optional outbound-only private-message and schedule gateway for an existing Claude/Codex/Pi agent; not an agent runtime; unattended jobs stay disabled until runtime-controller policy and automation constraints are proved |
 | [Fabric](https://github.com/danielmiessler/fabric) | optional | crowdsourced AI prompt "patterns" usable anywhere |
 
 OpenRouter is the intended substrate for model adapters and routing inside WfOS-built tools —
-a primitive to build on, not a replacement for an agent CLI.
+a primitive to build on, not a replacement for an agent CLI. Push is a possible gateway to an
+already configured agent; it does not own WfOS policy, agent reasoning, or tools, and a channel
+message never substitutes for runtime approval.
 
 **RTK** compresses shell output; **QMD** compresses document retrieval — both cut agent token use,
 but at different layers. See [workflow-apps.md](workflow-apps.md#agent-retrieval--qmd).
