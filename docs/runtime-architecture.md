@@ -9,17 +9,23 @@ integrates AI augmentation natively.
 It is a target architecture. The first useful version is a single-process CLI; the pieces
 below describe how that scales without a rewrite.
 
+**Composition:** persistent terminal PTYs, pane layouts, and agent-pane UX belong to optional
+providers (tmux or Herdr), not to Takogami. Desktop window geometry belongs to desktop
+providers. Takogami records command attempts and may later coordinate providers; it must not
+become a second terminal server.
+
 ## Client-daemon model
 
-To stay responsive under dense workloads, WfOS avoids a single monolithic binary. The
-terminal binary is a lightweight invocation client; resource allocation, process isolation,
-data multiplexing, and AI state live in a long-running local daemon.
+To stay responsive under dense workloads, a later phase may split a lightweight CLI client from
+a long-running local daemon for resource allocation, cross-provider coordination, and AI state.
+That daemon is **not** a PTY multiplexer — use Herdr or tmux for persistent terminals.
 
 ```mermaid
 flowchart LR
-  CLI[takogami CLI/TUI] -->|cmd| D[Local daemon]
+  CLI[takogami CLI] -->|cmd| D[Local daemon optional]
   D --> PR[tokio::process pool]
   PR --> NT["native-toolchain\nPanoply"]
+  D --> TERM["Herdr or tmux adapters"]
   D --> ORK[Orka DAG optional]
   D --> MCP[rmcp MCP server]
   MCP --> LLM[Agents / LLM]
@@ -30,9 +36,9 @@ flowchart LR
 Evolution phases:
 
 ```txt
-v0   single-process CLI — clap commands, direct tokio::process calls
-v1   daemon-backed       — client talks to a local daemon over a Unix socket
-v2   multi-panel TUI     — Ratatui views over the same daemon
+v0   single-process CLI — clap commands, direct tokio::process calls (E09)
+v1   daemon-backed       — only if cross-provider coordination/policy needs it
+v2   multi-panel TUI     — optional operator UI; not a Herdr workspace clone
 ```
 
 ## The Rust stack
@@ -46,7 +52,7 @@ systems-level primitives, each mapped to a WfOS responsibility.
 | [`tokio::process`](https://docs.rs/tokio/latest/tokio/process/) | Spawn native tools as async children; stream stdout/stderr without UI lag | native-toolchain proxying |
 | [starbase](https://crates.io/crates/starbase) | Application shell — lifecycle, sessions, diagnostics, reactive systems | runtime-controller (`takogami`) |
 | [clap](https://crates.io/crates/clap) | Type-safe argument and command parsing inside the starbase app | runtime-controller commands |
-| [Ratatui](https://crates.io/crates/ratatui) | Immediate-mode multi-panel terminal UI | TUI phase |
+| [Ratatui](https://crates.io/crates/ratatui) | Optional later operator TUI (not a terminal multiplexer) | TUI phase (post-MVP) |
 | [Serde](https://crates.io/crates/serde) | Parse profiles, brand maps, and pipeline configs | metadata-plane configs |
 | [Orka](https://crates.io/crates/orka) | Pluggable async DAG workflow engine (candidate) | task orchestration |
 | [Zenoh](https://crates.io/crates/zenoh) | Zero-overhead pub/sub data fabric | federation / multi-process |

@@ -1,14 +1,18 @@
 # `runtime-controller` — Takogami
 
 The runtime-controller (Takogami) is the WfOS runtime CLI (`takogami`): discovery, routing,
-policy, sessions, and explain output. It coordinates the [native-toolchain (Panoply)](../panoply/README.md)
-and [metadata-plane (Ontarch)](../ontarch/README.md); it does not replace them.
+policy, command execution records, and explain output. It coordinates the
+[native-toolchain (Panoply)](../panoply/README.md) and
+[metadata-plane (Ontarch)](../ontarch/README.md); it does not replace them.
+
+It does not own persistent terminal PTYs (tmux / optional Herdr) or desktop window restore.
 
 **Status: E09.S2 — metadata and runtime contracts.** The binary builds and exposes the full
 MVP command tree; only `doctor` is implemented. Other commands return a structured
-`not_implemented` error (human + `--json`). Typed contracts for envelopes, sessions,
-resolved commands, policy decisions, legacy entrypoints, fingerprints, and state-home
-precedence are in place for later stories.
+`not_implemented` error (human + `--json`). Typed contracts for envelopes, operational records
+(today `RuntimeSession`; rename to `RuntimeCommandRecord` in E09.S2.1), resolved commands,
+policy decisions, legacy entrypoints, fingerprints, and state-home precedence are in place for
+later stories. Next implementation story: **E09.S3** discovery/queries/complete doctor.
 
 ## Build
 
@@ -33,7 +37,8 @@ takogami scan | list | info | tools | interfaces | dev | build | check | graph |
 Global flags: `--json`, `--profile`, `--state-home`, `--no-color`, `--verbose`.
 
 `takogami build <unit>` is the unit lifecycle verb. A separate `workstream` namespace is
-post-MVP.
+post-MVP. `takogami session *` (S6) reads **command execution records**, not composed work
+sessions.
 
 ## Controller exit codes
 
@@ -55,7 +60,8 @@ Native child exit codes pass through unchanged in later stories (S6).
 Machine contracts live under `src/contracts/` and Ontarch schemas:
 
 - `packages/ontarch/schemas/command-output.schema.json` — `CommandEnvelope`
-- `packages/ontarch/schemas/runtime-session.schema.json` — operational `RuntimeSession`
+- `packages/ontarch/schemas/runtime-session.schema.json` — operational record (S2 name;
+  **E09.S2.1** renames to `runtime-command-record.schema.json` / `RuntimeCommandRecord`)
 - Structured lifecycle entrypoints in `unit.schema.json` (legacy strings still accepted)
 - Operational state home: `--state-home` → `TAKOGAMI_STATE_HOME` → profile
   `[runtime] session_state_home` → XDG → `~/.local/state/takogami/sessions`
@@ -64,7 +70,8 @@ Machine contracts live under `src/contracts/` and Ontarch schemas:
 ## Doctor (S1 skeleton)
 
 Checks only that `cargo`, `rustc`, and `moon` are on `PATH`. Does **not** claim registry,
-session-store, or RTK readiness (those arrive in E09.S3).
+command-record store, or RTK readiness (those arrive in E09.S3). Missing optional tools such as
+Herdr must not fail the base doctor once S3 lands.
 
 Design: [`../../docs/runtime-controller.md`](../../docs/runtime-controller.md) ·
 engine: [`../../docs/runtime-architecture.md`](../../docs/runtime-architecture.md).

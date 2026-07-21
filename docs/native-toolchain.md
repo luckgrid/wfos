@@ -58,7 +58,7 @@ alternatives are detected if present but never forced.
 | `git` | git, gh | jj, lazygit, git-delta | version control and source status |
 | `nav` | fzf, zoxide, eza, bat, ripgrep, fd, jq, tldr | skim, choose | search, selection, navigation, cheatsheets |
 | `system` | btop, dua | — | resource monitor and disk-usage visualizer |
-| `session` | tmux | zellij | persistent terminal sessions |
+| `session` | tmux | zellij (alt); Herdr optional additive | persistent terminals; Herdr for rich agent workspaces |
 | `secrets` | pass | age, sops, gitleaks | tiered vaults (`pass` interactive; `sops`+`age` files); leak scan via gitleaks (candidate) |
 | `tools` | mise, direnv | proto, asdf | runtime/version + per-dir env |
 | `dotfiles` | — | chezmoi | cross-machine dotfile management |
@@ -78,6 +78,9 @@ Every module is swappable; the matrix is **manifest data, not code** — it is t
 each tool's `default` + `alternatives` fields over the modules. A *swappable role* is a
 module-default tool with a non-empty `alternatives` list (e.g. `nav`: fzf/skim, `session`:
 tmux/zellij, `secrets`: pass/age+sops, `tools`: mise/proto, `git`: git/jj, `js`: pnpm/npm…).
+Herdr is planned as an **optional additive** `session` tool (not listed as a tmux `alternatives`
+swap): rich agent workspaces when a profile enables it; missing Herdr must not break tmux-only
+workflows.
 
 `panoply list --matrix` prints the matrix; `panoply doctor` (and `doctor --json` under `roles[]`)
 reports the **active** member of each role — the installed default, else the first installed
@@ -90,6 +93,9 @@ session    tmux             tmux (default) zellij
 secrets    pass             pass (default) age,sops
 tools      mise             mise (default) proto,asdf
 ```
+
+Optional additive tools (e.g. planned Herdr) appear in doctor/tool lists when registered, but
+are not the swappable “active” of the tmux/zellij role.
 
 Alternative ids that are external runtimes (not themselves native-toolchain tools, e.g. `asdf`,
 `npm`, `yarn`) are reported as informational notes by `validate-substrate.sh`. The

@@ -12,11 +12,11 @@ This folder is the self-contained reference for the workspace. Start with
 | Doc | What it covers |
 |-----|----------------|
 | [architecture.md](architecture.md) | Archetypes vs products, interface layers, the system map |
-| [runtime-architecture.md](runtime-architecture.md) | Terminal-first engine: client-daemon model and the Rust stack |
+| [runtime-architecture.md](runtime-architecture.md) | Engine blueprint: v0 CLI first; daemon/TUI optional and not a terminal multiplexer |
 | [monorepo.md](monorepo.md) | moon project graph + proto toolchains, tasks, conventions |
 | [native-toolchain.md](native-toolchain.md) | Native toolchain — Unix/Rust tools, modules, config templates |
 | [metadata-plane.md](metadata-plane.md) | Metadata plane — descriptors, registry, schemas, policies |
-| [runtime-controller.md](runtime-controller.md) | Runtime controller (`takogami`) — in progress; discovery, routing, sessions |
+| [runtime-controller.md](runtime-controller.md) | Runtime controller (`takogami`) — MVP discovery/routing/command records; providers for terminals |
 | [package-translator.md](package-translator.md) | Package translator (`takogami package`) — intent → packages (planned) |
 | [portable-component-runtime.md](portable-component-runtime.md) | Portable component runtime — WASM/WASI components (planned) |
 | [agent-configs.md](agent-configs.md) | Shared agent profiles, app-integration pattern, lean AGENTS.md |
@@ -25,7 +25,7 @@ This folder is the self-contained reference for the workspace. Start with
 | [git-hygiene.md](git-hygiene.md) | Repo-local hooks, gitleaks gate, conventional commits |
 | [bin-archive.md](bin-archive.md) | Bin inventory, manifests, cleanup modes, archive taxonomy |
 | [apps.md](apps.md) | Docs site + marketing site (Zola) |
-| [tool-catalog.md](tool-catalog.md) | Grouped catalog of tools, libraries, skills, and crates |
+| [tool-catalog.md](tool-catalog.md) | Grouped catalog of tools, libraries, skills, and crates (incl. optional Herdr / desktop providers) |
 | [workflow-apps.md](workflow-apps.md) | Core native workflow apps — notes, writing, AI engine, sessions |
 | [setup.md](setup.md) | Setup for developers and agents |
 | Workstreams namespaces | [architecture.md#workstreams-collection](architecture.md#workstreams-collection) — Plan, Brand, Build, Control |
@@ -34,7 +34,7 @@ This folder is the self-contained reference for the workspace. Start with
 
 | Archetype | Product | CLI | Role |
 |-----------|---------|-----|------|
-| `runtime-controller` | Takogami 🐙 | `takogami` | Discovery, routing, sessions, agent rails |
+| `runtime-controller` | Takogami 🐙 | `takogami` | Discovery, routing, command records, agent rails |
 | `package-translator` | Polytope 📦 | `takogami package` | Intent → packages and artifacts |
 | `native-toolchain` | Panoply 🧰 | `panoply` | Local Unix/Rust tool execution |
 | `portable-component-runtime` | Wisp 🫧 | `takogami portable` (planned) | WASM/WASI sandboxed components |

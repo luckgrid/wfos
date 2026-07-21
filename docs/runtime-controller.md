@@ -1,15 +1,19 @@
 # Runtime controller — Takogami 🐙
 
 The `runtime-controller` (Takogami) is the runtime CLI and low-level control interface (`takogami`).
-It is the daily command surface that reaches into many tools, libraries, sessions, descriptors,
+It is the daily command surface that reaches into many tools, libraries, descriptors,
 policies, and agents. It is **not** the package manager (that is the
 [package translator (Polytope)](package-translator.md)) and **not** the tools themselves (that is
 the [native toolchain (Panoply)](native-toolchain.md)) — it discovers, routes, and coordinates.
 
+It does **not** own persistent terminal PTYs or desktop window restore. Those belong to
+optional providers (tmux / Herdr for terminals; Hammerspoon and others for desktop layout). See
+[native-toolchain.md](native-toolchain.md) and the Plan tool-composition addendum.
+
 Status: **in progress.** The crate ships with the MVP command tree; only `doctor` is
 implemented today, and other commands return structured `not_implemented`. Metadata and
 runtime contracts (descriptor, schemas, Ontarch projection, Rust types) are in place.
-Discovery, routing, policy execution, and operational sessions are still ahead. See
+Discovery, routing, policy, execution, and **command execution records** are still ahead. See
 [`packages/takogami/README.md`](../packages/takogami/README.md) for the proved surface;
 build position lives in `Build/bin/wfos/STATE.md` and `SESSIONS.md`.
 
@@ -17,139 +21,120 @@ build position lives in `Build/bin/wfos/STATE.md` and `SESSIONS.md`.
 
 ```txt
 Discover local resources.      Read metadata plane.     Route commands.
-Prepare environments.          Call native tools.     Run WASM components.
-Manage sessions.               Apply rails and gates.  Expose system context.
+Prepare environments.          Call native tools.     Run WASM components (later).
+Record command attempts.       Apply rails and gates.  Expose system context.
+Coordinate providers.          Do not own PTY servers. Do not snapshot desktops (E09).
 ```
 
 ## Command surface
 
+### E09 MVP (authoritative for M4)
+
 ```txt
 takogami scan         discover local resources
-takogami list         list units, tools, packages, or sessions
+takogami list         list units or tools (not sessions)
 takogami info <unit>  show resolved metadata for a unit
 takogami doctor       validate local machine readiness
-takogami dev|build|check <unit>   route common workflow commands
-takogami session      manage local work sessions and logs
-takogami tools        detect and report local tools
+takogami tools        report tools from Panoply / Ontarch projections
 takogami interfaces   validate descriptors, schemas, policies, registry entries
-takogami portable <c> run or inspect portable WASM/WASI components (portable-component-runtime / Wisp)
-takogami native <c>   inspect and execute host-native tooling (native-toolchain / Panoply)
-takogami meta <c>     validate, graph, and query system metadata (metadata-plane / Ontarch)
-takogami package …    hand off to the package translator (Polytope)
-takogami workstream …   profile-agnostic Workstreams / gateway routing
-takogami tendril <c>  list, inspect, attach, and invoke runtime integrations
-takogami agent        run scoped agent rails and workflows
+takogami dev|build|check <unit>   route common workflow commands
+takogami graph        project metadata-plane graph
+takogami bin report|cleanup   project bin/archive contracts
+takogami session list|show|latest   read command execution records (not work sessions)
 ```
 
-Runtime integrations are runtime-controller-internal units (archetype `runtime-integration`, brand
-vocabulary **Tendril**) living under the package's `src/integrations/` namespace — there is no
-separate integration package. See the Level 0 namespace alignment for the contract and
-substructure (`registry/`, `contracts/`, `adapters/`, `connectors/`, `bindings/`, `providers/`).
+`takogami session *` is the operational **command-record** query surface (S6). It does not
+start/stop composed work sessions. Replaying a record does not restore a terminal pane or
+window layout.
 
-Every command should be explainable: `takogami <cmd> --explain` prints the unit, the descriptor
-and native manifest it resolved, the runtime/package adapter, the native command, the session
-id, and the policies applied.
-
-## Workstream routing
-
-The runtime controller routes into Workstreams namespaces and gateway metadata through a
-universal `takogami workstream` surface. Profile shortcuts (`takogami plan`, `takogami brand`, `takogami control`,
-plus `spec` / `qa` / `release` / `agent`) alias into it. Top-level `takogami build|dev|check` remain
-unit-lifecycle verbs — Build-namespace entry is `takogami workstream build`, not `takogami build`.
+### Post-MVP (aspirational — do not implement from this list in E09)
 
 ```txt
-# Universal (preferred)
-takogami workstream plan …       Plan — Decisions (briefs, specs, strategy)
-takogami workstream brand …      Brand — Expressions (design, content)
-takogami workstream build …      Build — Implementations (code, wfos, ds)
-takogami workstream control …    Control — Operations (records, sync)
-
-# Workstreams profile aliases
-takogami plan …                → takogami workstream plan …
-takogami brand …               → takogami workstream brand …
-takogami control …             → takogami workstream control …
-takogami spec …                Plan filter (kind: spec)
-takogami qa …                  Build QA gateway
-takogami release …             Build + Control when enabled
-
-# Unit lifecycle (not namespace routing)
-takogami build|dev|check <unit>
+takogami portable <c>   portable WASM/WASI components (Wisp / E11)
+takogami native <c>     host-native tooling inspection (beyond tools/doctor)
+takogami meta <c>       metadata-plane operator surface
+takogami package …      package translator (Polytope / E11)
+takogami workstream …   Workstreams / gateway routing
+takogami integrate <c>  runtime integrations (archetype runtime-integration; deferred)
+takogami agent          scoped agent rails / agent-interface (E10; brand pending)
+takogami work-session … composed multi-provider restore (post-E09)
 ```
 
-```mermaid
-flowchart LR
-  K["runtime-controller\nTakogami · takogami"] --> WF[takogami workstream]
-  WF --> PlanNs[Plan]
-  subgraph Prod [Build and Brand — parallel production]
-    direction TB
-    BuildNs[Build]
-    BrandNs[Brand]
-    BuildNs <-.->|shared context| BrandNs
-    BrandNs -->|approved| BuildNs
-  end
-  ControlNs[Control]
-  WF --> Prod
-  WF --> ControlNs
-  PlanNs -->|validated| BuildNs
-  PlanNs -->|validated| BrandNs
-  BuildNs -->|released| ControlNs
-  PlanNs <-.->|ops context| ControlNs
-```
+Optional `integrations/` modules under the runtime-controller package are an implementation
+layout for `runtime-integration` units — not a separate product. Unadopted brand candidates
+(Tendril, Casper, etc.) are recorded only in Plan
+[`lg_wfos_lvl_0_speculative_concepts.md`](../../../../../Plan/bin/wfos/lg_wfos_lvl_0_speculative_concepts.md).
+
+Every MVP command should be explainable: `takogami <cmd> --explain` prints the unit, the
+descriptor and native manifest it resolved, the runtime/package adapter, the native command,
+the correlation/session id, and the policies applied.
+
+## Workstream routing (post-MVP)
+
+The runtime controller will route into Workstreams namespaces through a universal
+`takogami workstream` surface. Profile shortcuts and gateway aliases are post-MVP. Top-level
+`takogami build|dev|check` remain unit-lifecycle verbs — Build-namespace entry will be
+`takogami workstream build`, not `takogami build`.
 
 Canon: [architecture.md#workstreams-collection](architecture.md#workstreams-collection). Shape:
 `Plan ←[gates]→ | Build ←→ Brand | ←[gates]→ Control`.
 
-## Routing flow
+## Routing flow (MVP)
 
 ```mermaid
 sequenceDiagram
   participant U as User
-  participant K as runtime-controller (Takogami)
-  participant C as metadata-plane (Ontarch)
-  participant H as package-translator (Polytope)
-  participant D as native-toolchain (Panoply)
-  U->>K: takogami build <unit>
-  K->>C: read descriptor + policy
+  participant K as runtime-controller
+  participant C as metadata-plane
+  participant D as native-toolchain
+  U->>K: takogami build unit
+  K->>C: read descriptor and policy
   C-->>K: unit metadata
-  K->>H: check package interface
-  H-->>K: package adapter info
   K->>D: run native build command
   D-->>K: result
-  K->>C: write session log + registry update
+  K->>K: write command execution record
 ```
+
+Registry write-back after every routed command is **not** E09 MVP; Ontarch remains the registry
+owner.
+
+## Composition boundary
+
+| Layer | Owner |
+|-------|--------|
+| Resolve / policy / direct spawn / command records | Takogami |
+| Tool install and detection | Panoply |
+| Lightweight terminal persistence | tmux (default) |
+| Rich agent workspaces | Herdr (optional additive; not required for doctor) |
+| Desktop window geometry | Desktop providers (post-E09) |
 
 ## CLI foundation
 
 The runtime controller is built on the Rust stack described in
 [runtime-architecture.md](runtime-architecture.md):
 
-- **[starbase](https://crates.io/crates/starbase)** as the application shell (lifecycle,
-  sessions, diagnostics, reactive systems), with **[clap](https://crates.io/crates/clap)** for
-  command and argument parsing. starbase is the same foundation the workspace's build tooling
-  is built on, so the patterns are shared.
+- **[starbase](https://crates.io/crates/starbase)** as the application shell, with
+  **[clap](https://crates.io/crates/clap)** for command and argument parsing.
 - **[Tokio](https://crates.io/crates/tokio)** + `tokio::process` for non-blocking native tool
   proxying.
-- **[Ratatui](https://crates.io/crates/ratatui)** for the later multi-panel TUI.
+- A later TUI (e.g. Ratatui), if any, is for cross-provider operator UX — **not** a clone of
+  Herdr's multiplexer UI. Persistent terminals stay with Herdr/tmux.
 
-It routes to the [moon](monorepo.md) task graph as a compat backend and to the
-[native toolchain (Panoply)](native-toolchain.md) for native execution. The v0 build is a
-single-process CLI; the daemon and TUI phases follow (see
-[runtime-architecture.md](runtime-architecture.md#client-daemon-model)).
+The v0 build is a single-process CLI. Any future daemon must be justified by cross-provider
+scheduling, event correlation, or policy enforcement — not by owning a terminal server. See
+[runtime-architecture.md](runtime-architecture.md#client-daemon-model).
 
 ## AI augmentation
 
-The runtime controller is designed for AI augmentation but does not require it. The daemon can
-embed an MCP server (via [`rmcp`](https://crates.io/crates/rmcp)) that exposes commands as gated
-LLM tools; every call is checked against metadata-plane policy. Planned assists: command
-explanation, risk detection, workflow suggestions, policy-aware planning, and session summaries.
-AI assists the runtime controller; it does not silently control it. See
-[agent-rails.md](agent-rails.md).
+The runtime controller is designed for AI augmentation but does not require it. A later daemon
+may embed an MCP server that exposes commands as gated LLM tools; every call is checked against
+metadata-plane policy. See [agent-rails.md](agent-rails.md).
 
-## First prototype scope
+## First prototype scope (E09 M4)
 
 ```txt
-scan · list · info · doctor · dev · build · check
-session logs · descriptor read · registry write
-hand-off to a package-translator descriptor and a portable-component-runtime hello component
-agent hard-block by default (read-only scope)
+scan · list units|tools · info · doctor · tools · interfaces
+dev · build · check · graph · bin report|cleanup
+command execution records via session list|show|latest
+agent hard-block by default (read-only / fail-closed policy)
 ```

@@ -44,7 +44,11 @@ detected if present. See [native-toolchain.md](native-toolchain.md).
 | [zsh-autocomplete](https://github.com/marlonrichert/zsh-autocomplete) | optional | real-time menu completion (sourced plugin; can conflict) | MIT |
 | [jj](https://github.com/jj-vcs/jj) | optional | Git-compatible VCS alternative | MIT/Apache-2.0 |
 | [skim](https://github.com/skim-rs/skim) | optional | Rust fuzzy finder (fzf alternative) | MIT |
-| [zellij](https://github.com/zellij-org/zellij) | optional | terminal workspace (tmux alternative) | MIT |
+| [zellij](https://github.com/zellij-org/zellij) | optional | terminal workspace (tmux syntax alternative) | MIT |
+| [Herdr](https://herdr.dev/) | planned | optional additive agent-aware terminal workspaces (not a tmux alternative swap; `agent_safe` false until per-action policy) | proprietary / see site |
+| [Hammerspoon](https://www.hammerspoon.org/) | inspiration | preferred free/open programmable macOS window geometry base (post-E09 work sessions) | MIT |
+| [Moom](https://manytricks.com/moom/) | inspiration | paid turnkey macOS layout provider (post-E09) | proprietary |
+| Raycast Pro + Window Layouts | inspiration | optional paid layout extension — **requires Raycast Pro**; not a Raycast Free feature | proprietary |
 | [Fabric](https://github.com/danielmiessler/fabric) | planned | AI-augmentation patterns runnable from the shell | MIT |
 
 Secrets are tiered by concern: **pass** for interactive CLI logins/keys, **sops + age** for
@@ -75,7 +79,7 @@ The engine under the [runtime-controller (Takogami)](runtime-controller.md); see
 |--------------|--------|------|
 | [Tokio](https://crates.io/crates/tokio) | in use (takogami v0) | async runtime + subprocess proxying |
 | [clap](https://crates.io/crates/clap) | in use (takogami v0) | CLI argument/command parsing |
-| [Ratatui](https://crates.io/crates/ratatui) | planned | terminal UI (TUI phase) |
+| [Ratatui](https://crates.io/crates/ratatui) | planned | optional later operator TUI — not a Herdr/tmux multiplexer clone |
 | [Serde](https://crates.io/crates/serde) | in use (takogami v0) | config/profile parsing (TOML-first) |
 | [Orka](https://crates.io/crates/orka) | planned | pluggable async DAG workflow engine (candidate) |
 | [Zenoh](https://crates.io/crates/zenoh) | planned | pub/sub data fabric (federation/multi-process) |
