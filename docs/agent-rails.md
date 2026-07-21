@@ -129,6 +129,28 @@ The [runtime-controller (Takogami)](runtime-controller.md) daemon can embed an M
 tools. Every tool call is checked against the same metadata-plane (Ontarch) policies — the MCP surface is a
 front door to the rails, not a way around them.
 
+## External message and schedule gateways
+
+An optional gateway such as [Push](https://github.com/owainlewis/push) may authenticate an
+allowlisted sender and invoke an existing coding agent. That identity is **not** a WfOS policy
+decision. The agent must enter through the same profile-bound MCP or Takogami CLI surface as a
+local caller, and every operation is re-evaluated by the metadata-plane/runtime-controller.
+
+Locked defaults:
+
+- channel authentication never satisfies Gate, mints approval, or overrides Deny;
+- begin with chat-only, read-only profiles and one narrowly allowlisted operator;
+- keep gateway config, tokens, history databases, and backend session state outside tracked
+  Workstreams and command records;
+- do not mirror the full Workstreams tree into a gateway assistant repository; project only
+  reviewed, task-scoped context; and
+- keep unattended gateway jobs disabled until the runtime-controller enforces allow-only spawn
+  and workflow automation supplies explicit scope, iteration, stop, and validator constraints.
+
+Push preserves backend permissions for chats, but its scheduled Codex/Claude jobs deliberately
+bypass interactive approvals. Treat those jobs as unattended code execution, not as a convenient
+approval transport.
+
 ## Skill security (the SkillSpector gate)
 
 Agent skills are third-party code. A skill is **not loaded until it has been scanned** with
