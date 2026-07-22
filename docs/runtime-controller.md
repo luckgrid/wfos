@@ -94,10 +94,9 @@ sequenceDiagram
   U->>K: takogami build unit
   K->>C: read descriptor and policy
   C-->>K: unit metadata
-  Note over K: S4 seals plan + explain; no spawn
-  K->>D: run native build command
-  D-->>K: result
-  K->>K: write command execution record
+  Note over K: S4 seals plan + explain; stops here (no spawn)
+  Note over K,D: S5 policy then S6 spawn/records (not yet)
+  K--xD: deferred until S6
 ```
 
 S4 stops at the sealed plan. Policy (S5) and spawn/records (S6) are later. Registry write-back

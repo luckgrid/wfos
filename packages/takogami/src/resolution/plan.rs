@@ -124,7 +124,85 @@ fn compute_plan_digest(resolved: &ResolvedCommand) -> String {
         execution_class: resolved.execution_class.as_str(),
         runtime_provider: resolved.runtime_provider.as_deref(),
     };
-    let bytes = serde_json::to_vec(&payload).unwrap_or_default();
+    // DigestPayload is plain &str/slices — serialization only fails if the allocator does.
+    let bytes = serde_json::to_vec(&payload).expect("plan digest payload serializes");
     let digest = Sha256::digest(&bytes);
     format!("sha256:{digest:x}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::contracts::{ExecutionClass, RegistryGeneration, SCHEMA_VERSION};
+
+    fn sample_resolved(session_id: &str) -> ResolvedCommand {
+        ResolvedCommand {
+            schema_version: SCHEMA_VERSION.into(),
+            session_id: session_id.into(),
+            unit_id: "demo".into(),
+            verb: "build".into(),
+            descriptor_path: "registry/sources/descriptors/demo.descriptor.toml".into(),
+            descriptor_fingerprint: "sha256:abc".into(),
+            native_manifests: vec!["moon.yml".into()],
+            backend: "moon".into(),
+            adapter: "moon-task".into(),
+            program: "moon".into(),
+            argv: vec!["run".into(), "demo:build".into()],
+            cwd: "demo".into(),
+            env_keys: vec!["PATH".into()],
+            profile_id: "workspace-dev".into(),
+            policy_ids: vec!["panoply.agent".into()],
+            registry_generation: RegistryGeneration {
+                generated_at: "2026-07-21T00:00:00Z".into(),
+                source_fingerprints: vec![],
+            },
+            execution_class: ExecutionClass::Direct,
+            runtime_provider: None,
+        }
+    }
+
+    #[test]
+    fn seal_twice_same_session_yields_equal_digest_and_resolved() {
+        let resolved = sample_resolved("tkg_fixed");
+        let a = SealedExecutionPlan::seal(
+            resolved.clone(),
+            PathBuf::from("/ws/bin/moon"),
+            PathBuf::from("/ws/demo"),
+            vec![PathBuf::from("/ws/demo/moon.yml")],
+            vec![],
+        );
+        let b = SealedExecutionPlan::seal(
+            resolved.clone(),
+            PathBuf::from("/ws/bin/moon"),
+            PathBuf::from("/ws/demo"),
+            vec![PathBuf::from("/ws/demo/moon.yml")],
+            vec![],
+        );
+        assert_eq!(a.plan_digest(), b.plan_digest());
+        assert!(a.plan_digest().starts_with("sha256:"));
+        assert_eq!(a.resolved(), b.resolved());
+        assert_eq!(
+            serde_json::to_vec(a.resolved()).unwrap(),
+            serde_json::to_vec(b.resolved()).unwrap()
+        );
+    }
+
+    #[test]
+    fn digest_includes_session_id() {
+        let a = SealedExecutionPlan::seal(
+            sample_resolved("tkg_a"),
+            PathBuf::from("/ws/bin/moon"),
+            PathBuf::from("/ws/demo"),
+            vec![],
+            vec![],
+        );
+        let b = SealedExecutionPlan::seal(
+            sample_resolved("tkg_b"),
+            PathBuf::from("/ws/bin/moon"),
+            PathBuf::from("/ws/demo"),
+            vec![],
+            vec![],
+        );
+        assert_ne!(a.plan_digest(), b.plan_digest());
+    }
 }

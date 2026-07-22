@@ -513,3 +513,173 @@ fn json_purity_on_failure() {
     let _ = parse_json(&out); // entire stdout is one document
     assert!(stderr(&out).is_empty() || !stderr(&out).contains('{'));
 }
+
+#[test]
+fn structured_metachar_argv_preserved_literally() {
+    let h = Harness::new();
+    let out = h.run(&["--json", "build", "native-demo"]);
+    assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
+    let argv = &parse_json(&out)["data"]["resolved_command"]["argv"];
+    assert_eq!(argv, &serde_json::json!(["a;b", "x|y", "$HOME"]));
+    let text = stdout(&out);
+    assert!(!text.contains("do-not-leak"));
+    h.assert_marker_untouched();
+}
+
+#[test]
+fn hit_provisional_returns_routing_incomplete() {
+    let h = Harness::new();
+    let mut doc: Value =
+        serde_json::from_str(&fs::read_to_string(h.registry.join("units.json")).unwrap()).unwrap();
+    let units = doc["units"].as_array_mut().unwrap();
+    let demo = units
+        .iter_mut()
+        .find(|u| u["id"] == "demo")
+        .expect("demo unit");
+    demo["provisional"] = serde_json::json!(true);
+    demo["routing_complete"] = serde_json::json!(false);
+    fs::write(
+        h.registry.join("units.json"),
+        serde_json::to_string_pretty(&doc).unwrap(),
+    )
+    .unwrap();
+
+    let out = h.run(&["--json", "build", "demo"]);
+    assert_eq!(
+        out.status.code(),
+        Some(RESOLUTION as i32),
+        "{}",
+        stderr(&out)
+    );
+    assert_eq!(
+        parse_json(&out)["diagnostics"][0]["code"],
+        "routing_incomplete"
+    );
+    h.assert_marker_untouched();
+}
+
+#[test]
+fn profile_required_when_no_default() {
+    let h = Harness::new();
+    fs::write(
+        h.registry.join("profiles.json"),
+        r#"{"generated_at":"2026-07-21T00:00:00Z","profiles":[{"id":"alt-profile","title":"Alt","purpose":"test","rails":"panoply.agent","rails_bin":"agent-bin","isolation_mode":"branch","isolation_jj":"opt-in","session_state_home":null}]}"#,
+    )
+    .unwrap();
+
+    let out = h.run(&["--json", "build", "demo"]);
+    assert_eq!(
+        out.status.code(),
+        Some(RESOLUTION as i32),
+        "{}",
+        stderr(&out)
+    );
+    assert_eq!(
+        parse_json(&out)["diagnostics"][0]["code"],
+        "profile_required"
+    );
+    h.assert_marker_untouched();
+}
+
+#[test]
+fn policy_not_found_fail_closed() {
+    let h = Harness::new();
+    let mut doc: Value =
+        serde_json::from_str(&fs::read_to_string(h.registry.join("units.json")).unwrap()).unwrap();
+    let units = doc["units"].as_array_mut().unwrap();
+    let demo = units
+        .iter_mut()
+        .find(|u| u["id"] == "demo")
+        .expect("demo unit");
+    demo["entrypoints"]["build"]["required_policies"] =
+        serde_json::json!(["panoply.agent", "missing-policy-xyz"]);
+    fs::write(
+        h.registry.join("units.json"),
+        serde_json::to_string_pretty(&doc).unwrap(),
+    )
+    .unwrap();
+
+    let out = h.run(&["--json", "build", "demo"]);
+    assert_eq!(
+        out.status.code(),
+        Some(RESOLUTION as i32),
+        "{}",
+        stderr(&out)
+    );
+    assert_eq!(
+        parse_json(&out)["diagnostics"][0]["code"],
+        "policy_not_found"
+    );
+    h.assert_marker_untouched();
+}
+
+#[test]
+fn execute_after_resolution_failure_is_exit_4() {
+    let h = Harness::new();
+    let out = h.run(&["--json", "build", "no-such-unit", "--execute"]);
+    assert_eq!(out.status.code(), Some(RESOLUTION as i32));
+    let v = parse_json(&out);
+    assert_eq!(v["diagnostics"][0]["code"], "unit_not_found");
+    assert_ne!(v["diagnostics"][0]["code"], "execution_unavailable");
+    h.assert_marker_untouched();
+}
+
+#[test]
+fn invalid_cwd_escapes_workspace() {
+    let h = Harness::new();
+    let mut doc: Value =
+        serde_json::from_str(&fs::read_to_string(h.registry.join("units.json")).unwrap()).unwrap();
+    let units = doc["units"].as_array_mut().unwrap();
+    let native = units
+        .iter_mut()
+        .find(|u| u["id"] == "native-demo")
+        .expect("native-demo");
+    native["entrypoints"]["build"]["cwd"] = serde_json::json!("/tmp");
+    fs::write(
+        h.registry.join("units.json"),
+        serde_json::to_string_pretty(&doc).unwrap(),
+    )
+    .unwrap();
+
+    let out = h.run(&["--json", "build", "native-demo"]);
+    assert_eq!(
+        out.status.code(),
+        Some(RESOLUTION as i32),
+        "{}",
+        stderr(&out)
+    );
+    assert_eq!(parse_json(&out)["diagnostics"][0]["code"], "invalid_cwd");
+    h.assert_marker_untouched();
+}
+
+#[test]
+fn unsupported_backend_pair() {
+    let h = Harness::new();
+    let mut doc: Value =
+        serde_json::from_str(&fs::read_to_string(h.registry.join("units.json")).unwrap()).unwrap();
+    let units = doc["units"].as_array_mut().unwrap();
+    let native = units
+        .iter_mut()
+        .find(|u| u["id"] == "native-demo")
+        .expect("native-demo");
+    native["entrypoints"]["build"]["backend"] = serde_json::json!("moon");
+    native["entrypoints"]["build"]["adapter"] = serde_json::json!("direct");
+    fs::write(
+        h.registry.join("units.json"),
+        serde_json::to_string_pretty(&doc).unwrap(),
+    )
+    .unwrap();
+
+    let out = h.run(&["--json", "build", "native-demo"]);
+    assert_eq!(
+        out.status.code(),
+        Some(RESOLUTION as i32),
+        "{}",
+        stderr(&out)
+    );
+    assert_eq!(
+        parse_json(&out)["diagnostics"][0]["code"],
+        "unsupported_backend"
+    );
+    h.assert_marker_untouched();
+}
