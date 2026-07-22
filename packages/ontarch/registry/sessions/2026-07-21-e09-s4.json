@@ -1,0 +1,62 @@
+{
+  "session_id": "2026-07-21-e09-s4",
+  "epic": "E09",
+  "story": "S4",
+  "title": "Deterministic command resolution and explain planning",
+  "status": "done",
+  "started_at": "2026-07-22T00:04:00Z",
+  "ended_at": "2026-07-22T01:20:00Z",
+  "agent": "cursor/composer",
+  "profile": "workspace-dev",
+  "loaded_context": [
+    "Build/bin/wfos/STATE.md",
+    "Build/bin/wfos/E09_runtime_controller.md (S4 block + frontmatter + locked decisions)",
+    "Build/bin/wfos/2026-07-21-wfos-e09-s4-resolution-explain-implementation-plan.md",
+    "Plan/bin/wfos/lg_wfos_lvl_0_command_routing.md",
+    "Build/src/workspaces/wfos/docs/native-toolchain.md",
+    "packages/ontarch/registry/sessions/2026-07-20-e09-s3.json",
+    "packages/ontarch/registry/sessions/2026-07-20-e09-s2.1.json"
+  ],
+  "changed_paths": [
+    "Build/bin/wfos/STATE.md",
+    "Build/bin/wfos/SESSIONS.md",
+    "Build/src/workspaces/wfos/packages/ontarch/schemas/unit.schema.json",
+    "Build/src/workspaces/wfos/packages/ontarch/schemas/command-output.schema.json",
+    "Build/src/workspaces/wfos/packages/ontarch/bin/ontarch-validate",
+    "Build/src/workspaces/wfos/packages/ontarch/registry/sessions/2026-07-21-e09-s4.json",
+    "Build/src/workspaces/wfos/packages/takogami/Cargo.toml",
+    "Build/src/workspaces/wfos/Cargo.lock",
+    "Build/src/workspaces/wfos/packages/takogami/src/resolution/",
+    "Build/src/workspaces/wfos/packages/takogami/src/{registry,contracts,cli,commands,app,error,output,lib}.rs",
+    "Build/src/workspaces/wfos/packages/takogami/tests/resolution_cli.rs",
+    "Build/src/workspaces/wfos/packages/takogami/tests/fixtures/resolution/",
+    "Build/src/workspaces/wfos/packages/takogami/tests/contracts_roundtrip.rs",
+    "Build/src/workspaces/wfos/packages/takogami/README.md",
+    "Build/src/workspaces/wfos/docs/runtime-controller.md"
+  ],
+  "commands_run": [
+    "moon run takogami:build",
+    "moon run takogami:test",
+    "moon run takogami:lint",
+    "moon run takogami:format-check",
+    "moon run ontarch:sync",
+    "moon run ontarch:validate",
+    "moon run panoply:gen-check",
+    "moon run panoply:validate-substrate"
+  ],
+  "outcome": "E09.S4 deterministic plan-only resolution: execution_class/runtime_provider on unit + ResolvedCommand schemas; typed entrypoints/profile/policy loaders; full authored TOML on stale/miss; SealedExecutionPlan + PolicyEvaluationInput seam; shared lifecycle CLI path with human/JSON explain; --execute → execution_unavailable; interactive_session → execution_class_unavailable; hermetic resolution_cli matrix (12) + no-process-api source check. No spawn, no RuntimeCommandRecord persistence, no policy evaluation.",
+  "validation": "moon run takogami:build/test/lint/format-check PASS (24 lib + 17 cli_smoke + 16 contracts + 12 resolution_cli). moon run ontarch:sync/validate PASS (routing projection selfcheck includes execution_class). moon run panoply:gen-check/validate-substrate PASS.",
+  "decisions": [
+    "Add toml crate only for authored-descriptor Serde load; keep S3 provisional string-extract for discovery fallback.",
+    "Preserve SCHEMA_VERSION 0.1.0; narrow ResolvedCommand extension for execution_class/runtime_provider.",
+    "Lifecycle unit errors map to RESOLUTION exit 4; remapped separately from S3 query exit 2.",
+    "MoonTask is explicit compatibility backend (moon not required in tools.json).",
+    "Do not implement S5 policy or S6 spawn/records; next_session = E09.S5."
+  ],
+  "next": "E09.S5",
+  "blockers": [
+    "ontarch:secrets-scan detect mode still reports pre-existing age-secret-key in git history (commit a3a4978) — unchanged; out of E09.S4 scope."
+  ],
+  "token_note": "Loaded STATE + S4 implementation plan + E09.S4 epic block + command-routing + native-toolchain + 2 session records vs full E09 epic and Plan/bin collection.",
+  "handoff": "E09.S5 must evaluate both (1) the requested runtime-controller operation and (2) the sealed child program/argv/cwd/path plan. S5 must not re-resolve or mutate the S4 SealedExecutionPlan. E09.S6 must consume only a decision-bound Allow plan."
+}

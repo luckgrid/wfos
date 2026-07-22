@@ -7,3 +7,4 @@ pub mod error;
 pub mod exit_codes;
 pub mod output;
 pub mod registry;
+pub mod resolution;

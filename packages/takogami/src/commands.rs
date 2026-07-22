@@ -1,8 +1,9 @@
-//! Command handlers for discovery / query / doctor (E09.S3).
+//! Command handlers for discovery / query / doctor (E09.S3) and lifecycle planning (E09.S4).
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::cli::{Command, ListTarget};
+use crate::contracts::ExecutionClass;
 use crate::doctor::{self, DoctorInputs};
 use crate::error::ControllerError;
 use crate::output::OutputSink;
@@ -10,11 +11,13 @@ use crate::registry::{
     ExternalAdapters, Freshness, ProcessAdapters, RefreshKind, RegistryAccess, discover_from_scan,
     filter_tools, filter_units, find_unit, parse_filters, resolve_registry_paths,
 };
+use crate::resolution::{CorrelationIdGenerator, DefaultIdGenerator, ResolutionRequest, resolve};
 
 pub fn dispatch_implemented(
     command: &Command,
     sink: &OutputSink,
     cli_state_home: Option<&Path>,
+    cli_profile: Option<&str>,
 ) -> Result<u8, ControllerError> {
     match command {
         Command::Doctor => run_doctor(sink, cli_state_home),
@@ -23,9 +26,122 @@ pub fn dispatch_implemented(
         Command::Info { unit } => run_info(sink, unit),
         Command::Tools => run_tools(sink),
         Command::Interfaces { validate } => run_interfaces(sink, *validate),
+        Command::Dev { .. } | Command::Build { .. } | Command::Check { .. } => {
+            let (verb, unit, explain, execute) =
+                command.lifecycle_parts().expect("lifecycle command");
+            run_lifecycle(
+                sink,
+                verb,
+                unit,
+                explain,
+                execute,
+                cli_profile,
+                cli_state_home,
+            )
+        }
         _ => Err(ControllerError::internal(
             "dispatch_implemented called for unimplemented command",
         )),
+    }
+}
+
+fn run_lifecycle(
+    sink: &OutputSink,
+    verb: crate::resolution::LifecycleVerb,
+    unit_id: &str,
+    explain: bool,
+    execute: bool,
+    cli_profile: Option<&str>,
+    cli_state_home: Option<&Path>,
+) -> Result<u8, ControllerError> {
+    // S4 must not create operational state.
+    let _ = cli_state_home;
+
+    let access = access()?;
+    let mut id_gen = DefaultIdGenerator::default();
+    let session_id = id_gen.next_id();
+    let path_dirs: Vec<PathBuf> = std::env::var_os("PATH")
+        .map(|p| std::env::split_paths(&p).collect())
+        .unwrap_or_default();
+    let env_profile = std::env::var("TAKOGAMI_PROFILE").ok();
+
+    let request = ResolutionRequest {
+        session_id: session_id.clone(),
+        unit_id: unit_id.into(),
+        verb,
+        explicit_profile: cli_profile.map(str::to_string),
+        explain,
+        execute_requested: execute,
+    };
+
+    let success = match resolve(&access, request, path_dirs, env_profile, &mut id_gen) {
+        Ok(s) => s,
+        Err(mut err) => {
+            if err.session_id().is_none()
+                && let ControllerError::Resolution {
+                    session_id: sid, ..
+                } = &mut err
+            {
+                *sid = Some(session_id.clone());
+            }
+            return sink
+                .emit_error(verb.as_str(), &err)
+                .map_err(|e| ControllerError::internal(e.to_string()));
+        }
+    };
+
+    // Class unavailable after a valid plan.
+    if success.plan.resolved().execution_class != ExecutionClass::Direct {
+        let err = ControllerError::ExecutionClassUnavailable {
+            message: format!(
+                "execution_class={} with provider {:?} is not executable in S4",
+                success.plan.resolved().execution_class.as_str(),
+                success.plan.resolved().runtime_provider
+            ),
+            session_id: session_id.clone(),
+            plan_digest: Some(success.plan.plan_digest().to_string()),
+        };
+        return sink
+            .emit_error_with_explanation(
+                verb.as_str(),
+                &err,
+                Some(&success.explanation),
+                Some(success.freshness),
+            )
+            .map_err(|e| ControllerError::internal(e.to_string()));
+    }
+
+    if execute {
+        let err = ControllerError::ExecutionUnavailable {
+            session_id: session_id.clone(),
+            plan_digest: Some(success.plan.plan_digest().to_string()),
+        };
+        return sink
+            .emit_error_with_explanation(
+                verb.as_str(),
+                &err,
+                Some(&success.explanation),
+                Some(success.freshness),
+            )
+            .map_err(|e| ControllerError::internal(e.to_string()));
+    }
+
+    if explain {
+        sink.emit_explanation(
+            verb.as_str(),
+            &success.plan,
+            &success.explanation,
+            success.freshness,
+        )
+        .map_err(|e| ControllerError::internal(e.to_string()))
+    } else {
+        sink.emit_plan(
+            verb.as_str(),
+            &success.plan,
+            &success.explanation,
+            success.freshness,
+        )
+        .map_err(|e| ControllerError::internal(e.to_string()))
     }
 }
 

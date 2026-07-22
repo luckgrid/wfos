@@ -8,7 +8,8 @@ use crate::contracts::{RegistryGeneration, fingerprint_file};
 use crate::error::ControllerError;
 
 use super::types::{
-    Freshness, RegistryFileKind, ScanDocument, ToolsDocument, UnitRecord, UnitsDocument,
+    AuthoredUnitDescriptor, Freshness, PoliciesDocument, ProfilesDocument, RegistryFileKind,
+    ScanDocument, ToolsDocument, UnitRecord, UnitsDocument,
 };
 
 /// Locations for Ontarch registry JSON and workspace root (for fingerprint path resolve).
@@ -64,13 +65,13 @@ fn find_registry_from_cwd() -> Result<PathBuf, ControllerError> {
 fn infer_workspace_root(registry_root: &Path) -> PathBuf {
     // …/Workstreams/Build/src/workspaces/wfos/packages/ontarch/registry → Workstreams
     let mut p = registry_root.to_path_buf();
-    for _ in 0..6 {
+    for _ in 0..8 {
         if !p.pop() {
             break;
         }
-    }
-    if p.join("Build").is_dir() || p.join(".agents").is_dir() {
-        return p;
+        if p.join("Build").is_dir() || p.join(".agents").is_dir() {
+            return p;
+        }
     }
     std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
 }
@@ -155,6 +156,55 @@ impl RegistryAccess {
         let doc: ToolsDocument = serde_json::from_str(&text)
             .map_err(|e| ControllerError::invalid_registry(format!("malformed tools.json: {e}")))?;
         Ok((doc, Freshness::Hit))
+    }
+
+    pub fn load_profiles(&self) -> Result<ProfilesDocument, ControllerError> {
+        let path = self.file_path(RegistryFileKind::Profiles);
+        if !path.exists() {
+            return Err(ControllerError::invalid_registry(format!(
+                "profiles.json missing at {}",
+                path.display()
+            )));
+        }
+        let text = fs::read_to_string(&path).map_err(|e| {
+            ControllerError::invalid_registry(format!("cannot read {}: {e}", path.display()))
+        })?;
+        serde_json::from_str(&text)
+            .map_err(|e| ControllerError::invalid_registry(format!("malformed profiles.json: {e}")))
+    }
+
+    pub fn load_policies(&self) -> Result<PoliciesDocument, ControllerError> {
+        let path = self.file_path(RegistryFileKind::Policies);
+        if !path.exists() {
+            return Err(ControllerError::invalid_registry(format!(
+                "policies.json missing at {}",
+                path.display()
+            )));
+        }
+        let text = fs::read_to_string(&path).map_err(|e| {
+            ControllerError::invalid_registry(format!("cannot read {}: {e}", path.display()))
+        })?;
+        serde_json::from_str(&text)
+            .map_err(|e| ControllerError::invalid_registry(format!("malformed policies.json: {e}")))
+    }
+
+    /// Full authored descriptor via the TOML crate (not the S3 awk-subset fallback).
+    pub fn load_authored_unit_descriptor(
+        &self,
+        path: &Path,
+    ) -> Result<AuthoredUnitDescriptor, ControllerError> {
+        let text = fs::read_to_string(path).map_err(|e| {
+            ControllerError::invalid_registry(format!(
+                "cannot read authored descriptor {}: {e}",
+                path.display()
+            ))
+        })?;
+        toml::from_str(&text).map_err(|e| {
+            ControllerError::invalid_registry(format!(
+                "invalid authored descriptor {}: {e}",
+                path.display()
+            ))
+        })
     }
 
     /// Source fallback: provisional units from `*.descriptor.toml` under configured roots.
@@ -269,7 +319,7 @@ fn provisional_from_descriptor(path: &Path) -> Option<UnitRecord> {
         runtime: None,
         path: Some(path.display().to_string()),
         native_manifests: Vec::new(),
-        entrypoints: serde_json::json!({}),
+        entrypoints: BTreeMap::new(),
         cli: None,
         provides: Vec::new(),
         requires: Vec::new(),

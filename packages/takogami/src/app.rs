@@ -71,7 +71,12 @@ async fn dispatch(session: TakogamiSession) -> AppResult<ControllerError> {
     };
 
     if command.is_implemented() {
-        match commands::dispatch_implemented(&command, &sink, session.cli.state_home.as_deref()) {
+        match commands::dispatch_implemented(
+            &command,
+            &sink,
+            session.cli.state_home.as_deref(),
+            session.cli.profile.as_deref(),
+        ) {
             Ok(code) => Ok(Some(code)),
             Err(error) => {
                 let code = sink

@@ -512,7 +512,7 @@ _selfcheck_manifest_archive_reason() {
 _selfcheck_routing_projection() {
   ontarch_info "routing projection (selfcheck)"
   local full rec
-  full='{"id":"proj-fixture","kind":"runtime-controller","title":"Proj","status":"active","paths":{"root":"x"},"native":{"manifests":["Cargo.toml"]},"cli":{"entry":"takogami","commands":["build","doctor"]},"entrypoints":{"build":{"program":"moon","args":["run","takogami:build"],"cwd":".","env_keys":["PATH"],"backend":"moon","adapter":"moon-task","source_manifests":["Cargo.toml"],"required_policies":["panoply.agent"]},"legacy":"moon run x"},"capabilities":{"provides":["a"],"requires":["b"]},"policy":{"allow_git_push":false}}'
+  full='{"id":"proj-fixture","kind":"runtime-controller","title":"Proj","status":"active","paths":{"root":"x"},"native":{"manifests":["Cargo.toml"]},"cli":{"entry":"takogami","commands":["build","doctor"]},"entrypoints":{"build":{"program":"moon","args":["run","takogami:build"],"cwd":".","env_keys":["PATH"],"backend":"moon","adapter":"moon-task","source_manifests":["Cargo.toml"],"required_policies":["panoply.agent"],"execution_class":"direct","runtime_provider":null},"legacy":"moon run x"},"capabilities":{"provides":["a"],"requires":["b"]},"policy":{"allow_git_push":false}}'
   rec="$(ontarch_unit_record "$full" "central")"
   if ! jq -e '
     .cli.entry == "takogami"
@@ -525,6 +525,11 @@ _selfcheck_routing_projection() {
     and .entrypoints.build.adapter == "moon-task"
     and (.entrypoints.build.source_manifests | index("Cargo.toml"))
     and (.entrypoints.build.required_policies | index("panoply.agent"))
+    and .entrypoints.build.execution_class == "direct"
+    and (
+      (.entrypoints.build | has("runtime_provider") | not)
+      or .entrypoints.build.runtime_provider == null
+    )
     and .entrypoints.legacy == "moon run x"
     and (.native_manifests | index("Cargo.toml"))
   ' <<<"$rec" >/dev/null; then

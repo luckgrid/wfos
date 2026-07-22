@@ -81,8 +81,42 @@
               "backend": { "type": "string" },
               "adapter": { "type": "string" },
               "source_manifests": { "type": "array", "items": { "type": "string" } },
-              "required_policies": { "type": "array", "items": { "type": "string" } }
-            }
+              "required_policies": { "type": "array", "items": { "type": "string" } },
+              "execution_class": {
+                "type": "string",
+                "enum": ["direct", "interactive_session"],
+                "default": "direct"
+              },
+              "runtime_provider": {
+                "type": ["string", "null"],
+                "description": "Required non-empty when execution_class is interactive_session; null/absent for direct."
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": { "execution_class": { "const": "interactive_session" } },
+                  "required": ["execution_class"]
+                },
+                "then": {
+                  "required": ["runtime_provider"],
+                  "properties": {
+                    "runtime_provider": { "type": "string", "minLength": 1 }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": { "execution_class": { "const": "direct" } },
+                  "required": ["execution_class"]
+                },
+                "then": {
+                  "properties": {
+                    "runtime_provider": { "type": "null" }
+                  }
+                }
+              }
+            ]
           }
         ]
       }

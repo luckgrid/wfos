@@ -1,4 +1,4 @@
-use crate::exit_codes::{CONTRACT, INTERNAL, NOT_IMPLEMENTED, USAGE};
+use crate::exit_codes::{CONTRACT, INTERNAL, NOT_IMPLEMENTED, RESOLUTION, USAGE};
 use miette::Diagnostic;
 use thiserror::Error;
 
@@ -39,6 +39,30 @@ pub enum ControllerError {
     #[error("unavailable source: {message}")]
     #[diagnostic(code(takogami::unavailable_source))]
     UnavailableSource { message: String },
+
+    #[error("resolution failed ({code}): {message}")]
+    #[diagnostic(code(takogami::resolution))]
+    Resolution {
+        code: String,
+        message: String,
+        session_id: Option<String>,
+        explanation_partial: Option<serde_json::Value>,
+    },
+
+    #[error("execution unavailable in S4 (plan-only): session={session_id}")]
+    #[diagnostic(code(takogami::execution_unavailable))]
+    ExecutionUnavailable {
+        session_id: String,
+        plan_digest: Option<String>,
+    },
+
+    #[error("execution class unavailable: {message}")]
+    #[diagnostic(code(takogami::execution_class_unavailable))]
+    ExecutionClassUnavailable {
+        message: String,
+        session_id: String,
+        plan_digest: Option<String>,
+    },
 
     #[error("internal error: {message}")]
     #[diagnostic(code(takogami::internal))]
@@ -108,17 +132,29 @@ impl ControllerError {
         }
     }
 
+    pub fn session_id(&self) -> Option<&str> {
+        match self {
+            Self::Resolution { session_id, .. } => session_id.as_deref(),
+            Self::ExecutionUnavailable { session_id, .. }
+            | Self::ExecutionClassUnavailable { session_id, .. } => Some(session_id.as_str()),
+            _ => None,
+        }
+    }
+
     pub fn exit_code(&self) -> u8 {
         match self {
             Self::Usage { .. } => USAGE,
-            Self::NotImplemented { .. } => NOT_IMPLEMENTED,
+            Self::NotImplemented { .. }
+            | Self::ExecutionUnavailable { .. }
+            | Self::ExecutionClassUnavailable { .. } => NOT_IMPLEMENTED,
             Self::Contract { .. } | Self::InvalidRegistry { .. } => CONTRACT,
             Self::NotFound { .. } | Self::Ambiguous { .. } | Self::InvalidFilter { .. } => USAGE,
+            Self::Resolution { .. } => RESOLUTION,
             Self::UnavailableSource { .. } | Self::Internal { .. } => INTERNAL,
         }
     }
 
-    pub fn diagnostic_code(&self) -> &'static str {
+    pub fn diagnostic_code(&self) -> &str {
         match self {
             Self::Usage { .. } => "usage",
             Self::NotImplemented { .. } => "not_implemented",
@@ -128,6 +164,9 @@ impl ControllerError {
             Self::InvalidRegistry { .. } => "invalid_registry",
             Self::InvalidFilter { .. } => "invalid_filter",
             Self::UnavailableSource { .. } => "unavailable_source",
+            Self::Resolution { code, .. } => code.as_str(),
+            Self::ExecutionUnavailable { .. } => "execution_unavailable",
+            Self::ExecutionClassUnavailable { .. } => "execution_class_unavailable",
             Self::Internal { .. } => "internal",
         }
     }

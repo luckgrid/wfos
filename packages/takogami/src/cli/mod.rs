@@ -242,7 +242,33 @@ impl Command {
                 | Self::Info { .. }
                 | Self::Tools
                 | Self::Interfaces { .. }
+                | Self::Dev { .. }
+                | Self::Build { .. }
+                | Self::Check { .. }
         )
+    }
+
+    /// Shared lifecycle parts: (verb, unit, explain, execute).
+    pub fn lifecycle_parts(&self) -> Option<(crate::resolution::LifecycleVerb, &str, bool, bool)> {
+        use crate::resolution::LifecycleVerb;
+        match self {
+            Self::Dev {
+                unit,
+                explain,
+                execute,
+            } => Some((LifecycleVerb::Dev, unit.as_str(), *explain, *execute)),
+            Self::Build {
+                unit,
+                explain,
+                execute,
+            } => Some((LifecycleVerb::Build, unit.as_str(), *explain, *execute)),
+            Self::Check {
+                unit,
+                explain,
+                execute,
+            } => Some((LifecycleVerb::Check, unit.as_str(), *explain, *execute)),
+            _ => None,
+        }
     }
 }
 

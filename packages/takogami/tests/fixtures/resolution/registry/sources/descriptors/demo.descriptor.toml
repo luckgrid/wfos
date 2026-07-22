@@ -1,0 +1,40 @@
+id = "demo"
+kind = "package"
+title = "Demo unit"
+status = "active"
+
+[paths]
+root = "demo"
+
+[native]
+manifests = ["Cargo.toml", "moon.yml"]
+
+[entrypoints.dev]
+program = "demo-bin"
+args = []
+cwd = "demo"
+env_keys = ["PATH"]
+backend = "native"
+adapter = "direct"
+source_manifests = ["Cargo.toml"]
+required_policies = ["panoply.agent"]
+
+[entrypoints.build]
+program = "moon"
+args = ["run", "demo:build"]
+cwd = "demo"
+env_keys = ["PATH"]
+backend = "moon"
+adapter = "moon-task"
+source_manifests = ["moon.yml"]
+required_policies = ["panoply.agent"]
+
+[entrypoints.check]
+program = "moon"
+args = ["run", "demo:check"]
+cwd = "demo"
+env_keys = ["PATH"]
+backend = "moon"
+adapter = "moon-task"
+source_manifests = ["Cargo.toml", "moon.yml"]
+required_policies = ["panoply.agent"]

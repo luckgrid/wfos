@@ -82,7 +82,7 @@ pub fn discover_from_scan(
                 runtime: None,
                 path: Some(ws.path.clone()),
                 native_manifests: ws.native_manifests.clone(),
-                entrypoints: serde_json::json!({}),
+                entrypoints: std::collections::BTreeMap::new(),
                 cli: None,
                 provides: Vec::new(),
                 requires: Vec::new(),

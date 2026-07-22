@@ -7,11 +7,11 @@ policy, command execution records, and explain output. It coordinates the
 
 It does not own persistent terminal PTYs (tmux / optional Herdr) or desktop window restore.
 
-**Status: E09.S2.1 — command-record contract.** Public type/schema is
-`RuntimeCommandRecord` / `runtime-command-record.schema.json` with
-`record_kind: command_execution`. S3 discovery/queries/doctor remain. Lifecycle
-resolve/execute, policy, graph/bin, and `session *` remain `not_implemented`
-until later stories. Next: **E09.S4** (deterministic resolution).
+**Status: E09.S4 — deterministic resolution (plan-only).** Lifecycle `dev` / `build` /
+`check` resolve a sealed pre-policy plan and optional `--explain` output. They do **not**
+spawn processes, evaluate policy, or persist `RuntimeCommandRecord`. `--execute` returns
+`execution_unavailable` (exit 10). Non-`direct` execution classes return
+`execution_class_unavailable` (exit 10). Next: **E09.S5** (policy).
 
 ## Build
 
@@ -34,13 +34,23 @@ takogami list units|tools [--filter FIELD=VALUE] [--json]
 takogami info <unit> [--json]
 takogami tools [--json]
 takogami interfaces [--validate] [--json]
-takogami dev|build|check|graph|bin|session …
+takogami dev|build|check <unit> [--explain] [--execute] [--json]
+  → plan-only resolution (S4); --execute → execution_unavailable
+takogami graph|bin|session …
   → not_implemented (exit 10) until later E09 stories
 ```
 
 Global flags: `--json`, `--profile`, `--state-home`, `--no-color`, `--verbose`.
 
 Registry override for tests/fixtures: `TAKOGAMI_ONTARCH_REGISTRY`, `TAKOGAMI_WORKSPACE_ROOT`.
+
+### Lifecycle resolution (S4)
+
+- Profile precedence: CLI `--profile` → `TAKOGAMI_PROFILE` → `workspace-dev` → fail closed.
+- No shell: structured argv boundaries preserved; legacy strings use the constrained parser.
+- No spawn: resolution never runs the resolved executable, Panoply, Ontarch, Herdr, or tmux.
+- No operational state: `--state-home` is ignored for writes; no command-record files.
+- Authored descriptor TOML is authoritative on stale/miss; `units.json` is a cache.
 
 `takogami build <unit>` is the unit lifecycle verb. A separate `workstream` namespace is
 post-MVP. `takogami session *` (S6) reads **command execution records**, not composed work
@@ -54,10 +64,10 @@ sessions.
 | 1 | Internal / unavailable source |
 | 2 | Usage (invalid flags, not-found, ambiguous, invalid-filter) |
 | 3 | Contract / invalid-registry |
-| 4 | Resolution failure (reserved) |
+| 4 | Resolution failure |
 | 5 | Policy deny (reserved) |
 | 6 | Policy gate (reserved) |
-| 10 | Not implemented |
+| 10 | Not implemented / execution_unavailable / execution_class_unavailable |
 
 ## Freshness (S3)
 

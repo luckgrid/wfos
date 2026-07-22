@@ -1,0 +1,20 @@
+id = "panoply-demo"
+kind = "package"
+title = "Panoply demo"
+status = "active"
+
+[paths]
+root = "demo"
+
+[native]
+manifests = ["Cargo.toml"]
+
+[entrypoints.build]
+program = "rg"
+args = ["--version"]
+cwd = "demo"
+env_keys = ["PATH"]
+backend = "panoply"
+adapter = "native-tool"
+source_manifests = ["Cargo.toml"]
+required_policies = ["panoply.agent"]

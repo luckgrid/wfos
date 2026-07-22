@@ -11,6 +11,8 @@ pub use adapters::{ExternalAdapters, ProcessAdapters, RefreshKind};
 pub use query::{UnitFilters, filter_tools, filter_units, find_unit, parse_filters};
 pub use scan::{ScanDiscovery, discover_from_scan};
 pub use types::{
-    Freshness, ProvisionalUnit, RegistryFileKind, ScanDocument, ToolRecord, ToolsDocument,
-    UnitRecord, UnitsDocument, WorkspaceScanEntry,
+    AuthoredNative, AuthoredPaths, AuthoredUnitDescriptor, EntrypointDefinition, Freshness,
+    PoliciesDocument, PolicyRecord, ProfileRecord, ProfilesDocument, ProvisionalUnit,
+    RegistryFileKind, ScanDocument, StructuredEntrypoint, ToolRecord, ToolsDocument,
+    UnitDefinition, UnitRecord, UnitsDocument, WorkspaceScanEntry,
 };

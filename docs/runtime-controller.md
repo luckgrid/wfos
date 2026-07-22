@@ -11,9 +11,10 @@ Those belong to optional providers (tmux / Herdr for terminals; Hammerspoon and 
 desktop layout; an external gateway such as Push for message/schedule ingress). See
 [native-toolchain.md](native-toolchain.md).
 
-Status: **in progress; E09.S4 is next.** Discovery, list/info/tools/interfaces, complete doctor,
-and the command-record contract correction are implemented. Lifecycle resolution, policy,
-execution, and persisted **command execution records** remain ahead. See
+Status: **in progress; E09.S4 complete (plan-only resolution).** Discovery, list/info/tools/
+interfaces, doctor, the command-record contract, and deterministic lifecycle resolution/
+`--explain` are implemented. Policy evaluation, process execution, and persisted **command
+execution records** remain ahead (E09.S5–S6). See
 [`packages/takogami/README.md`](../packages/takogami/README.md) for the proved surface;
 build position lives in `Build/bin/wfos/STATE.md` and `SESSIONS.md`.
 
@@ -37,11 +38,15 @@ takogami info <unit>  show resolved metadata for a unit
 takogami doctor       validate local machine readiness
 takogami tools        report tools from Panoply / Ontarch projections
 takogami interfaces   validate descriptors, schemas, policies, registry entries
-takogami dev|build|check <unit>   route common workflow commands
+takogami dev|build|check <unit> [--explain] [--execute]   plan-only resolution (S4)
 takogami graph        project metadata-plane graph
 takogami bin report|cleanup   project bin/archive contracts
 takogami session list|show|latest   read command execution records (not work sessions)
 ```
+
+Lifecycle verbs resolve a sealed pre-policy plan (no spawn). `--explain` prints provenance;
+`--execute` returns `execution_unavailable` until S5/S6. Profile precedence is CLI
+`--profile` → `TAKOGAMI_PROFILE` → `workspace-dev` → fail closed.
 
 `takogami session *` is the operational **command-record** query surface (S6). It does not
 start/stop composed work sessions. Replaying a record does not restore a terminal pane or
@@ -89,13 +94,14 @@ sequenceDiagram
   U->>K: takogami build unit
   K->>C: read descriptor and policy
   C-->>K: unit metadata
+  Note over K: S4 seals plan + explain; no spawn
   K->>D: run native build command
   D-->>K: result
   K->>K: write command execution record
 ```
 
-Registry write-back after every routed command is **not** E09 MVP; Ontarch remains the registry
-owner.
+S4 stops at the sealed plan. Policy (S5) and spawn/records (S6) are later. Registry write-back
+after every routed command is **not** E09 MVP; Ontarch remains the registry owner.
 
 ## Composition boundary
 

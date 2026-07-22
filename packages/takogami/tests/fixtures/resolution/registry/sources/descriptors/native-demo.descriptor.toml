@@ -1,0 +1,20 @@
+id = "native-demo"
+kind = "package"
+title = "Native demo"
+status = "active"
+
+[paths]
+root = "demo"
+
+[native]
+manifests = ["Cargo.toml"]
+
+[entrypoints.build]
+program = "demo-bin"
+args = ["a;b", "x|y", "$HOME"]
+cwd = "demo"
+env_keys = ["PATH"]
+backend = "native"
+adapter = "direct"
+source_manifests = ["Cargo.toml"]
+required_policies = ["panoply.agent"]

@@ -1,0 +1,25 @@
+{
+  "generated_at": "2026-07-21T00:00:00Z",
+  "profiles": [
+    {
+      "id": "workspace-dev",
+      "title": "Workspace developer",
+      "purpose": "test",
+      "rails": "panoply.agent",
+      "rails_bin": "agent-bin",
+      "isolation_mode": "worktree",
+      "isolation_jj": "opt-in",
+      "session_state_home": null
+    },
+    {
+      "id": "alt-profile",
+      "title": "Alt",
+      "purpose": "test alt",
+      "rails": "panoply.agent",
+      "rails_bin": "agent-bin",
+      "isolation_mode": "branch",
+      "isolation_jj": "opt-in",
+      "session_state_home": null
+    }
+  ]
+}

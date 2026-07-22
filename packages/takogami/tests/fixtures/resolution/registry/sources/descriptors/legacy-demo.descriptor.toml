@@ -1,0 +1,13 @@
+id = "legacy-demo"
+kind = "package"
+title = "Legacy demo"
+status = "active"
+
+[paths]
+root = "demo"
+
+[native]
+manifests = ["moon.yml"]
+
+[entrypoints]
+build = "moon run demo:check"

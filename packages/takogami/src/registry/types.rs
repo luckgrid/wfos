@@ -1,5 +1,8 @@
-//! Registry JSON shapes projected by Ontarch (subset needed for S3 queries).
+//! Registry JSON shapes projected by Ontarch (subset needed for S3/S4).
 
+use std::collections::BTreeMap;
+
+use crate::contracts::ExecutionClass;
 use crate::contracts::RegistryGeneration;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -47,6 +50,37 @@ impl RegistryFileKind {
     }
 }
 
+/// Lifecycle verb → command, matching Ontarch structured/legacy entrypoints.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(untagged)]
+pub enum EntrypointDefinition {
+    Legacy(String),
+    Structured(StructuredEntrypoint),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct StructuredEntrypoint {
+    pub program: String,
+    #[serde(default)]
+    pub args: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cwd: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub env_keys: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backend: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub adapter: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub source_manifests: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub required_policies: Vec<String>,
+    #[serde(default)]
+    pub execution_class: ExecutionClass,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_provider: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct UnitsDocument {
     pub generated_at: String,
@@ -82,7 +116,7 @@ pub struct UnitRecord {
     #[serde(default)]
     pub native_manifests: Vec<String>,
     #[serde(default)]
-    pub entrypoints: Value,
+    pub entrypoints: BTreeMap<String, EntrypointDefinition>,
     #[serde(default)]
     pub cli: Option<Value>,
     #[serde(default)]
@@ -157,4 +191,87 @@ pub struct ToolRecord {
 pub struct ProvisionalUnit {
     pub unit: UnitRecord,
     pub evidence: Vec<String>,
+}
+
+/// Flattened profile projection (matches `profiles.json` top-level fields).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ProfilesDocument {
+    pub generated_at: String,
+    #[serde(default)]
+    pub profiles: Vec<ProfileRecord>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ProfileRecord {
+    pub id: String,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub purpose: Option<String>,
+    #[serde(default)]
+    pub rails: Option<String>,
+    #[serde(default)]
+    pub rails_bin: Option<String>,
+    #[serde(default)]
+    pub isolation_mode: Option<String>,
+    #[serde(default)]
+    pub isolation_jj: Option<String>,
+    #[serde(default)]
+    pub session_state_home: Option<String>,
+    /// Remainder of the flattened projection (paths, commands, skills, …).
+    #[serde(flatten)]
+    pub rest: BTreeMap<String, Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PoliciesDocument {
+    pub generated_at: String,
+    #[serde(default)]
+    pub policies: Vec<PolicyRecord>,
+}
+
+/// S4 needs id + applies_to; bodies stay opaque for S5.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PolicyRecord {
+    pub id: String,
+    #[serde(default)]
+    pub applies_to: Option<String>,
+    #[serde(flatten)]
+    pub rest: BTreeMap<String, Value>,
+}
+
+/// Authored descriptor TOML (source-authoritative routing).
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+pub struct AuthoredUnitDescriptor {
+    pub id: String,
+    #[serde(default)]
+    pub paths: Option<AuthoredPaths>,
+    #[serde(default)]
+    pub native: Option<AuthoredNative>,
+    #[serde(default)]
+    pub entrypoints: BTreeMap<String, EntrypointDefinition>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+pub struct AuthoredPaths {
+    pub root: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+pub struct AuthoredNative {
+    #[serde(default)]
+    pub manifests: Vec<String>,
+}
+
+/// Normalized unit definition shared by hit projections and authored TOML.
+#[derive(Debug, Clone, PartialEq)]
+pub struct UnitDefinition {
+    pub id: String,
+    pub path: Option<String>,
+    pub root: Option<String>,
+    pub native_manifests: Vec<String>,
+    pub entrypoints: BTreeMap<String, EntrypointDefinition>,
+    pub descriptor_path: String,
+    pub provisional: bool,
+    pub routing_complete: bool,
 }

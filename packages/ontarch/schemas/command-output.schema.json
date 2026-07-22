@@ -89,7 +89,8 @@
         "env_keys",
         "profile_id",
         "policy_ids",
-        "registry_generation"
+        "registry_generation",
+        "execution_class"
       ],
       "additionalProperties": false,
       "properties": {
@@ -112,7 +113,15 @@
         },
         "profile_id": { "type": "string" },
         "policy_ids": { "type": "array", "items": { "type": "string" } },
-        "registry_generation": { "$ref": "#/definitions/registry_generation" }
+        "registry_generation": { "$ref": "#/definitions/registry_generation" },
+        "execution_class": {
+          "type": "string",
+          "enum": ["direct", "interactive_session"]
+        },
+        "runtime_provider": {
+          "type": ["string", "null"],
+          "description": "Optional provider id; null/absent for direct execution."
+        }
       }
     },
     "registry_generation": {

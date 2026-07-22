@@ -266,6 +266,8 @@ fn resolved_command_redacts_env_to_keys_only() {
                 digest: fingerprint_bytes(b"descriptor").digest,
             }],
         },
+        execution_class: takogami::contracts::ExecutionClass::Direct,
+        runtime_provider: None,
     };
     let value = serde_json::to_value(&cmd).unwrap();
     let text = value.to_string();
@@ -280,6 +282,40 @@ fn resolved_command_redacts_env_to_keys_only() {
     // No inherited environment dump field.
     assert!(value.get("env").is_none());
     assert!(value.get("environment").is_none());
+    assert_eq!(value["execution_class"], "direct");
+    assert!(value.get("runtime_provider").is_none());
+}
+
+#[test]
+fn resolved_command_redaction_holds_with_interactive_fields() {
+    let cmd = ResolvedCommand {
+        schema_version: SCHEMA_VERSION.into(),
+        session_id: "s1".into(),
+        unit_id: "demo".into(),
+        verb: "dev".into(),
+        descriptor_path: "demo.descriptor.toml".into(),
+        descriptor_fingerprint: format!("sha256:{}", fingerprint_bytes(b"x").digest),
+        native_manifests: vec!["moon.yml".into()],
+        backend: "native".into(),
+        adapter: "direct".into(),
+        program: "demo".into(),
+        argv: vec![],
+        cwd: ".".into(),
+        env_keys: vec!["PATH".into()],
+        profile_id: "workspace-dev".into(),
+        policy_ids: vec!["panoply.agent".into()],
+        registry_generation: RegistryGeneration {
+            generated_at: "2026-07-19T00:00:00Z".into(),
+            source_fingerprints: vec![],
+        },
+        execution_class: takogami::contracts::ExecutionClass::InteractiveSession,
+        runtime_provider: Some("herdr".into()),
+    };
+    let text = serde_json::to_string(&cmd).unwrap();
+    assert!(!text.contains("SECRET_VALUE"));
+    assert!(!text.contains("/var/run/herdr.sock"));
+    assert!(text.contains("herdr"));
+    assert!(text.contains("interactive_session"));
 }
 
 #[test]

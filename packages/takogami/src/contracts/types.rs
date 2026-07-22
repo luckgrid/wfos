@@ -7,6 +7,23 @@ use super::fingerprint::SourceFingerprint;
 /// Wire schema version for all Takogami machine contracts.
 pub const SCHEMA_VERSION: &str = "0.1.0";
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum ExecutionClass {
+    #[default]
+    Direct,
+    InteractiveSession,
+}
+
+impl ExecutionClass {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Direct => "direct",
+            Self::InteractiveSession => "interactive_session",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DiagnosticRecord {
     pub code: String,
@@ -38,6 +55,9 @@ pub struct ResolvedCommand {
     pub profile_id: String,
     pub policy_ids: Vec<String>,
     pub registry_generation: RegistryGeneration,
+    pub execution_class: ExecutionClass,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_provider: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

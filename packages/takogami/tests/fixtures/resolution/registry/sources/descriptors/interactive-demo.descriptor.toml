@@ -1,0 +1,22 @@
+id = "interactive-demo"
+kind = "package"
+title = "Interactive demo"
+status = "active"
+
+[paths]
+root = "demo"
+
+[native]
+manifests = ["Cargo.toml"]
+
+[entrypoints.build]
+program = "demo-bin"
+args = []
+cwd = "demo"
+env_keys = ["PATH"]
+backend = "native"
+adapter = "direct"
+source_manifests = ["Cargo.toml"]
+required_policies = ["panoply.agent"]
+execution_class = "interactive_session"
+runtime_provider = "herdr"
