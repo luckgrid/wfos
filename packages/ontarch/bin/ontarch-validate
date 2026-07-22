@@ -30,6 +30,37 @@ _check_enum() {
   return 0
 }
 
+# Keep runtime routing validation aligned with the closed structured-entrypoint schema.
+_routing_entrypoints_ok() {
+  jq -e '
+    (.entrypoints // {}) as $entrypoints
+    | ($entrypoints | type == "object")
+    and all($entrypoints[];
+      (type == "string")
+      or (
+        type == "object"
+        and ((keys - [
+          "program", "args", "cwd", "env_keys", "backend", "adapter",
+          "source_manifests", "required_policies", "execution_class", "runtime_provider"
+        ]) | length == 0)
+        and (.program | type == "string" and length > 0)
+        and ((.args // []) | type == "array" and all(.[]; type == "string"))
+        and ((.env_keys // []) | type == "array" and all(.[]; type == "string"))
+        and ((.source_manifests // []) | type == "array" and all(.[]; type == "string"))
+        and ((.required_policies // []) | type == "array" and all(.[]; type == "string"))
+        and ((.execution_class // "direct") as $class
+          | if $class == "direct" then
+              .runtime_provider == null
+            elif $class == "interactive_session" then
+              (.runtime_provider | type == "string" and length > 0)
+            else
+              false
+            end)
+      )
+    )
+  ' <<<"$1" >/dev/null 2>&1
+}
+
 _validate_descriptors() {
   local schema="$ONTARCH_SCHEMAS/unit.schema.json"
   [ -f "$schema" ] || ontarch_die "missing schema: $schema"
@@ -56,6 +87,8 @@ _validate_descriptors() {
     _check_enum "$full" kind "$schema" "$label" || unit_fail=1
     _check_enum "$full" status "$schema" "$label" || unit_fail=1
     _check_enum "$full" layer "$schema" "$label" || unit_fail=1
+    _routing_entrypoints_ok "$full" \
+      || { ontarch_err "$label: structured entrypoint violates routing schema"; unit_fail=1; }
 
     if [ "$unit_fail" -eq 0 ]; then
       printf '  %sok%s  %-12s %s%s%s\n' "$_C_GREEN" "$_C_RESET" "$id" "$_C_DIM" "$f" "$_C_RESET"
@@ -540,6 +573,34 @@ _selfcheck_routing_projection() {
   fi
 }
 
+_selfcheck_routing_schema() {
+  ontarch_info "routing schema parity (selfcheck)"
+  local valid_direct valid_interactive unknown omitted_provider direct_provider interactive_empty invalid_failed=0
+  valid_direct='{"entrypoints":{"build":{"program":"moon","args":["run","x"]}}}'
+  valid_interactive='{"entrypoints":{"dev":{"program":"demo","execution_class":"interactive_session","runtime_provider":"herdr"}}}'
+  unknown='{"entrypoints":{"build":{"program":"moon","arg":["run","x"]}}}'
+  omitted_provider='{"entrypoints":{"build":{"program":"moon","runtime_provider":"herdr"}}}'
+  direct_provider='{"entrypoints":{"build":{"program":"moon","execution_class":"direct","runtime_provider":"herdr"}}}'
+  interactive_empty='{"entrypoints":{"dev":{"program":"demo","execution_class":"interactive_session","runtime_provider":""}}}'
+
+  if _routing_entrypoints_ok "$valid_direct" && _routing_entrypoints_ok "$valid_interactive"; then
+    printf '  %sok%s  valid direct + interactive routing accepted\n' "$_C_GREEN" "$_C_RESET"
+  else
+    ontarch_err "routing schema selfcheck: valid fixtures should pass"
+    fail=1
+  fi
+  for fixture in "$unknown" "$omitted_provider" "$direct_provider" "$interactive_empty"; do
+    if _routing_entrypoints_ok "$fixture"; then
+      ontarch_err "routing schema selfcheck: invalid fixture should fail"
+      fail=1
+      invalid_failed=1
+    fi
+  done
+  if [ "$invalid_failed" -eq 0 ]; then
+    printf '  %sok%s  unknown/provider-invalid routing rejected\n' "$_C_GREEN" "$_C_RESET"
+  fi
+}
+
 # Registry generation fingerprints must be present on units.json after sync (FR-14 / E09.S3).
 _selfcheck_registry_generation() {
   ontarch_info "registry generation (selfcheck)"
@@ -722,6 +783,7 @@ main() {
   _selfcheck_skillspector_gate
   _selfcheck_skill_scan_gate
   _selfcheck_routing_projection
+  _selfcheck_routing_schema
   _selfcheck_registry_generation
   _validate_scan
   _validate_bin_inventory

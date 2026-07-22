@@ -95,6 +95,58 @@ fn minimal_record(outcome: &str) -> RuntimeCommandRecord {
 }
 
 #[test]
+fn unit_schema_closes_structured_entrypoints_and_defaults_to_direct() {
+    let validator = compile_schema("unit.schema.json");
+    let descriptor = |entrypoint: Value| {
+        serde_json::json!({
+            "id": "demo",
+            "kind": "package",
+            "title": "Demo",
+            "status": "active",
+            "paths": {"root": "demo"},
+            "entrypoints": {"build": entrypoint}
+        })
+    };
+
+    assert_valid(
+        &validator,
+        &descriptor(serde_json::json!({"program": "moon", "args": ["run", "demo:build"]})),
+    );
+    assert_valid(
+        &validator,
+        &descriptor(serde_json::json!({
+            "program": "demo",
+            "execution_class": "interactive_session",
+            "runtime_provider": "herdr"
+        })),
+    );
+    assert_invalid(
+        &validator,
+        &descriptor(serde_json::json!({"program": "moon", "arg": ["run"]})),
+    );
+    assert_invalid(
+        &validator,
+        &descriptor(serde_json::json!({"program": "moon", "runtime_provider": "herdr"})),
+    );
+    assert_invalid(
+        &validator,
+        &descriptor(serde_json::json!({
+            "program": "moon",
+            "execution_class": "direct",
+            "runtime_provider": "herdr"
+        })),
+    );
+    assert_invalid(
+        &validator,
+        &descriptor(serde_json::json!({
+            "program": "demo",
+            "execution_class": "interactive_session",
+            "runtime_provider": ""
+        })),
+    );
+}
+
+#[test]
 fn command_envelope_fixture_round_trips_and_validates() {
     let validator = compile_schema("command-output.schema.json");
     let value = load_json(&fixture("command-envelope-valid.json"));

@@ -9,6 +9,7 @@ use crate::registry::{PoliciesDocument, PolicyRecord, ProfileRecord, ProfilesDoc
 #[derive(Debug, Clone)]
 pub struct SelectedProfile {
     pub profile: ProfileRecord,
+    pub policies: Vec<PolicyRecord>,
     pub policy_ids: Vec<String>,
     pub policy_origins: Vec<(String, String)>,
 }
@@ -83,6 +84,10 @@ pub fn collect_policy_refs(
     }
 
     let policy_ids: Vec<String> = origins.keys().cloned().collect();
+    let selected_policies = policy_ids
+        .iter()
+        .filter_map(|id| by_id.get(id.as_str()).map(|policy| (*policy).clone()))
+        .collect();
     let policy_origins: Vec<(String, String)> = origins
         .iter()
         .map(|(id, labels)| {
@@ -94,6 +99,7 @@ pub fn collect_policy_refs(
 
     Ok(SelectedProfile {
         profile: profile.clone(),
+        policies: selected_policies,
         policy_ids,
         policy_origins,
     })

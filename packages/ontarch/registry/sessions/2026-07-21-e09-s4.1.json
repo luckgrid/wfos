@@ -1,0 +1,34 @@
+{
+  "session_id": "2026-07-21-e09-s4.1",
+  "epic": "E09",
+  "story": "S4.1",
+  "title": "Resolution integrity and failure-provenance hardening",
+  "status": "done",
+  "started_at": "2026-07-22T01:00:00Z",
+  "ended_at": "2026-07-22T02:27:42Z",
+  "changed_paths": [
+    "packages/ontarch/bin/ontarch-validate",
+    "packages/ontarch/schemas/unit.schema.json",
+    "packages/ontarch/registry/sessions/2026-07-21-e09-s4.1.json",
+    "packages/takogami/src/output/mod.rs",
+    "packages/takogami/src/registry/types.rs",
+    "packages/takogami/src/resolution/",
+    "packages/takogami/tests/contracts_roundtrip.rs",
+    "packages/takogami/tests/resolution_cli.rs",
+    "packages/takogami/README.md",
+    "docs/runtime-controller.md"
+  ],
+  "outcome": "E09.S4.1 closes the reviewed S4 integrity gaps: every resolution error carries one safe typed partial trace; the versioned digest binds the complete public command plus canonical executable/cwd/manifest identities, selection provenance, and diagnostics; authored routing parse failures fail closed; structured entrypoint fields match the closed schema; manifest authorization uses exact canonical identity; ordered PATH remains first-hit while distinct Panoply projections return executable_ambiguous; and ResolveSuccess exposes the immutable profile/policy handoff required by S5. No policy decision, spawn path, terminal-provider control, state-home creation, or RuntimeCommandRecord persistence was added.",
+  "validation": "PASS: Takogami semantic check; 37 library + 17 CLI smoke + 17 contract + 27 resolution CLI tests (98 total); lint and formatting checks; Ontarch sync/validate including routing-schema parity; Panoply generation and substrate validation.",
+  "decisions": [
+    "Keep SCHEMA_VERSION 0.1.0; failure provenance and executable-selection evidence are additive explanation data.",
+    "Represent completed resolution steps with a closed snake-case enum and keep success/failure explanation types distinct.",
+    "Hash reversible platform-native path encodings rather than display strings; keep canonical paths private.",
+    "Normalize set-like resolved fields before sealing while preserving argv order exactly.",
+    "Use first-hit semantics for ordered deduplicated PATH input; reserve executable_ambiguous for unordered distinct Panoply candidates.",
+    "Fail closed on malformed requested or unknown-identity authored descriptors without emitting descriptor contents or external absolute paths.",
+    "Do not implement policy evaluation or an executor while preparing an immutable PolicyEvaluationInput handoff."
+  ],
+  "next": "E09.S5",
+  "handoff": "E09.S5 should consume ResolveSuccess::policy_evaluation_input and evaluate the requested operation plus the same immutable digest-bound child plan. It must not reload descriptors, repeat manifest/executable lookup, rebuild argv, or mutate the sealed plan."
+}

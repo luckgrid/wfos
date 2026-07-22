@@ -11,12 +11,13 @@ Those belong to optional providers (tmux / Herdr for terminals; Hammerspoon and 
 desktop layout; an external gateway such as Push for message/schedule ingress). See
 [native-toolchain.md](native-toolchain.md).
 
-Status: **in progress; E09.S4 complete (plan-only resolution).** Discovery, list/info/tools/
-interfaces, doctor, the command-record contract, and deterministic lifecycle resolution/
-`--explain` are implemented. Policy evaluation, process execution, and persisted **command
-execution records** remain ahead (E09.S5–S6). See
+Status: **in progress; deterministic resolution hardening complete (plan-only).** Discovery,
+list/info/tools/interfaces, doctor, the command-record contract, and deterministic lifecycle
+resolution/`--explain` are implemented. Sealed plans bind canonical private execution inputs;
+failed resolution returns a safely redacted typed partial trace. Policy evaluation, process
+execution, and persisted **command execution records** remain ahead. See
 [`packages/takogami/README.md`](../packages/takogami/README.md) for the proved surface;
-build position lives in `Build/bin/wfos/STATE.md` and `SESSIONS.md`.
+implementation provenance lives in [`packages/ontarch/registry/sessions/`](../packages/ontarch/registry/sessions/).
 
 ## Responsibilities
 
@@ -24,12 +25,12 @@ build position lives in `Build/bin/wfos/STATE.md` and `SESSIONS.md`.
 Discover local resources.      Read metadata plane.     Route commands.
 Prepare environments.          Call native tools.     Run WASM components (later).
 Record command attempts.       Apply rails and gates.  Expose system context.
-Coordinate providers.          Do not own PTY servers. Do not snapshot desktops (E09).
+Coordinate providers.          Do not own PTY servers. Do not snapshot desktops in the runtime MVP.
 ```
 
 ## Command surface
 
-### E09 MVP (authoritative for M4)
+### Runtime MVP (authoritative for M4)
 
 ```txt
 takogami scan         discover local resources
@@ -38,21 +39,22 @@ takogami info <unit>  show resolved metadata for a unit
 takogami doctor       validate local machine readiness
 takogami tools        report tools from Panoply / Ontarch projections
 takogami interfaces   validate descriptors, schemas, policies, registry entries
-takogami dev|build|check <unit> [--explain] [--execute]   plan-only resolution (S4)
+takogami dev|build|check <unit> [--explain] [--execute]   plan-only resolution
 takogami graph        project metadata-plane graph
 takogami bin report|cleanup   project bin/archive contracts
 takogami session list|show|latest   read command execution records (not work sessions)
 ```
 
 Lifecycle verbs resolve a sealed pre-policy plan (no spawn). `--explain` prints provenance;
-`--execute` returns `execution_unavailable` until S5/S6. Profile precedence is CLI
+resolution failures print the safely completed portion without a digest. `--execute` returns
+`execution_unavailable` until policy and native execution are implemented. Profile precedence is CLI
 `--profile` → `TAKOGAMI_PROFILE` → `workspace-dev` → fail closed.
 
-`takogami session *` is the operational **command-record** query surface (S6). It does not
+`takogami session *` is the future operational **command-record** query surface. It does not
 start/stop composed work sessions. Replaying a record does not restore a terminal pane or
 window layout.
 
-### Post-MVP (aspirational — do not implement from this list in E09)
+### Post-MVP (aspirational — not part of the runtime MVP)
 
 ```txt
 takogami portable <c>   portable WASM/WASI components (Wisp / E11)
@@ -62,7 +64,7 @@ takogami package …      package translator (Polytope / E11)
 takogami workstream …   Workstreams / gateway routing
 takogami integrate <c>  runtime integrations (archetype runtime-integration; deferred)
 takogami agent          scoped agent rails / agent-interface (E10; brand pending)
-takogami work-session … composed multi-provider restore (post-E09)
+takogami work-session … composed multi-provider restore (post-MVP)
 ```
 
 Optional `integrations/` modules under the runtime-controller package are an implementation
@@ -94,13 +96,13 @@ sequenceDiagram
   U->>K: takogami build unit
   K->>C: read descriptor and policy
   C-->>K: unit metadata
-  Note over K: S4 seals plan + explain; stops here (no spawn)
-  Note over K,D: S5 policy then S6 spawn/records (not yet)
-  K--xD: deferred until S6
+  Note over K: Seal plan + explain; stop here (no spawn)
+  Note over K,D: Policy then spawn/records (not yet)
+  K--xD: deferred until native execution
 ```
 
-S4 stops at the sealed plan. Policy (S5) and spawn/records (S6) are later. Registry write-back
-after every routed command is **not** E09 MVP; Ontarch remains the registry owner.
+The current phase stops at the sealed plan. Policy and spawn/records are later. Registry write-back
+after every routed command is **not** runtime MVP; Ontarch remains the registry owner.
 
 ## Composition boundary
 
@@ -110,8 +112,8 @@ after every routed command is **not** E09 MVP; Ontarch remains the registry owne
 | Tool install and detection | Panoply |
 | Lightweight terminal persistence | tmux (default) |
 | Rich agent workspaces | Herdr (optional additive; not required for doctor) |
-| Desktop window geometry | Desktop providers (post-E09) |
-| Message/schedule ingress to an existing agent | Push or another narrow gateway (optional; post-E09) |
+| Desktop window geometry | Desktop providers (post-MVP) |
+| Message/schedule ingress to an existing agent | Push or another narrow gateway (optional; post-MVP) |
 
 A gateway authenticates who may ask an agent to act; it does not authorize the resulting WfOS
 operation. The spawned agent must use the same profile-bound CLI/MCP surface as a local caller.
@@ -140,7 +142,7 @@ The runtime controller is designed for AI augmentation but does not require it. 
 may embed an MCP server that exposes commands as gated LLM tools; every call is checked against
 metadata-plane policy. See [agent-rails.md](agent-rails.md).
 
-## First prototype scope (E09 M4)
+## First prototype scope (M4)
 
 ```txt
 scan · list units|tools · info · doctor · tools · interfaces

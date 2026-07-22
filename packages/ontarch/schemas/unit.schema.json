@@ -107,8 +107,13 @@
               },
               {
                 "if": {
-                  "properties": { "execution_class": { "const": "direct" } },
-                  "required": ["execution_class"]
+                  "anyOf": [
+                    { "not": { "required": ["execution_class"] } },
+                    {
+                      "properties": { "execution_class": { "const": "direct" } },
+                      "required": ["execution_class"]
+                    }
+                  ]
                 },
                 "then": {
                   "properties": {
