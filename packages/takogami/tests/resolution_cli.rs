@@ -307,6 +307,29 @@ fn explain_human_field_order() {
 }
 
 #[test]
+fn explain_json_reports_safe_executable_provenance() {
+    let h = Harness::new();
+    let out = h.run(&["--json", "build", "demo", "--explain"]);
+    assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
+    let value = parse_json(&out);
+    assert_eq!(
+        value["explanation"]["command"]["executable"]["selection_source"],
+        "path"
+    );
+    assert_eq!(
+        value["explanation"]["command"]["executable"]["path_index"],
+        0
+    );
+    assert!(
+        value["explanation"]["command"]["executable"]
+            .get("display_path")
+            .is_some()
+    );
+    assert!(!stdout(&out).contains("PATH="));
+    h.assert_marker_untouched();
+}
+
+#[test]
 fn execute_returns_execution_unavailable() {
     let h = Harness::new();
     let out = h.run(&["--json", "build", "demo", "--execute"]);
@@ -339,6 +362,12 @@ fn unit_not_found_and_session_id() {
     let v = parse_json(&out);
     assert_eq!(v["diagnostics"][0]["code"], "unit_not_found");
     assert!(v["session_id"].as_str().unwrap().starts_with("tkg_"));
+    assert_eq!(
+        v["explanation"]["completed_steps"],
+        serde_json::json!(["correlation_id", "registry"])
+    );
+    assert_eq!(v["explanation"]["freshness"]["registry_cache"], "hit");
+    assert!(v["explanation"].get("plan_digest").is_none());
 }
 
 #[test]
@@ -681,5 +710,191 @@ fn unsupported_backend_pair() {
         parse_json(&out)["diagnostics"][0]["code"],
         "unsupported_backend"
     );
+    h.assert_marker_untouched();
+}
+
+#[test]
+fn human_failure_renders_same_partial_trace() {
+    let h = Harness::new();
+    let out = h.run(&["--no-color", "build", "no-such-unit"]);
+    assert_eq!(out.status.code(), Some(RESOLUTION as i32));
+    assert!(stderr(&out).contains("Resolution trace:"));
+    assert!(stderr(&out).contains("Completed steps: correlation_id, registry"));
+    assert!(stdout(&out).is_empty());
+    h.assert_marker_untouched();
+}
+
+#[test]
+fn malformed_requested_authored_descriptor_fails_closed() {
+    let h = Harness::new();
+    let descriptor = h.registry.join("sources/descriptors/demo.descriptor.toml");
+    fs::write(
+        &descriptor,
+        "id = \"demo\"\n[entrypoints.build\nprogram = \"moon\"\n",
+    )
+    .unwrap();
+
+    let out = h.run(&["--json", "build", "demo"]);
+    assert_eq!(out.status.code(), Some(RESOLUTION as i32));
+    let value = parse_json(&out);
+    assert_eq!(value["diagnostics"][0]["code"], "invalid_descriptor");
+    assert_eq!(
+        value["explanation"]["completed_steps"],
+        serde_json::json!(["correlation_id", "registry", "unit"])
+    );
+    assert!(!stdout(&out).contains(h.temp.path().to_str().unwrap()));
+    h.assert_marker_untouched();
+}
+
+#[test]
+fn malformed_unknown_identity_descriptor_cannot_hide_duplicate() {
+    let h = Harness::new();
+    fs::write(
+        h.registry
+            .join("sources/descriptors/unknown-malformed.descriptor.toml"),
+        "this is not toml and has no attributable id",
+    )
+    .unwrap();
+
+    let out = h.run(&["--json", "build", "demo"]);
+    assert_eq!(out.status.code(), Some(RESOLUTION as i32));
+    assert_eq!(
+        parse_json(&out)["diagnostics"][0]["code"],
+        "invalid_descriptor"
+    );
+    h.assert_marker_untouched();
+}
+
+#[test]
+fn duplicate_valid_authored_descriptors_are_ambiguous() {
+    let h = Harness::new();
+    let original = h.registry.join("sources/descriptors/demo.descriptor.toml");
+    let duplicate = h
+        .registry
+        .join("sources/descriptors/demo-duplicate.descriptor.toml");
+    fs::copy(original, duplicate).unwrap();
+
+    let out = h.run(&["--json", "build", "demo"]);
+    assert_eq!(out.status.code(), Some(RESOLUTION as i32));
+    let value = parse_json(&out);
+    assert_eq!(value["diagnostics"][0]["code"], "descriptor_ambiguous");
+    assert_eq!(
+        value["explanation"]["completed_steps"],
+        serde_json::json!(["correlation_id", "registry", "unit"])
+    );
+    h.assert_marker_untouched();
+}
+
+#[test]
+fn structured_entrypoint_unknown_field_is_rejected() {
+    let h = Harness::new();
+    let mut doc: Value =
+        serde_json::from_str(&fs::read_to_string(h.registry.join("units.json")).unwrap()).unwrap();
+    let demo = doc["units"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|unit| unit["id"] == "demo")
+        .unwrap();
+    demo["entrypoints"]["build"]["arg"] = serde_json::json!(["misspelled"]);
+    fs::write(
+        h.registry.join("units.json"),
+        serde_json::to_string_pretty(&doc).unwrap(),
+    )
+    .unwrap();
+
+    let out = h.run(&["--json", "build", "demo"]);
+    assert_eq!(out.status.code(), Some(RESOLUTION as i32));
+    assert_eq!(
+        parse_json(&out)["diagnostics"][0]["code"],
+        "registry_unavailable"
+    );
+    h.assert_marker_untouched();
+}
+
+#[test]
+fn same_basename_manifest_substitution_is_rejected() {
+    let h = Harness::new();
+    fs::create_dir_all(h.workspace.join("demo/a")).unwrap();
+    fs::create_dir_all(h.workspace.join("demo/b")).unwrap();
+    fs::write(
+        h.workspace.join("demo/a/Cargo.toml"),
+        "[package]\nname='a'\n",
+    )
+    .unwrap();
+    fs::write(
+        h.workspace.join("demo/b/Cargo.toml"),
+        "[package]\nname='b'\n",
+    )
+    .unwrap();
+
+    let mut doc: Value =
+        serde_json::from_str(&fs::read_to_string(h.registry.join("units.json")).unwrap()).unwrap();
+    let native = doc["units"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|unit| unit["id"] == "native-demo")
+        .unwrap();
+    native["native_manifests"] = serde_json::json!(["a/Cargo.toml"]);
+    native["entrypoints"]["build"]["source_manifests"] = serde_json::json!(["b/Cargo.toml"]);
+    fs::write(
+        h.registry.join("units.json"),
+        serde_json::to_string_pretty(&doc).unwrap(),
+    )
+    .unwrap();
+
+    let out = h.run(&["--json", "build", "native-demo"]);
+    assert_eq!(out.status.code(), Some(RESOLUTION as i32));
+    let value = parse_json(&out);
+    assert_eq!(value["diagnostics"][0]["code"], "missing_manifest");
+    assert!(
+        value["diagnostics"][0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("not authorized")
+    );
+    h.assert_marker_untouched();
+}
+
+#[test]
+fn distinct_panoply_detect_candidates_are_ambiguous() {
+    let h = Harness::new();
+    let first = h.path_dir.join("rg-first");
+    let second = h.path_dir.join("rg-second");
+    write_marker_exe(&first, &h.marker);
+    write_marker_exe(&second, &h.marker);
+    let tools = serde_json::json!({
+        "generated_at": "2026-07-22T00:00:00Z",
+        "summary": {"total": 2},
+        "tools": [
+            {"id": "rg", "installed": true, "detect": first},
+            {"id": "rg", "installed": true, "detect": second}
+        ]
+    });
+    fs::write(
+        h.registry.join("tools.json"),
+        serde_json::to_string_pretty(&tools).unwrap(),
+    )
+    .unwrap();
+
+    let out = h.run(&["--json", "build", "panoply-demo"]);
+    assert_eq!(out.status.code(), Some(RESOLUTION as i32));
+    let value = parse_json(&out);
+    assert_eq!(value["diagnostics"][0]["code"], "executable_ambiguous");
+    assert_eq!(
+        value["explanation"]["completed_steps"],
+        serde_json::json!([
+            "correlation_id",
+            "registry",
+            "unit",
+            "descriptor",
+            "entrypoint",
+            "cwd",
+            "manifests",
+            "backend"
+        ])
+    );
+    assert!(!stdout(&out).contains("PATH="));
     h.assert_marker_untouched();
 }

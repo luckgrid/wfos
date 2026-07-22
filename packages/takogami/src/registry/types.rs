@@ -59,6 +59,7 @@ pub enum EntrypointDefinition {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct StructuredEntrypoint {
     pub program: String,
     #[serde(default)]
@@ -274,4 +275,29 @@ pub struct UnitDefinition {
     pub descriptor_path: String,
     pub provisional: bool,
     pub routing_complete: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn structured_entrypoint_rejects_unknown_projection_fields() {
+        let value = serde_json::json!({
+            "program": "moon",
+            "arg": ["run", "demo:build"]
+        });
+        assert!(serde_json::from_value::<StructuredEntrypoint>(value).is_err());
+    }
+
+    #[test]
+    fn structured_entrypoint_rejects_unknown_authored_fields() {
+        let text = r#"
+id = "demo"
+[entrypoints.build]
+program = "moon"
+arg = ["run", "demo:build"]
+"#;
+        assert!(toml::from_str::<AuthoredUnitDescriptor>(text).is_err());
+    }
 }

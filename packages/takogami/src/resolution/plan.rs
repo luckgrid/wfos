@@ -1,12 +1,16 @@
 //! Sealed pre-policy plan and S5 handoff seam.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
 use crate::contracts::{DiagnosticRecord, ResolvedCommand};
 use crate::registry::{PolicyRecord, ProfileRecord};
+
+use super::explain::ExecutableProvenance;
+
+const DIGEST_PAYLOAD_VERSION: &str = "s4.1-v1";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -28,24 +32,54 @@ pub struct SealedExecutionPlan {
     executable_path: PathBuf,
     cwd_path: PathBuf,
     source_manifest_paths: Vec<PathBuf>,
+    executable_provenance: ExecutableProvenance,
     diagnostics: Vec<DiagnosticRecord>,
     plan_digest: String,
 }
 
 impl SealedExecutionPlan {
     pub(crate) fn seal(
-        resolved: ResolvedCommand,
+        mut resolved: ResolvedCommand,
         executable_path: PathBuf,
         cwd_path: PathBuf,
-        source_manifest_paths: Vec<PathBuf>,
-        diagnostics: Vec<DiagnosticRecord>,
+        mut source_manifest_paths: Vec<PathBuf>,
+        executable_provenance: ExecutableProvenance,
+        mut diagnostics: Vec<DiagnosticRecord>,
     ) -> Self {
-        let plan_digest = compute_plan_digest(&resolved);
+        resolved.native_manifests.sort();
+        resolved.native_manifests.dedup();
+        resolved.env_keys.sort();
+        resolved.env_keys.dedup();
+        resolved.policy_ids.sort();
+        resolved.policy_ids.dedup();
+        resolved
+            .registry_generation
+            .source_fingerprints
+            .sort_by(|a, b| {
+                a.path
+                    .cmp(&b.path)
+                    .then(a.algorithm.cmp(&b.algorithm))
+                    .then(a.digest.cmp(&b.digest))
+            });
+        resolved.registry_generation.source_fingerprints.dedup();
+        source_manifest_paths.sort();
+        source_manifest_paths.dedup();
+        diagnostics.sort_by(|a, b| a.code.cmp(&b.code).then(a.message.cmp(&b.message)));
+        diagnostics.dedup();
+        let plan_digest = compute_plan_digest(
+            &resolved,
+            &executable_path,
+            &cwd_path,
+            &source_manifest_paths,
+            &executable_provenance,
+            &diagnostics,
+        );
         Self {
             resolved,
             executable_path,
             cwd_path,
             source_manifest_paths,
+            executable_provenance,
             diagnostics,
             plan_digest,
         }
@@ -67,6 +101,10 @@ impl SealedExecutionPlan {
         &self.source_manifest_paths
     }
 
+    pub fn executable_provenance(&self) -> &ExecutableProvenance {
+        &self.executable_provenance
+    }
+
     pub fn diagnostics(&self) -> &[DiagnosticRecord] {
         &self.diagnostics
     }
@@ -86,54 +124,83 @@ pub struct PolicyEvaluationInput {
     pub policies: Vec<PolicyRecord>,
 }
 
-fn compute_plan_digest(resolved: &ResolvedCommand) -> String {
+fn compute_plan_digest(
+    resolved: &ResolvedCommand,
+    executable_path: &Path,
+    cwd_path: &Path,
+    source_manifest_paths: &[PathBuf],
+    executable_provenance: &ExecutableProvenance,
+    diagnostics: &[DiagnosticRecord],
+) -> String {
     #[derive(Serialize)]
     struct DigestPayload<'a> {
-        session_id: &'a str,
-        unit_id: &'a str,
-        verb: &'a str,
-        descriptor_path: &'a str,
-        descriptor_fingerprint: &'a str,
-        native_manifests: &'a [String],
-        backend: &'a str,
-        adapter: &'a str,
-        program: &'a str,
-        argv: &'a [String],
-        cwd: &'a str,
-        env_keys: &'a [String],
-        profile_id: &'a str,
-        policy_ids: &'a [String],
-        execution_class: &'a str,
-        runtime_provider: Option<&'a str>,
+        version: &'static str,
+        resolved: &'a ResolvedCommand,
+        canonical_executable: PathIdentity,
+        canonical_cwd: PathIdentity,
+        canonical_source_manifests: Vec<PathIdentity>,
+        executable_provenance: &'a ExecutableProvenance,
+        diagnostics: &'a [DiagnosticRecord],
     }
     let payload = DigestPayload {
-        session_id: &resolved.session_id,
-        unit_id: &resolved.unit_id,
-        verb: &resolved.verb,
-        descriptor_path: &resolved.descriptor_path,
-        descriptor_fingerprint: &resolved.descriptor_fingerprint,
-        native_manifests: &resolved.native_manifests,
-        backend: &resolved.backend,
-        adapter: &resolved.adapter,
-        program: &resolved.program,
-        argv: &resolved.argv,
-        cwd: &resolved.cwd,
-        env_keys: &resolved.env_keys,
-        profile_id: &resolved.profile_id,
-        policy_ids: &resolved.policy_ids,
-        execution_class: resolved.execution_class.as_str(),
-        runtime_provider: resolved.runtime_provider.as_deref(),
+        version: DIGEST_PAYLOAD_VERSION,
+        resolved,
+        canonical_executable: path_identity(executable_path),
+        canonical_cwd: path_identity(cwd_path),
+        canonical_source_manifests: source_manifest_paths
+            .iter()
+            .map(|path| path_identity(path))
+            .collect(),
+        executable_provenance,
+        diagnostics,
     };
-    // DigestPayload is plain &str/slices — serialization only fails if the allocator does.
+    // Every path uses a reversible platform-native encoding; display rendering is never hashed.
     let bytes = serde_json::to_vec(&payload).expect("plan digest payload serializes");
     let digest = Sha256::digest(&bytes);
     format!("sha256:{digest:x}")
+}
+
+#[derive(Serialize)]
+#[serde(tag = "encoding", content = "value", rename_all = "snake_case")]
+enum PathIdentity {
+    #[cfg(unix)]
+    UnixBytes(String),
+    #[cfg(windows)]
+    WindowsWide(Vec<u16>),
+}
+
+fn path_identity(path: &Path) -> PathIdentity {
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStrExt;
+        let mut encoded = String::with_capacity(path.as_os_str().as_bytes().len() * 2);
+        for byte in path.as_os_str().as_bytes() {
+            use std::fmt::Write;
+            write!(&mut encoded, "{byte:02x}").expect("writing to String cannot fail");
+        }
+        PathIdentity::UnixBytes(encoded)
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        PathIdentity::WindowsWide(path.as_os_str().encode_wide().collect())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::contracts::{ExecutionClass, RegistryGeneration, SCHEMA_VERSION};
+    use crate::resolution::{ExecutableProvenance, ExecutableSelectionSource};
+
+    fn provenance() -> ExecutableProvenance {
+        ExecutableProvenance {
+            selection_source: ExecutableSelectionSource::Path,
+            tool_id: None,
+            path_index: Some(0),
+            display_path: None,
+        }
+    }
 
     fn sample_resolved(session_id: &str) -> ResolvedCommand {
         ResolvedCommand {
@@ -169,6 +236,7 @@ mod tests {
             PathBuf::from("/ws/bin/moon"),
             PathBuf::from("/ws/demo"),
             vec![PathBuf::from("/ws/demo/moon.yml")],
+            provenance(),
             vec![],
         );
         let b = SealedExecutionPlan::seal(
@@ -176,6 +244,7 @@ mod tests {
             PathBuf::from("/ws/bin/moon"),
             PathBuf::from("/ws/demo"),
             vec![PathBuf::from("/ws/demo/moon.yml")],
+            provenance(),
             vec![],
         );
         assert_eq!(a.plan_digest(), b.plan_digest());
@@ -194,6 +263,7 @@ mod tests {
             PathBuf::from("/ws/bin/moon"),
             PathBuf::from("/ws/demo"),
             vec![],
+            provenance(),
             vec![],
         );
         let b = SealedExecutionPlan::seal(
@@ -201,8 +271,113 @@ mod tests {
             PathBuf::from("/ws/bin/moon"),
             PathBuf::from("/ws/demo"),
             vec![],
+            provenance(),
             vec![],
         );
         assert_ne!(a.plan_digest(), b.plan_digest());
+    }
+
+    #[test]
+    fn digest_binds_private_execution_paths() {
+        let resolved = sample_resolved("tkg_fixed");
+        let base = SealedExecutionPlan::seal(
+            resolved.clone(),
+            PathBuf::from("/ws/bin/moon"),
+            PathBuf::from("/ws/demo"),
+            vec![PathBuf::from("/ws/demo/moon.yml")],
+            provenance(),
+            vec![],
+        );
+        let executable_changed = SealedExecutionPlan::seal(
+            resolved.clone(),
+            PathBuf::from("/other/bin/moon"),
+            PathBuf::from("/ws/demo"),
+            vec![PathBuf::from("/ws/demo/moon.yml")],
+            provenance(),
+            vec![],
+        );
+        let cwd_changed = SealedExecutionPlan::seal(
+            resolved.clone(),
+            PathBuf::from("/ws/bin/moon"),
+            PathBuf::from("/ws/other"),
+            vec![PathBuf::from("/ws/demo/moon.yml")],
+            provenance(),
+            vec![],
+        );
+        let manifest_changed = SealedExecutionPlan::seal(
+            resolved,
+            PathBuf::from("/ws/bin/moon"),
+            PathBuf::from("/ws/demo"),
+            vec![PathBuf::from("/ws/demo/Cargo.toml")],
+            provenance(),
+            vec![],
+        );
+
+        assert_ne!(base.plan_digest(), executable_changed.plan_digest());
+        assert_ne!(base.plan_digest(), cwd_changed.plan_digest());
+        assert_ne!(base.plan_digest(), manifest_changed.plan_digest());
+    }
+
+    #[test]
+    fn digest_normalizes_sets_but_binds_argv_policy_and_provider() {
+        let mut base_resolved = sample_resolved("tkg_fixed");
+        base_resolved.policy_ids = vec!["z-policy".into(), "a-policy".into()];
+        let base = SealedExecutionPlan::seal(
+            base_resolved.clone(),
+            PathBuf::from("/ws/bin/moon"),
+            PathBuf::from("/ws/demo"),
+            vec![],
+            provenance(),
+            vec![],
+        );
+
+        let mut reordered = base_resolved.clone();
+        reordered.policy_ids.reverse();
+        let reordered = SealedExecutionPlan::seal(
+            reordered,
+            PathBuf::from("/ws/bin/moon"),
+            PathBuf::from("/ws/demo"),
+            vec![],
+            provenance(),
+            vec![],
+        );
+        assert_eq!(base.plan_digest(), reordered.plan_digest());
+
+        let mut argv_changed = base_resolved.clone();
+        argv_changed.argv = vec!["run demo:build".into()];
+        let argv_changed = SealedExecutionPlan::seal(
+            argv_changed,
+            PathBuf::from("/ws/bin/moon"),
+            PathBuf::from("/ws/demo"),
+            vec![],
+            provenance(),
+            vec![],
+        );
+        assert_ne!(base.plan_digest(), argv_changed.plan_digest());
+
+        let mut policies_changed = base_resolved.clone();
+        policies_changed.policy_ids.push("another-policy".into());
+        let policies_changed = SealedExecutionPlan::seal(
+            policies_changed,
+            PathBuf::from("/ws/bin/moon"),
+            PathBuf::from("/ws/demo"),
+            vec![],
+            provenance(),
+            vec![],
+        );
+        assert_ne!(base.plan_digest(), policies_changed.plan_digest());
+
+        let mut provider_changed = base_resolved;
+        provider_changed.execution_class = ExecutionClass::InteractiveSession;
+        provider_changed.runtime_provider = Some("herdr".into());
+        let provider_changed = SealedExecutionPlan::seal(
+            provider_changed,
+            PathBuf::from("/ws/bin/moon"),
+            PathBuf::from("/ws/demo"),
+            vec![],
+            provenance(),
+            vec![],
+        );
+        assert_ne!(base.plan_digest(), provider_changed.plan_digest());
     }
 }

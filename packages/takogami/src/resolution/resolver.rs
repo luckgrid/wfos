@@ -11,9 +11,13 @@ use crate::registry::{
 
 use super::entrypoint::{NormalizedEntrypoint, normalize_entrypoint};
 use super::executable::{ExecutableLocator, FilesystemLocator};
-use super::explain::{ResolutionExplanation, explanation_from_plan};
+use super::explain::{
+    FreshnessExplanation, PartialRequestView, PartialResolutionTrace, PartialUnitView,
+    ResolutionExplanation, ResolutionStep, SafeEntrypointView, SafeSourceView,
+    explanation_from_plan,
+};
 use super::paths::{resolve_cwd, resolve_manifests, workspace_relative_display};
-use super::plan::SealedExecutionPlan;
+use super::plan::{Actor, PolicyEvaluationInput, PolicyRequestView, SealedExecutionPlan};
 use super::profile::{SelectedProfile, collect_policy_refs, select_profile};
 use super::request::{CorrelationIdGenerator, ResolutionRequest};
 
@@ -119,16 +123,22 @@ impl ResolutionCode {
         }
     }
 
-    pub fn into_error(
-        self,
-        session_id: String,
-        explanation_partial: Option<ResolutionExplanation>,
-    ) -> ControllerError {
+    pub fn into_error(mut self, explanation_partial: PartialResolutionTrace) -> ControllerError {
+        match &mut self {
+            Self::UnitAmbiguous { candidates, .. }
+            | Self::DescriptorAmbiguous { candidates, .. }
+            | Self::ManifestAmbiguous { candidates }
+            | Self::ExecutableAmbiguous { candidates } => {
+                candidates.sort();
+                candidates.dedup();
+            }
+            _ => {}
+        }
         ControllerError::Resolution {
             code: self.code().into(),
             message: self.message(),
-            session_id: Some(session_id),
-            explanation_partial: explanation_partial.and_then(|e| serde_json::to_value(e).ok()),
+            session_id: Some(explanation_partial.session_id.clone()),
+            explanation_partial: serde_json::to_value(explanation_partial).ok(),
         }
     }
 }
@@ -153,6 +163,23 @@ pub struct ResolveSuccess {
     pub freshness: Freshness,
 }
 
+impl ResolveSuccess {
+    /// Immutable S5 handoff. Policy evaluation must not re-resolve any plan input.
+    pub fn policy_evaluation_input(&self) -> PolicyEvaluationInput {
+        PolicyEvaluationInput {
+            actor: Actor::Agent,
+            request: PolicyRequestView {
+                unit_id: self.plan.resolved().unit_id.clone(),
+                verb: self.plan.resolved().verb.clone(),
+                profile_id: self.plan.resolved().profile_id.clone(),
+            },
+            plan: self.plan.clone(),
+            profile: self.selected.profile.clone(),
+            policies: self.selected.policies.clone(),
+        }
+    }
+}
+
 impl<'a> Resolver<'a> {
     pub fn new(inputs: ResolverInputs<'a>) -> Self {
         Self { inputs }
@@ -165,45 +192,61 @@ impl<'a> Resolver<'a> {
         if request.session_id.is_empty() {
             request.session_id = self.inputs.id_gen.next_id();
         }
-        let session_id = request.session_id.clone();
-        self.resolve_inner(request)
-            .map_err(|code| code.into_error(session_id, None))
+        let mut trace = PartialResolutionTrace {
+            session_id: request.session_id.clone(),
+            mode: "plan_only".into(),
+            request: PartialRequestView {
+                unit_id: request.unit_id.clone(),
+                verb: request.verb.as_str().into(),
+                requested_profile: request.explicit_profile.clone(),
+            },
+            completed_steps: vec![ResolutionStep::CorrelationId],
+            freshness: None,
+            unit: None,
+            descriptor: None,
+            entrypoint: None,
+            manifests: Vec::new(),
+            executable: None,
+            profile_id: None,
+            policy_ids: Vec::new(),
+        };
+        self.resolve_inner(request, &mut trace)
+            .map_err(|code| code.into_error(trace))
     }
 
     fn resolve_inner(
         &mut self,
         request: ResolutionRequest,
+        trace: &mut PartialResolutionTrace,
     ) -> Result<ResolveSuccess, ResolutionCode> {
-        let mut completed = vec!["correlation_id".into()];
-
         // Step 2 — registry roots already on access
         let workspace_root = self.inputs.access.paths.workspace_root.clone();
         if !self.inputs.access.paths.registry_root.is_dir() {
             return Err(ResolutionCode::RegistryUnavailable {
-                message: format!(
-                    "registry root missing: {}",
-                    self.inputs.access.paths.registry_root.display()
-                ),
+                message: "configured registry root is missing".into(),
             });
         }
-        completed.push("registry".into());
+        trace.completed_steps.push(ResolutionStep::Registry);
 
         // Step 3 — unit
         let (units_doc, freshness) =
             self.inputs
                 .access
                 .load_units()
-                .map_err(|e| ResolutionCode::RegistryUnavailable {
-                    message: e.to_string(),
+                .map_err(|_| ResolutionCode::RegistryUnavailable {
+                    message: "units registry is unavailable or invalid".into(),
                 })?;
         let mut units = units_doc.units.clone();
         if freshness == Freshness::Miss {
-            units = self.inputs.access.source_fallback_units().map_err(|e| {
+            units = self.inputs.access.source_fallback_units().map_err(|_| {
                 ResolutionCode::RegistryUnavailable {
-                    message: e.to_string(),
+                    message: "authored unit sources are unavailable".into(),
                 }
             })?;
         }
+        trace.freshness = Some(FreshnessExplanation {
+            registry_cache: freshness.as_str().into(),
+        });
 
         let unit_rec = match select_unit(&units, &request.unit_id) {
             Ok(u) => u.clone(),
@@ -244,11 +287,17 @@ impl<'a> Resolver<'a> {
                 id: request.unit_id.clone(),
             });
         }
-        completed.push("unit".into());
+        trace.unit = Some(PartialUnitView {
+            id: unit_rec.id.clone(),
+        });
+        trace.completed_steps.push(ResolutionStep::Unit);
 
         // Step 4 — authoritative descriptor
         let unit_def = load_unit_definition(self.inputs.access, &unit_rec, freshness)?;
-        completed.push("descriptor".into());
+        trace.descriptor = Some(SafeSourceView {
+            descriptor: safe_workspace_path(&workspace_root, Path::new(&unit_def.descriptor_path)),
+        });
+        trace.completed_steps.push(ResolutionStep::Descriptor);
 
         // Step 5 — entrypoint
         let verb_key = request.verb.as_str();
@@ -258,29 +307,36 @@ impl<'a> Resolver<'a> {
             }
         })?;
         let mut entry = normalize_entrypoint(entry_def)?;
-        completed.push("entrypoint".into());
+        trace.entrypoint = Some(SafeEntrypointView {
+            program: entry.program.clone(),
+            execution_class: entry.execution_class.as_str().into(),
+            runtime_provider: entry.runtime_provider.clone(),
+        });
+        trace.completed_steps.push(ResolutionStep::Entrypoint);
 
         // Step 8 — tools + classify + executable
         let (tools_doc, _) =
             self.inputs
                 .access
                 .load_tools()
-                .map_err(|e| ResolutionCode::RegistryUnavailable {
-                    message: e.to_string(),
+                .map_err(|_| ResolutionCode::RegistryUnavailable {
+                    message: "tool registry is unavailable or invalid".into(),
                 })?;
         let backend = classify_backend(&entry, &tools_doc.tools)?;
         let (backend_label, adapter_label) = authored_or_wire_labels(&entry, backend);
 
         // Step 6 — cwd
         let cwd = resolve_cwd(&workspace_root, &unit_def, &entry)?;
-        completed.push("cwd".into());
+        trace.completed_steps.push(ResolutionStep::Cwd);
 
         // Step 7 — manifests
         let (manifest_display, manifest_paths) =
             resolve_manifests(&workspace_root, &cwd.canonical, &unit_def, &entry, backend)?;
-        completed.push("manifests".into());
+        trace.manifests = manifest_display.clone();
+        trace.completed_steps.push(ResolutionStep::Manifests);
 
         validate_backend_contract(&entry, backend, &tools_doc.tools)?;
+        trace.completed_steps.push(ResolutionStep::Backend);
         let executable = self.inputs.locator.locate(
             &entry.program,
             &cwd.canonical,
@@ -289,12 +345,13 @@ impl<'a> Resolver<'a> {
             &tools_doc.tools,
             &workspace_root,
         )?;
-        completed.push("executable".into());
+        trace.executable = Some(executable.provenance.clone());
+        trace.completed_steps.push(ResolutionStep::Executable);
 
         // Step 9 — profile + policies
-        let profiles = self.inputs.access.load_profiles().map_err(|e| {
+        let profiles = self.inputs.access.load_profiles().map_err(|_| {
             ResolutionCode::RegistryUnavailable {
-                message: e.to_string(),
+                message: "profile registry is unavailable or invalid".into(),
             }
         })?;
         let profile = select_profile(
@@ -302,13 +359,16 @@ impl<'a> Resolver<'a> {
             request.explicit_profile.as_deref(),
             self.inputs.env_profile.as_deref(),
         )?;
-        let policies = self.inputs.access.load_policies().map_err(|e| {
+        trace.profile_id = Some(profile.id.clone());
+        trace.completed_steps.push(ResolutionStep::Profile);
+        let policies = self.inputs.access.load_policies().map_err(|_| {
             ResolutionCode::RegistryUnavailable {
-                message: e.to_string(),
+                message: "policy registry is unavailable or invalid".into(),
             }
         })?;
         let selected = collect_policy_refs(&policies, &profile, &entry, &request.unit_id)?;
-        completed.push("profile".into());
+        trace.policy_ids = selected.policy_ids.clone();
+        trace.completed_steps.push(ResolutionStep::Policies);
 
         // Stable env keys
         let mut env_keys = entry.env_keys.clone();
@@ -327,8 +387,8 @@ impl<'a> Resolver<'a> {
                 let abs = workspace_root.join(&unit_def.descriptor_path);
                 fingerprint_file(&abs, &descriptor_path)
             })
-            .map_err(|e| ResolutionCode::DescriptorUnavailable {
-                message: format!("cannot fingerprint descriptor: {e}"),
+            .map_err(|_| ResolutionCode::DescriptorUnavailable {
+                message: "cannot fingerprint selected descriptor".into(),
             })?;
 
         let mut diagnostics = entry.diagnostics.clone();
@@ -360,15 +420,16 @@ impl<'a> Resolver<'a> {
 
         let plan = SealedExecutionPlan::seal(
             resolved,
-            executable,
+            executable.canonical,
             cwd.canonical,
             manifest_paths,
+            executable.provenance,
             diagnostics,
         );
-        completed.push("plan".into());
+        trace.completed_steps.push(ResolutionStep::Plan);
 
         let mut explanation = explanation_from_plan(&plan, &selected, freshness);
-        explanation.completed_steps = completed;
+        explanation.completed_steps = trace.completed_steps.clone();
 
         Ok(ResolveSuccess {
             plan,
@@ -444,7 +505,10 @@ fn load_unit_definition(
             }
             [(path, _)] => path.clone(),
             many => {
-                let mut paths: Vec<_> = many.iter().map(|(p, _)| p.display().to_string()).collect();
+                let mut paths: Vec<_> = many
+                    .iter()
+                    .map(|(p, _)| safe_workspace_path(&access.paths.workspace_root, p))
+                    .collect();
                 paths.sort();
                 return Err(ResolutionCode::DescriptorAmbiguous {
                     id: unit.id.clone(),
@@ -454,7 +518,10 @@ fn load_unit_definition(
         };
         if !desc_path.is_file() {
             return Err(ResolutionCode::DescriptorUnavailable {
-                message: format!("descriptor missing at {}", desc_path.display()),
+                message: format!(
+                    "descriptor missing at {}",
+                    safe_workspace_path(&access.paths.workspace_root, &desc_path)
+                ),
             });
         }
         return Ok(UnitDefinition {
@@ -486,7 +553,10 @@ fn load_unit_definition(
             Ok(unit_def_from_authored(path, authored))
         }
         many => {
-            let mut paths: Vec<_> = many.iter().map(|(p, _)| p.display().to_string()).collect();
+            let mut paths: Vec<_> = many
+                .iter()
+                .map(|(p, _)| safe_workspace_path(&access.paths.workspace_root, p))
+                .collect();
             paths.sort();
             Err(ResolutionCode::DescriptorAmbiguous {
                 id: unit.id.clone(),
@@ -535,30 +605,104 @@ fn find_authored_descriptors(
     if fixture.is_dir() {
         roots.push(fixture);
     }
-    // Also consider unit.path as candidate when present
-    let mut found = Vec::new();
-    let mut seen = BTreeSet::new();
+    roots.sort();
+    roots.dedup();
+
+    let mut paths = Vec::new();
     for root in roots {
-        let Ok(entries) = std::fs::read_dir(&root) else {
-            continue;
-        };
-        for entry in entries.flatten() {
+        let entries = std::fs::read_dir(&root).map_err(|_| ResolutionCode::InvalidDescriptor {
+            message: format!(
+                "cannot read descriptor directory `{}`",
+                safe_workspace_path(&access.paths.workspace_root, &root)
+            ),
+        })?;
+        for entry in entries {
+            let entry = entry.map_err(|_| ResolutionCode::InvalidDescriptor {
+                message: format!(
+                    "cannot inspect descriptor directory `{}`",
+                    safe_workspace_path(&access.paths.workspace_root, &root)
+                ),
+            })?;
             let path = entry.path();
             if path.extension().and_then(|e| e.to_str()) != Some("toml") {
                 continue;
             }
-            let Ok(authored) = access.load_authored_unit_descriptor(&path) else {
-                continue;
-            };
-            if authored.id == unit_id {
-                let key = path.canonicalize().unwrap_or(path.clone());
-                if seen.insert(key.clone()) {
-                    found.push((path, authored));
-                }
+            paths.push(path);
+        }
+    }
+    paths.sort();
+
+    let mut found = Vec::new();
+    let mut seen = BTreeSet::new();
+    for path in paths {
+        let display = safe_workspace_path(&access.paths.workspace_root, &path);
+        let text =
+            std::fs::read_to_string(&path).map_err(|_| ResolutionCode::InvalidDescriptor {
+                message: format!("cannot read authored descriptor `{display}`"),
+            })?;
+        let probed_id = probe_top_level_id(&text);
+        let authored: AuthoredUnitDescriptor = match toml::from_str(&text) {
+            Ok(authored) => authored,
+            Err(_) if probed_id.as_deref() == Some(unit_id) || probed_id.is_none() => {
+                return Err(ResolutionCode::InvalidDescriptor {
+                    message: format!("invalid authored descriptor `{display}`"),
+                });
+            }
+            Err(_) => continue,
+        };
+        if authored.id == unit_id {
+            let key = path.canonicalize().unwrap_or(path.clone());
+            if seen.insert(key) {
+                found.push((path, authored));
             }
         }
     }
     Ok(found)
+}
+
+fn probe_top_level_id(text: &str) -> Option<String> {
+    for line in text.lines() {
+        let line = line.trim();
+        if line.starts_with('[') {
+            break;
+        }
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        if key.trim() != "id" {
+            continue;
+        }
+        let value = value.trim();
+        return value
+            .strip_prefix('"')
+            .and_then(|rest| rest.split_once('"'))
+            .map(|(id, _)| id.to_string());
+    }
+    None
+}
+
+fn safe_workspace_path(workspace_root: &Path, path: &Path) -> String {
+    let root = workspace_root
+        .canonicalize()
+        .unwrap_or_else(|_| workspace_root.to_path_buf());
+    let candidate = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        root.join(path)
+    };
+    let normalized = candidate.canonicalize().unwrap_or(candidate);
+    if normalized.starts_with(&root) {
+        workspace_relative_display(&root, &normalized)
+    } else {
+        normalized
+            .file_name()
+            .and_then(|name| name.to_str())
+            .map(|name| format!("external/{name}"))
+            .unwrap_or_else(|| "external/descriptor".into())
+    }
 }
 
 fn classify_backend(
@@ -805,6 +949,24 @@ mod tests {
         assert_eq!(
             serde_json::to_vec(a.plan.resolved()).unwrap(),
             serde_json::to_vec(b.plan.resolved()).unwrap()
+        );
+
+        let handoff = a.policy_evaluation_input();
+        assert_eq!(handoff.request.unit_id, "demo");
+        assert_eq!(handoff.request.verb, "build");
+        assert_eq!(handoff.request.profile_id, "workspace-dev");
+        assert_eq!(handoff.plan.plan_digest(), a.plan.plan_digest());
+        assert_eq!(
+            handoff
+                .policies
+                .iter()
+                .map(|policy| policy.id.as_str())
+                .collect::<Vec<_>>(),
+            a.selected
+                .policy_ids
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>()
         );
     }
 

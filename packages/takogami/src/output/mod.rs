@@ -7,7 +7,8 @@ use crate::doctor::DoctorReport;
 use crate::error::ControllerError;
 use crate::registry::Freshness;
 use crate::resolution::{
-    ResolutionExplanation, SealedExecutionPlan, render_human_explanation, render_human_summary,
+    PartialResolutionTrace, ResolutionExplanation, SealedExecutionPlan, render_human_explanation,
+    render_human_partial_explanation, render_human_summary,
 };
 use std::io::{self, Write};
 
@@ -170,7 +171,14 @@ impl OutputSink {
             if let Some(sid) = error.session_id() {
                 writeln!(io::stderr(), "session: {sid}")?;
             }
-            if let Some(ex) = explanation {
+            if let ControllerError::Resolution {
+                explanation_partial: Some(partial),
+                ..
+            } = error
+                && let Ok(trace) = serde_json::from_value::<PartialResolutionTrace>(partial.clone())
+            {
+                writeln!(io::stderr(), "{}", render_human_partial_explanation(&trace))?;
+            } else if let Some(ex) = explanation {
                 writeln!(io::stderr(), "{}", render_human_explanation(ex))?;
             }
         }

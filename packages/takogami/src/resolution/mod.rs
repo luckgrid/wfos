@@ -40,9 +40,11 @@ mod request;
 mod resolver;
 
 pub use explain::{
-    CommandExplanation, ExecutionExplanation, FreshnessExplanation, IsolationExplanation,
-    PolicyReferenceExplanation, ProfileExplanation, ResolutionExplanation, SourceExplanation,
-    UnitExplanation, render_human_explanation, render_human_summary,
+    CommandExplanation, ExecutableProvenance, ExecutableSelectionSource, ExecutionExplanation,
+    FreshnessExplanation, IsolationExplanation, PartialRequestView, PartialResolutionTrace,
+    PartialUnitView, PolicyReferenceExplanation, ProfileExplanation, ResolutionExplanation,
+    ResolutionStep, SafeEntrypointView, SafeSourceView, SourceExplanation, UnitExplanation,
+    render_human_explanation, render_human_partial_explanation, render_human_summary,
 };
 pub use plan::{Actor, PolicyEvaluationInput, PolicyRequestView, SealedExecutionPlan};
 pub use request::{
