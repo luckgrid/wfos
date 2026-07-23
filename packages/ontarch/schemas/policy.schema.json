@@ -27,9 +27,18 @@
         }
       }
     },
-    "allow": { "$ref": "#/definitions/ruleTable" },
-    "gate": { "$ref": "#/definitions/ruleTable" },
-    "block": { "$ref": "#/definitions/ruleTable" },
+    "allow": {
+      "description": "Command/tool allow table. v0: paths and actions must be empty or absent (unsupported); only commands/tools are enforced.",
+      "allOf": [{ "$ref": "#/definitions/ruleTable" }]
+    },
+    "gate": {
+      "description": "Command/tool gate table. v0: paths and actions must be empty or absent (unsupported); only commands/tools are enforced.",
+      "allOf": [{ "$ref": "#/definitions/ruleTable" }]
+    },
+    "block": {
+      "description": "Command/tool/path/action block table. paths and actions are supported for Deny.",
+      "allOf": [{ "$ref": "#/definitions/ruleTable" }]
+    },
     "gates": {
       "type": "object",
       "additionalProperties": false,

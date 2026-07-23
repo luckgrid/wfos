@@ -103,9 +103,10 @@ sequenceDiagram
   K--xD: deferred until native execution
 ```
 
-The current phase stops after policy: dual-layer Allow/Gate/Deny is enforced, but child
-processes and command records are not yet started. Registry write-back after every routed
-command is **not** runtime MVP; Ontarch remains the registry owner.
+The current phase stops after policy: dual-layer Allow/Gate/Deny is enforced against one opaque
+sealed handoff; `AuthorizedExecutionPlan` requires a private dual-Allow proof. Child processes
+and command records are not yet started. Registry write-back after every routed command is
+**not** runtime MVP; Ontarch remains the registry owner.
 
 ## Composition boundary
 

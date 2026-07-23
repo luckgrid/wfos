@@ -43,6 +43,14 @@ pub fn collect_policy_refs(
     entry: &NormalizedEntrypoint,
     unit_id: &str,
 ) -> Result<SelectedProfile, ResolutionCode> {
+    // Reject duplicate source IDs before map insertion can silently drop a body.
+    let mut seen_ids = BTreeSet::new();
+    for p in &policies.policies {
+        if !seen_ids.insert(p.id.as_str()) {
+            return Err(ResolutionCode::PolicyDuplicate { id: p.id.clone() });
+        }
+    }
+
     let mut origins: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
 
     let push = |map: &mut BTreeMap<String, BTreeSet<String>>, id: &str, origin: &str| {
@@ -103,4 +111,58 @@ pub fn collect_policy_refs(
         policy_ids,
         policy_origins,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::contracts::ExecutionClass;
+    use crate::registry::{PoliciesDocument, PolicyRecord, ProfileRecord};
+
+    #[test]
+    fn duplicate_policy_ids_rejected_at_collect() {
+        let policies = PoliciesDocument {
+            generated_at: "t".into(),
+            policies: vec![
+                PolicyRecord {
+                    id: "a".into(),
+                    applies_to: Some("agent".into()),
+                    rest: Default::default(),
+                },
+                PolicyRecord {
+                    id: "a".into(),
+                    applies_to: Some("agent".into()),
+                    rest: Default::default(),
+                },
+            ],
+        };
+        let profile = ProfileRecord {
+            id: "p".into(),
+            title: None,
+            purpose: None,
+            rails: None,
+            rails_bin: None,
+            isolation_mode: None,
+            isolation_jj: None,
+            session_state_home: None,
+            rest: Default::default(),
+        };
+        let entry = NormalizedEntrypoint {
+            program: "moon".into(),
+            args: vec![],
+            cwd: None,
+            env_keys: vec![],
+            backend: Some("native".into()),
+            adapter: Some("direct".into()),
+            source_manifests: vec![],
+            required_policies: vec![],
+            execution_class: ExecutionClass::Direct,
+            runtime_provider: None,
+            diagnostics: vec![],
+        };
+        assert!(matches!(
+            collect_policy_refs(&policies, &profile, &entry, "demo"),
+            Err(ResolutionCode::PolicyDuplicate { id }) if id == "a"
+        ));
+    }
 }

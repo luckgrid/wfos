@@ -39,7 +39,8 @@ mod paths;
 mod raw;
 
 pub use authorize::{
-    AuthorizedExecutionPlan, Executor, ExecutorResult, SpyExecutor, UnavailableExecutor,
+    AllowDecision, AuthorizedExecutionPlan, Executor, ExecutorResult, SpyExecutor,
+    UnavailableExecutor,
 };
 pub use evaluate::{
     PolicyContractError, PolicyEvaluationExplanation, PolicyEvaluationResult, PolicyLayer,

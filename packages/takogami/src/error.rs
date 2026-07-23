@@ -31,6 +31,7 @@ pub struct ExecutionDeferredDetails {
     pub plan_digest: Option<String>,
     pub policy_decision: Option<PolicyDecision>,
     pub policy_explanation: Option<PolicyEvaluationExplanation>,
+    pub execution_requested: bool,
 }
 
 #[derive(Debug, Error, Diagnostic)]

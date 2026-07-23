@@ -30,7 +30,7 @@ pub fn dispatch_implemented(
         Command::Dev { .. } | Command::Build { .. } | Command::Check { .. } => {
             let (verb, unit, explain, execute) =
                 command.lifecycle_parts().expect("lifecycle command");
-            run_lifecycle(
+            run_lifecycle_with_executor(
                 sink,
                 verb,
                 unit,
@@ -38,6 +38,7 @@ pub fn dispatch_implemented(
                 execute,
                 cli_profile,
                 cli_state_home,
+                &crate::policy::UnavailableExecutor,
             )
         }
         _ => Err(ControllerError::internal(
@@ -46,7 +47,9 @@ pub fn dispatch_implemented(
     }
 }
 
-fn run_lifecycle(
+/// Internal coordinator accepting an injected executor (spy in tests; unavailable in production).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn run_lifecycle_with_executor(
     sink: &OutputSink,
     verb: crate::resolution::LifecycleVerb,
     unit_id: &str,
@@ -54,8 +57,9 @@ fn run_lifecycle(
     execute: bool,
     cli_profile: Option<&str>,
     cli_state_home: Option<&Path>,
+    executor: &dyn Executor,
 ) -> Result<u8, ControllerError> {
-    // S5 must not create operational state.
+    // S5/S5.1 must not create operational state.
     let _ = cli_state_home;
 
     let access = access()?;
@@ -131,6 +135,7 @@ fn run_lifecycle(
                         &explanation,
                         &decision,
                         success.freshness,
+                        execute,
                     )
                     .map_err(|e| ControllerError::internal(e.to_string()));
             }
@@ -154,6 +159,7 @@ fn run_lifecycle(
                         &explanation,
                         &decision,
                         success.freshness,
+                        execute,
                     )
                     .map_err(|e| ControllerError::internal(e.to_string()));
             }
@@ -163,7 +169,7 @@ fn run_lifecycle(
         },
     };
 
-    // Class unavailable after Allow.
+    // Class unavailable after Allow — executor must not run.
     if success.plan.resolved().execution_class != ExecutionClass::Direct {
         let err = ControllerError::ExecutionClassUnavailable {
             message: format!(
@@ -176,6 +182,7 @@ fn run_lifecycle(
                 plan_digest: Some(success.plan.plan_digest().to_string()),
                 policy_decision: Some(policy_decision.clone()),
                 policy_explanation: Some(policy_explanation.clone()),
+                execution_requested: execute,
             }),
         };
         return sink
@@ -190,7 +197,7 @@ fn run_lifecycle(
 
     if execute {
         let auth = authorized.expect("Allow must produce AuthorizedExecutionPlan");
-        let _ = crate::policy::UnavailableExecutor.execute(&auth);
+        let _ = executor.execute(&auth);
         let err = ControllerError::ExecutionUnavailable {
             session_id: session_id.clone(),
             details: Box::new(ExecutionDeferredDetails {
@@ -198,6 +205,7 @@ fn run_lifecycle(
                 plan_digest: Some(success.plan.plan_digest().to_string()),
                 policy_decision: Some(policy_decision.clone()),
                 policy_explanation: Some(policy_explanation.clone()),
+                execution_requested: true,
             }),
         };
         return sink
@@ -219,6 +227,7 @@ fn run_lifecycle(
             &policy_decision,
             &policy_explanation,
             success.freshness,
+            false,
         )
         .map_err(|e| ControllerError::internal(e.to_string()))
     } else {
@@ -229,6 +238,7 @@ fn run_lifecycle(
             &policy_decision,
             &policy_explanation,
             success.freshness,
+            false,
         )
         .map_err(|e| ControllerError::internal(e.to_string()))
     }
@@ -513,4 +523,273 @@ fn run_interfaces(sink: &OutputSink, validate: bool) -> Result<u8, ControllerErr
 fn writeln_human(line: &str) -> Result<(), ControllerError> {
     use std::io::Write;
     writeln!(std::io::stdout(), "{line}").map_err(|e| ControllerError::internal(e.to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::contracts::{RegistryGeneration, fingerprint_file};
+    use crate::exit_codes::{NOT_IMPLEMENTED, POLICY_DENY, POLICY_GATE, SUCCESS};
+    use crate::output::OutputSink;
+    use crate::policy::SpyExecutor;
+    use crate::resolution::LifecycleVerb;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+    use std::sync::Mutex;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    struct Fixture {
+        _temp: tempfile::TempDir,
+        workspace: PathBuf,
+        registry: PathBuf,
+        path_dir: PathBuf,
+        marker: PathBuf,
+        _env_guard: std::sync::MutexGuard<'static, ()>,
+    }
+
+    impl Fixture {
+        fn new() -> Self {
+            let env_guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            let temp = tempfile::tempdir().unwrap();
+            let workspace = temp.path().join("ws");
+            let registry = workspace.join("registry");
+            fs::create_dir_all(&workspace).unwrap();
+            copy_tree(
+                &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/resolution"),
+                &workspace,
+            );
+
+            let path_dir = workspace.join("bin");
+            fs::create_dir_all(&path_dir).unwrap();
+            let marker = workspace.join("MARKER_RAN");
+            for name in ["moon", "demo-bin", "rg", "git", "pass", "ontarch"] {
+                write_marker_exe(&path_dir.join(name), &marker);
+            }
+
+            let mut fx = Self {
+                _temp: temp,
+                workspace: workspace.clone(),
+                registry,
+                path_dir: path_dir.clone(),
+                marker,
+                _env_guard: env_guard,
+            };
+            fx.write_hit_units();
+            // Serialized by ENV_LOCK — no concurrent env mutation in these tests.
+            unsafe {
+                std::env::set_var("TAKOGAMI_ONTARCH_REGISTRY", &fx.registry);
+                std::env::set_var("TAKOGAMI_WORKSPACE_ROOT", &fx.workspace);
+                std::env::set_var("PATH", &fx.path_dir);
+                std::env::remove_var("TAKOGAMI_PROFILE");
+            }
+            fx
+        }
+
+        fn write_hit_units(&mut self) {
+            let descs = self
+                .registry
+                .join("sources/descriptors")
+                .read_dir()
+                .unwrap()
+                .filter_map(|e| e.ok())
+                .map(|e| e.path())
+                .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("toml"))
+                .collect::<Vec<_>>();
+
+            let mut fps = Vec::new();
+            let mut units = Vec::new();
+            for path in &descs {
+                let rel = format!(
+                    "registry/sources/descriptors/{}",
+                    path.file_name().unwrap().to_string_lossy()
+                );
+                let abs = self.workspace.join(&rel);
+                fps.push(fingerprint_file(&abs, &rel).unwrap());
+                let text = fs::read_to_string(path).unwrap();
+                let authored: toml::Value = toml::from_str(&text).unwrap();
+                let id = authored["id"].as_str().unwrap().to_string();
+                let entrypoints = authored
+                    .get("entrypoints")
+                    .cloned()
+                    .unwrap_or(toml::Value::Table(Default::default()));
+                let entrypoints_json: serde_json::Value =
+                    serde_json::to_value(&entrypoints).unwrap();
+                let native = authored
+                    .get("native")
+                    .and_then(|n| n.get("manifests"))
+                    .cloned()
+                    .unwrap_or(toml::Value::Array(vec![]));
+                let native_json: serde_json::Value = serde_json::to_value(&native).unwrap();
+                let root = authored
+                    .get("paths")
+                    .and_then(|p| p.get("root"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("demo");
+                units.push(serde_json::json!({
+                    "id": id,
+                    "kind": "package",
+                    "title": id,
+                    "status": "active",
+                    "path": root,
+                    "native_manifests": native_json,
+                    "entrypoints": entrypoints_json,
+                    "source": "central",
+                    "provides": [],
+                    "requires": [],
+                }));
+            }
+
+            let meta = RegistryGeneration {
+                generated_at: "2026-07-21T00:00:00Z".into(),
+                source_fingerprints: fps,
+            };
+            let doc = serde_json::json!({
+                "generated_at": meta.generated_at,
+                "registry_generation": meta,
+                "summary": {"total": units.len()},
+                "units": units,
+            });
+            fs::write(
+                self.registry.join("units.json"),
+                serde_json::to_string_pretty(&doc).unwrap(),
+            )
+            .unwrap();
+        }
+
+        fn patch_demo_gated(&mut self) {
+            let path = self
+                .registry
+                .join("sources/descriptors/demo.descriptor.toml");
+            let text = fs::read_to_string(&path).unwrap().replace(
+                r#"program = "moon"
+args = ["run", "demo:build"]
+cwd = "demo"
+env_keys = ["PATH"]
+backend = "moon"
+adapter = "moon-task""#,
+                r#"program = "ontarch"
+args = ["bin-cleanup", "--mode", "dry-run"]
+cwd = "demo"
+env_keys = ["PATH"]
+backend = "native"
+adapter = "direct""#,
+            );
+            fs::write(&path, text).unwrap();
+            self.write_hit_units();
+        }
+
+        fn assert_marker_untouched(&self) {
+            assert!(!self.marker.exists(), "marker must never run");
+        }
+    }
+
+    fn write_marker_exe(path: &Path, marker: &Path) {
+        let script = format!("#!/bin/sh\necho ran >> {}\nexit 0\n", marker.display());
+        fs::write(path, script).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+    }
+
+    fn copy_tree(src: &Path, dst: &Path) {
+        for entry in fs::read_dir(src).unwrap() {
+            let entry = entry.unwrap();
+            let to = dst.join(entry.file_name());
+            if entry.file_type().unwrap().is_dir() {
+                fs::create_dir_all(&to).unwrap();
+                copy_tree(&entry.path(), &to);
+            } else {
+                if let Some(parent) = to.parent() {
+                    fs::create_dir_all(parent).unwrap();
+                }
+                fs::copy(entry.path(), &to).unwrap();
+            }
+        }
+    }
+
+    fn run(
+        unit: &str,
+        execute: bool,
+        profile: Option<&str>,
+        spy: &SpyExecutor,
+    ) -> Result<u8, ControllerError> {
+        let sink = OutputSink {
+            json: true,
+            no_color: true,
+        };
+        run_lifecycle_with_executor(
+            &sink,
+            LifecycleVerb::Build,
+            unit,
+            false,
+            execute,
+            profile,
+            None,
+            spy,
+        )
+    }
+
+    #[test]
+    fn allow_execute_invokes_spy_once() {
+        let fx = Fixture::new();
+        let spy = SpyExecutor::default();
+        let code = run("demo", true, None, &spy).expect("lifecycle");
+        assert_eq!(code, NOT_IMPLEMENTED);
+        assert_eq!(spy.calls.get(), 1);
+        fx.assert_marker_untouched();
+    }
+
+    #[test]
+    fn plan_only_never_invokes_spy() {
+        let fx = Fixture::new();
+        let spy = SpyExecutor::default();
+        let code = run("demo", false, None, &spy).expect("lifecycle");
+        assert_eq!(code, SUCCESS);
+        assert_eq!(spy.calls.get(), 0);
+        fx.assert_marker_untouched();
+    }
+
+    #[test]
+    fn gate_with_execute_never_invokes_spy() {
+        let mut fx = Fixture::new();
+        fx.patch_demo_gated();
+        let spy = SpyExecutor::default();
+        let code = run("demo", true, None, &spy).expect("lifecycle");
+        assert_eq!(code, POLICY_GATE);
+        assert_eq!(spy.calls.get(), 0);
+        fx.assert_marker_untouched();
+    }
+
+    #[test]
+    fn deny_with_execute_never_invokes_spy() {
+        let mut fx = Fixture::new();
+        // Force a hard deny via blocked `rm` child (alt-profile path allow no longer denies demo-bin).
+        let path = fx.registry.join("sources/descriptors/demo.descriptor.toml");
+        let text = fs::read_to_string(&path).unwrap().replace(
+            r#"program = "moon"
+args = ["run", "demo:build"]
+cwd = "demo"
+env_keys = ["PATH"]
+backend = "moon"
+adapter = "moon-task""#,
+            r#"program = "rm"
+args = ["bin/foo"]
+cwd = "demo"
+env_keys = ["PATH"]
+backend = "native"
+adapter = "direct""#,
+        );
+        fs::write(&path, text).unwrap();
+        fx.write_hit_units();
+        write_marker_exe(&fx.path_dir.join("rm"), &fx.marker);
+
+        let spy = SpyExecutor::default();
+        let code = run("demo", true, None, &spy).expect("lifecycle");
+        assert_eq!(code, POLICY_DENY);
+        assert_eq!(spy.calls.get(), 0);
+        fx.assert_marker_untouched();
+    }
 }

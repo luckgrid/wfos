@@ -59,6 +59,7 @@ pub enum ResolutionCode {
     ProfileNotFound { id: String },
     ProfileAmbiguous { id: String },
     PolicyNotFound { id: String },
+    PolicyDuplicate { id: String },
 }
 
 impl ResolutionCode {
@@ -83,6 +84,7 @@ impl ResolutionCode {
             Self::ProfileNotFound { .. } => "profile_not_found",
             Self::ProfileAmbiguous { .. } => "profile_ambiguous",
             Self::PolicyNotFound { .. } => "policy_not_found",
+            Self::PolicyDuplicate { .. } => "policy_duplicate",
         }
     }
 
@@ -120,6 +122,7 @@ impl ResolutionCode {
             Self::ProfileNotFound { id } => format!("profile `{id}` not found"),
             Self::ProfileAmbiguous { id } => format!("profile `{id}` ambiguous"),
             Self::PolicyNotFound { id } => format!("policy `{id}` not found"),
+            Self::PolicyDuplicate { id } => format!("duplicate policy id `{id}`"),
         }
     }
 
@@ -170,20 +173,20 @@ impl ResolveSuccess {
     /// Immutable S5 handoff. Policy evaluation must not re-resolve any plan input.
     pub fn policy_evaluation_input(&self) -> PolicyEvaluationInput {
         let resolved = self.plan.resolved();
-        PolicyEvaluationInput {
-            actor: Actor::Agent,
-            request: super::plan::RequestedOperation::from_resolution(
+        PolicyEvaluationInput::new(
+            Actor::Agent,
+            super::plan::RequestedOperation::from_resolution(
                 &resolved.unit_id,
                 &resolved.verb,
                 self.explain_requested,
                 self.execute_requested,
             ),
-            plan: self.plan.clone(),
-            profile: self.selected.profile.clone(),
-            policies: self.selected.policies.clone(),
-            policy_origins: self.selected.policy_origins.clone(),
-            policy_root: self.policy_root.clone(),
-        }
+            self.plan.clone(),
+            self.selected.profile.clone(),
+            self.selected.policies.clone(),
+            self.selected.policy_origins.clone(),
+            self.policy_root.clone(),
+        )
     }
 }
 
@@ -438,6 +441,11 @@ impl<'a> Resolver<'a> {
         let mut explanation = explanation_from_plan(&plan, &selected, freshness);
         explanation.completed_steps = trace.completed_steps.clone();
 
+        let workspace = &self.inputs.access.paths.workspace_root;
+        let policy_root = workspace
+            .canonicalize()
+            .unwrap_or_else(|_| workspace.clone());
+
         Ok(ResolveSuccess {
             plan,
             explanation,
@@ -445,7 +453,7 @@ impl<'a> Resolver<'a> {
             freshness,
             explain_requested: request.explain,
             execute_requested: request.execute_requested,
-            policy_root: self.inputs.access.paths.workspace_root.clone(),
+            policy_root,
         })
     }
 }
@@ -962,16 +970,16 @@ mod tests {
         );
 
         let handoff = a.policy_evaluation_input();
-        assert_eq!(handoff.request.unit_id, "demo");
-        assert_eq!(handoff.request.verb, "build");
-        assert_eq!(handoff.request.program, "takogami");
-        assert_eq!(handoff.profile.id, "workspace-dev");
-        assert!(!handoff.policy_origins.is_empty());
-        assert!(handoff.policy_root.exists() || !handoff.policy_root.as_os_str().is_empty());
-        assert_eq!(handoff.plan.plan_digest(), a.plan.plan_digest());
+        assert_eq!(handoff.request().unit_id, "demo");
+        assert_eq!(handoff.request().verb, "build");
+        assert_eq!(handoff.request().program, "takogami");
+        assert_eq!(handoff.profile().id, "workspace-dev");
+        assert!(!handoff.policy_origins().is_empty());
+        assert!(handoff.policy_root().exists() || !handoff.policy_root().as_os_str().is_empty());
+        assert_eq!(handoff.plan().plan_digest(), a.plan.plan_digest());
         assert_eq!(
             handoff
-                .policies
+                .policies()
                 .iter()
                 .map(|policy| policy.id.as_str())
                 .collect::<Vec<_>>(),

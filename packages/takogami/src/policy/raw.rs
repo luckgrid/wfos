@@ -1,6 +1,6 @@
 //! Strict typed raw policy/profile enforcement shapes.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Deserialize;
 use serde_json::Value;
@@ -187,6 +187,8 @@ impl PolicyEnforcementRecord {
             )
         })?;
         parsed.validate_version()?;
+        parsed.validate_unique_items()?;
+        parsed.validate_allow_gate_unsupported()?;
         parsed.validate_actions()?;
         Ok(parsed)
     }
@@ -209,21 +211,87 @@ impl PolicyEnforcementRecord {
         }
     }
 
+    /// v0: allow/gate paths and actions are unsupported when non-empty.
+    fn validate_allow_gate_unsupported(&self) -> Result<(), RawPolicyError> {
+        for (name, table) in [("allow", &self.allow), ("gate", &self.gate)] {
+            let Some(table) = table else {
+                continue;
+            };
+            if !table.paths.is_empty() {
+                return Err(RawPolicyError::new(
+                    PolicyContractKind::PolicyRuleInvalid,
+                    format!("{name}.paths is unsupported in v0 (must be empty or absent)"),
+                    Some(self.id.clone()),
+                    Some(format!("{name}.paths")),
+                ));
+            }
+            if !table.actions.is_empty() {
+                return Err(RawPolicyError::new(
+                    PolicyContractKind::PolicyRuleInvalid,
+                    format!("{name}.actions is unsupported in v0 (must be empty or absent)"),
+                    Some(self.id.clone()),
+                    Some(format!("{name}.actions")),
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_unique_items(&self) -> Result<(), RawPolicyError> {
+        if let Some(agent) = &self.agent {
+            ensure_unique(&agent.allow, &self.id, "agent.allow")?;
+            ensure_unique(&agent.block, &self.id, "agent.block")?;
+        }
+        for (name, table) in [
+            ("allow", &self.allow),
+            ("gate", &self.gate),
+            ("block", &self.block),
+        ] {
+            let Some(table) = table else {
+                continue;
+            };
+            ensure_unique(&table.commands, &self.id, &format!("{name}.commands"))?;
+            ensure_unique(&table.tools, &self.id, &format!("{name}.tools"))?;
+            ensure_unique(&table.paths, &self.id, &format!("{name}.paths"))?;
+            ensure_unique(&table.actions, &self.id, &format!("{name}.actions"))?;
+        }
+        if let Some(secrets) = &self.secrets {
+            ensure_unique(&secrets.block_tools, &self.id, "secrets.block_tools")?;
+        }
+        Ok(())
+    }
+
     fn validate_actions(&self) -> Result<(), RawPolicyError> {
-        for table in [&self.allow, &self.gate, &self.block].into_iter().flatten() {
-            for action in &table.actions {
+        // allow/gate actions already rejected when non-empty; only block.actions remain.
+        if let Some(block) = &self.block {
+            for action in &block.actions {
                 if action != "delete untracked files" {
                     return Err(RawPolicyError::new(
                         PolicyContractKind::PolicyRuleInvalid,
                         format!("unsupported action `{action}`"),
                         Some(self.id.clone()),
-                        Some("actions".into()),
+                        Some("block.actions".into()),
                     ));
                 }
             }
         }
         Ok(())
     }
+}
+
+fn ensure_unique(items: &[String], policy_id: &str, field: &str) -> Result<(), RawPolicyError> {
+    let mut seen = BTreeSet::new();
+    for item in items {
+        if !seen.insert(item.as_str()) {
+            return Err(RawPolicyError::new(
+                PolicyContractKind::PolicyRuleInvalid,
+                format!("{field} must have unique items"),
+                Some(policy_id.into()),
+                Some(field.into()),
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// Typed profile enforcement view extracted from a flattened ProfileRecord.
@@ -243,7 +311,8 @@ pub struct ProfileEnforcement {
 
 impl ProfileEnforcement {
     pub fn from_record(profile: &ProfileRecord) -> Result<Self, RawPolicyError> {
-        let allowed_paths = string_array(&profile.rest, "allowed_paths")?;
+        let pid = profile.id.as_str();
+        let allowed_paths = string_array(&profile.rest, "allowed_paths", pid)?;
         if allowed_paths.is_empty() {
             return Err(RawPolicyError::new(
                 PolicyContractKind::PolicyContractInvalid,
@@ -252,24 +321,31 @@ impl ProfileEnforcement {
                 Some("allowed_paths".into()),
             ));
         }
-        let blocked_paths = string_array(&profile.rest, "blocked_paths").unwrap_or_default();
-        let allowed_commands = string_array(&profile.rest, "allowed_commands").unwrap_or_default();
-        let gated_commands = string_array(&profile.rest, "gated_commands").unwrap_or_default();
-        let blocked_commands = string_array(&profile.rest, "blocked_commands").unwrap_or_default();
-        let secret_access = bool_field(&profile.rest, "secret_access")?.unwrap_or(false);
-        let remote_write_policy = match profile
-            .rest
-            .get("remote_write_policy")
-            .and_then(|v| v.as_str())
-        {
-            None => RemoteWritePolicy::Blocked,
-            Some("blocked") => RemoteWritePolicy::Blocked,
-            Some("local-only") => RemoteWritePolicy::LocalOnly,
-            Some("elevated") => RemoteWritePolicy::Elevated,
-            Some(other) => {
+        // Absent array → empty; present non-array / non-string member → contract error.
+        let blocked_paths = string_array(&profile.rest, "blocked_paths", pid)?;
+        let allowed_commands = string_array(&profile.rest, "allowed_commands", pid)?;
+        let gated_commands = string_array(&profile.rest, "gated_commands", pid)?;
+        let blocked_commands = string_array(&profile.rest, "blocked_commands", pid)?;
+        let secret_access = bool_field(&profile.rest, "secret_access", pid)?.unwrap_or(false);
+        let remote_write_policy = match profile.rest.get("remote_write_policy") {
+            None | Some(Value::Null) => RemoteWritePolicy::Blocked,
+            Some(Value::String(s)) => match s.as_str() {
+                "blocked" => RemoteWritePolicy::Blocked,
+                "local-only" => RemoteWritePolicy::LocalOnly,
+                "elevated" => RemoteWritePolicy::Elevated,
+                other => {
+                    return Err(RawPolicyError::new(
+                        PolicyContractKind::PolicyRuleInvalid,
+                        format!("unsupported remote_write_policy `{other}`"),
+                        Some(profile.id.clone()),
+                        Some("remote_write_policy".into()),
+                    ));
+                }
+            },
+            Some(_) => {
                 return Err(RawPolicyError::new(
                     PolicyContractKind::PolicyRuleInvalid,
-                    format!("unsupported remote_write_policy `{other}`"),
+                    "remote_write_policy must be a string",
                     Some(profile.id.clone()),
                     Some("remote_write_policy".into()),
                 ));
@@ -290,7 +366,11 @@ impl ProfileEnforcement {
     }
 }
 
-fn string_array(map: &BTreeMap<String, Value>, key: &str) -> Result<Vec<String>, RawPolicyError> {
+fn string_array(
+    map: &BTreeMap<String, Value>,
+    key: &str,
+    profile_id: &str,
+) -> Result<Vec<String>, RawPolicyError> {
     match map.get(key) {
         None => Ok(Vec::new()),
         Some(Value::Array(items)) => {
@@ -302,7 +382,7 @@ fn string_array(map: &BTreeMap<String, Value>, key: &str) -> Result<Vec<String>,
                         return Err(RawPolicyError::new(
                             PolicyContractKind::PolicyRuleInvalid,
                             format!("{key} items must be strings"),
-                            None,
+                            Some(profile_id.into()),
                             Some(key.into()),
                         ));
                     }
@@ -313,20 +393,24 @@ fn string_array(map: &BTreeMap<String, Value>, key: &str) -> Result<Vec<String>,
         Some(_) => Err(RawPolicyError::new(
             PolicyContractKind::PolicyRuleInvalid,
             format!("{key} must be an array of strings"),
-            None,
+            Some(profile_id.into()),
             Some(key.into()),
         )),
     }
 }
 
-fn bool_field(map: &BTreeMap<String, Value>, key: &str) -> Result<Option<bool>, RawPolicyError> {
+fn bool_field(
+    map: &BTreeMap<String, Value>,
+    key: &str,
+    profile_id: &str,
+) -> Result<Option<bool>, RawPolicyError> {
     match map.get(key) {
         None | Some(Value::Null) => Ok(None),
         Some(Value::Bool(b)) => Ok(Some(*b)),
         Some(_) => Err(RawPolicyError::new(
             PolicyContractKind::PolicyRuleInvalid,
             format!("{key} must be a boolean"),
-            None,
+            Some(profile_id.into()),
             Some(key.into()),
         )),
     }
@@ -370,5 +454,108 @@ mod tests {
             .unwrap(),
         };
         assert!(PolicyEnforcementRecord::from_registry(&record).is_err());
+    }
+
+    #[test]
+    fn rejects_nonempty_allow_paths() {
+        let record = PolicyRecord {
+            id: "bad".into(),
+            applies_to: Some("agent".into()),
+            rest: serde_json::from_value(serde_json::json!({
+                "version": "0.1.0",
+                "allow": {"paths": ["Build/**"]}
+            }))
+            .unwrap(),
+        };
+        let err = PolicyEnforcementRecord::from_registry(&record).unwrap_err();
+        assert_eq!(err.field.as_deref(), Some("allow.paths"));
+    }
+
+    #[test]
+    fn rejects_duplicate_array_items() {
+        let record = PolicyRecord {
+            id: "bad".into(),
+            applies_to: Some("agent".into()),
+            rest: serde_json::from_value(serde_json::json!({
+                "version": "0.1.0",
+                "allow": {"commands": ["x", "x"]}
+            }))
+            .unwrap(),
+        };
+        let err = PolicyEnforcementRecord::from_registry(&record).unwrap_err();
+        assert_eq!(err.field.as_deref(), Some("allow.commands"));
+    }
+
+    #[test]
+    fn accepts_generated_source() {
+        let record = PolicyRecord {
+            id: "ok".into(),
+            applies_to: Some("agent".into()),
+            rest: serde_json::from_value(serde_json::json!({
+                "version": "0.1.0",
+                "source": "policies/ok.policy.toml",
+                "allow": {"commands": ["x"]}
+            }))
+            .unwrap(),
+        };
+        assert!(PolicyEnforcementRecord::from_registry(&record).is_ok());
+    }
+
+    fn profile_with_rest(rest: serde_json::Value) -> ProfileRecord {
+        ProfileRecord {
+            id: "p".into(),
+            title: None,
+            purpose: None,
+            rails: None,
+            rails_bin: None,
+            isolation_mode: None,
+            isolation_jj: None,
+            session_state_home: None,
+            rest: serde_json::from_value(rest).unwrap(),
+        }
+    }
+
+    #[test]
+    fn profile_rejects_malformed_blocked_paths() {
+        let profile = profile_with_rest(serde_json::json!({
+            "allowed_paths": ["Build/**"],
+            "blocked_paths": "not-an-array"
+        }));
+        let err = ProfileEnforcement::from_record(&profile).unwrap_err();
+        assert_eq!(err.policy_id.as_deref(), Some("p"));
+        assert_eq!(err.field.as_deref(), Some("blocked_paths"));
+    }
+
+    #[test]
+    fn profile_rejects_non_string_array_member() {
+        let profile = profile_with_rest(serde_json::json!({
+            "allowed_paths": ["Build/**"],
+            "blocked_paths": ["ok", 123]
+        }));
+        let err = ProfileEnforcement::from_record(&profile).unwrap_err();
+        assert_eq!(err.field.as_deref(), Some("blocked_paths"));
+        assert!(err.message.contains("must be strings"));
+    }
+
+    #[test]
+    fn profile_rejects_non_string_remote_write_policy() {
+        let profile = profile_with_rest(serde_json::json!({
+            "allowed_paths": ["Build/**"],
+            "remote_write_policy": true
+        }));
+        let err = ProfileEnforcement::from_record(&profile).unwrap_err();
+        assert_eq!(err.field.as_deref(), Some("remote_write_policy"));
+    }
+
+    #[test]
+    fn profile_absent_arrays_default_empty() {
+        let profile = profile_with_rest(serde_json::json!({
+            "allowed_paths": ["Build/**"]
+        }));
+        let enf = ProfileEnforcement::from_record(&profile).unwrap();
+        assert!(enf.blocked_paths.is_empty());
+        assert!(enf.allowed_commands.is_empty());
+        assert!(!enf.secret_access);
+        assert_eq!(enf.remote_write_policy, RemoteWritePolicy::Blocked);
     }
 }

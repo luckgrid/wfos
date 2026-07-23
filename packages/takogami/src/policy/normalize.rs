@@ -116,6 +116,10 @@ pub fn normalize_policies(
     let profile_enf = ProfileEnforcement::from_record(profile)?;
     let mut rules = Vec::new();
 
+    // Sort by policy ID so the first malformed diagnostic is order-independent.
+    let mut policies_sorted: Vec<&PolicyRecord> = policies.iter().collect();
+    policies_sorted.sort_by(|a, b| a.id.cmp(&b.id));
+
     // Controller hard-block wrappers.
     for wrapper in [
         "sh", "bash", "zsh", "fish", "env", "sudo", "doas", "xargs", "command", "exec",
@@ -157,7 +161,7 @@ pub fn normalize_policies(
         "out_of_scope",
     ));
 
-    for policy in policies {
+    for policy in &policies_sorted {
         let enf = PolicyEnforcementRecord::from_registry(policy)?;
         let _origin_label = policy_origins
             .iter()
@@ -369,12 +373,11 @@ pub fn normalize_policies(
         profile_enf.remote_write_policy.as_str(),
     ));
 
-    // Path patterns.
+    // Path patterns — bind each CompiledPathPattern to its canonical rule_id.
     let mut allowed_path_patterns = Vec::new();
     for p in &profile_enf.allowed_paths {
         let adjusted = adjust_pattern_for_root(p, policy_root);
-        let compiled = compile_path_pattern(&adjusted, &profile_enf.id)?;
-        rules.push(make_rule(
+        let rule = make_rule(
             OriginKind::Profile,
             &profile_enf.id,
             Effect::Allow,
@@ -383,14 +386,15 @@ pub fn normalize_policies(
             None,
             "path_out_of_scope",
             &adjusted,
-        ));
+        );
+        let compiled = compile_path_pattern(&adjusted, &profile_enf.id, &rule.rule_id)?;
+        rules.push(rule);
         allowed_path_patterns.push(compiled);
     }
     let mut blocked_path_patterns = Vec::new();
     for p in &profile_enf.blocked_paths {
         let adjusted = adjust_pattern_for_root(p, policy_root);
-        let compiled = compile_path_pattern(&adjusted, &profile_enf.id)?;
-        rules.push(make_rule(
+        let rule = make_rule(
             OriginKind::Profile,
             &profile_enf.id,
             Effect::Deny,
@@ -399,18 +403,19 @@ pub fn normalize_policies(
             None,
             "path_blocked",
             &adjusted,
-        ));
+        );
+        let compiled = compile_path_pattern(&adjusted, &profile_enf.id, &rule.rule_id)?;
+        rules.push(rule);
         blocked_path_patterns.push(compiled);
     }
 
     // Also path blocks from policy block.paths
-    for policy in policies {
+    for policy in &policies_sorted {
         let enf = PolicyEnforcementRecord::from_registry(policy)?;
         if let Some(block) = &enf.block {
             for p in &block.paths {
                 let adjusted = adjust_pattern_for_root(p, policy_root);
-                let compiled = compile_path_pattern(&adjusted, &enf.id)?;
-                rules.push(make_rule(
+                let rule = make_rule(
                     OriginKind::Policy,
                     &enf.id,
                     Effect::Deny,
@@ -419,7 +424,9 @@ pub fn normalize_policies(
                     None,
                     "path_blocked",
                     &adjusted,
-                ));
+                );
+                let compiled = compile_path_pattern(&adjusted, &enf.id, &rule.rule_id)?;
+                rules.push(rule);
                 blocked_path_patterns.push(compiled);
             }
             for action in &block.actions {

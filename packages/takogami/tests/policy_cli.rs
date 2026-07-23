@@ -232,8 +232,30 @@ fn allow_execute_reaches_unavailable_seam() {
 
 #[test]
 fn denied_interactive_returns_policy_before_class() {
-    let h = Harness::new();
-    // Restrictive alt profile blocks demo-bin → policy deny wins over class unavailable.
+    let mut h = Harness::new();
+    // Keep interactive_session class, but force policy deny via blocked `rm` child so
+    // policy wins before execution_class_unavailable.
+    let path = h
+        .registry
+        .join("sources/descriptors/interactive-demo.descriptor.toml");
+    let text = fs::read_to_string(&path).unwrap().replace(
+        r#"program = "demo-bin"
+args = []
+cwd = "demo"
+env_keys = ["PATH"]
+backend = "native"
+adapter = "direct""#,
+        r#"program = "rm"
+args = ["bin/foo"]
+cwd = "demo"
+env_keys = ["PATH"]
+backend = "native"
+adapter = "direct""#,
+    );
+    fs::write(&path, text).unwrap();
+    h.write_hit_units();
+    write_marker_exe(&h.path_dir.join("rm"), &h.marker);
+
     let out = h.run(&[
         "--json",
         "--profile",
@@ -341,5 +363,185 @@ fn human_allow_summary_mentions_policy() {
     let text = stdout(&out);
     assert!(text.contains("Policy:"), "{text}");
     assert!(text.contains("Plan only"), "{text}");
+    h.assert_marker_untouched();
+}
+
+#[test]
+fn allow_plan_only_includes_policy_layers_and_execution_flags() {
+    let h = Harness::new();
+    let state = h.workspace.join("state-home-should-not-exist");
+    let out = h.run(&[
+        "--json",
+        "--state-home",
+        state.to_str().unwrap(),
+        "build",
+        "demo",
+    ]);
+    assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
+    let v = parse_json(&out);
+    assert_eq!(v["data"]["policy"]["request"]["decision"], "allow");
+    assert_eq!(v["data"]["policy"]["child"]["decision"], "allow");
+    assert_eq!(v["data"]["policy"]["execution_authorized"], true);
+    assert_eq!(v["data"]["execution_authorized"], true);
+    assert_eq!(v["data"]["execution_requested"], false);
+    assert_eq!(v["data"]["mode"], "plan_only");
+    h.assert_marker_untouched();
+    h.assert_no_state_home(&state);
+}
+
+#[test]
+fn allow_execute_reports_execution_requested_and_leaves_marker() {
+    let h = Harness::new();
+    let out = h.run(&["--json", "build", "demo", "--execute"]);
+    assert_eq!(out.status.code(), Some(NOT_IMPLEMENTED as i32));
+    let v = parse_json(&out);
+    assert_eq!(v["diagnostics"][0]["code"], "execution_unavailable");
+    assert_eq!(v["data"]["policy_decision"]["outcome"], "allow");
+    assert_eq!(v["data"]["execution_requested"], true);
+    assert_eq!(v["data"]["execution_authorized"], true);
+    h.assert_marker_untouched();
+}
+
+#[test]
+fn gate_with_execute_reports_execution_requested() {
+    let mut h = Harness::new();
+    let path = h.registry.join("sources/descriptors/demo.descriptor.toml");
+    let text = fs::read_to_string(&path).unwrap().replace(
+        r#"program = "moon"
+args = ["run", "demo:build"]
+cwd = "demo"
+env_keys = ["PATH"]
+backend = "moon"
+adapter = "moon-task""#,
+        r#"program = "ontarch"
+args = ["bin-cleanup", "--mode", "dry-run"]
+cwd = "demo"
+env_keys = ["PATH"]
+backend = "native"
+adapter = "direct""#,
+    );
+    fs::write(&path, text).unwrap();
+    h.write_hit_units();
+    write_marker_exe(&h.path_dir.join("ontarch"), &h.marker);
+
+    let out = h.run(&["--json", "build", "demo", "--execute"]);
+    assert_eq!(
+        out.status.code(),
+        Some(POLICY_GATE as i32),
+        "{}",
+        stderr(&out)
+    );
+    let v = parse_json(&out);
+    assert_eq!(v["data"]["policy_decision"]["outcome"], "gate");
+    assert_eq!(v["data"]["execution_requested"], true);
+    assert_eq!(v["data"]["execution_authorized"], false);
+    assert!(v["data"]["policy"]["request"].is_object());
+    assert!(v["data"]["policy"]["child"].is_object());
+    h.assert_marker_untouched();
+}
+
+#[test]
+fn deny_with_execute_reports_execution_requested() {
+    let mut h = Harness::new();
+    let path = h.registry.join("sources/descriptors/demo.descriptor.toml");
+    let text = fs::read_to_string(&path).unwrap().replace(
+        r#"program = "moon"
+args = ["run", "demo:build"]
+cwd = "demo"
+env_keys = ["PATH"]
+backend = "moon"
+adapter = "moon-task""#,
+        r#"program = "rm"
+args = ["bin/foo"]
+cwd = "demo"
+env_keys = ["PATH"]
+backend = "native"
+adapter = "direct""#,
+    );
+    fs::write(&path, text).unwrap();
+    h.write_hit_units();
+    write_marker_exe(&h.path_dir.join("rm"), &h.marker);
+
+    let out = h.run(&["--json", "build", "demo", "--execute"]);
+    assert_eq!(
+        out.status.code(),
+        Some(POLICY_DENY as i32),
+        "{}",
+        stderr(&out)
+    );
+    let v = parse_json(&out);
+    assert_eq!(v["data"]["policy_decision"]["outcome"], "deny");
+    assert_eq!(v["data"]["execution_requested"], true);
+    assert_eq!(v["data"]["execution_authorized"], false);
+    h.assert_marker_untouched();
+}
+
+#[test]
+fn human_gate_stderr_includes_plan_digest_and_policy() {
+    let mut h = Harness::new();
+    let path = h.registry.join("sources/descriptors/demo.descriptor.toml");
+    let text = fs::read_to_string(&path).unwrap().replace(
+        r#"program = "moon"
+args = ["run", "demo:build"]
+cwd = "demo"
+env_keys = ["PATH"]
+backend = "moon"
+adapter = "moon-task""#,
+        r#"program = "ontarch"
+args = ["bin-cleanup", "--mode", "dry-run"]
+cwd = "demo"
+env_keys = ["PATH"]
+backend = "native"
+adapter = "direct""#,
+    );
+    fs::write(&path, text).unwrap();
+    h.write_hit_units();
+    write_marker_exe(&h.path_dir.join("ontarch"), &h.marker);
+
+    let out = h.run(&["build", "demo"]);
+    assert_eq!(
+        out.status.code(),
+        Some(POLICY_GATE as i32),
+        "{}",
+        stderr(&out)
+    );
+    let err = stderr(&out);
+    assert!(err.contains("plan digest:"), "{err}");
+    assert!(err.contains("Policy:"), "{err}");
+    h.assert_marker_untouched();
+}
+
+#[test]
+fn human_deny_stderr_includes_plan_digest_and_policy() {
+    let mut h = Harness::new();
+    let path = h.registry.join("sources/descriptors/demo.descriptor.toml");
+    let text = fs::read_to_string(&path).unwrap().replace(
+        r#"program = "moon"
+args = ["run", "demo:build"]
+cwd = "demo"
+env_keys = ["PATH"]
+backend = "moon"
+adapter = "moon-task""#,
+        r#"program = "rm"
+args = ["bin/foo"]
+cwd = "demo"
+env_keys = ["PATH"]
+backend = "native"
+adapter = "direct""#,
+    );
+    fs::write(&path, text).unwrap();
+    h.write_hit_units();
+    write_marker_exe(&h.path_dir.join("rm"), &h.marker);
+
+    let out = h.run(&["build", "demo"]);
+    assert_eq!(
+        out.status.code(),
+        Some(POLICY_DENY as i32),
+        "{}",
+        stderr(&out)
+    );
+    let err = stderr(&out);
+    assert!(err.contains("plan digest:"), "{err}");
+    assert!(err.contains("Policy:"), "{err}");
     h.assert_marker_untouched();
 }

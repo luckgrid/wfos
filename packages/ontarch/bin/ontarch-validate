@@ -105,7 +105,7 @@ _validate_descriptors() {
 # Args: <policy-json>
 _policy_shape_ok() {
   jq -e '
-    def known_root: ["id","applies_to","version","agent","allow","gate","block","gates","secrets","remote","rationale","source"];
+    def known_root: ["id","applies_to","version","agent","allow","gate","block","gates","secrets","remote","rationale"];
     def known_agent: ["env_flag","allow","block"];
     def known_rule: ["commands","tools","paths","actions"];
     def known_gates: ["no_global_install","no_secret_read","no_shell_mutation"];
@@ -114,13 +114,24 @@ _policy_shape_ok() {
     def known_rationale: ["text"];
     def known_actions: ["delete untracked files"];
     def obj_keys_ok($known): (type != "object") or ((keys - $known) | length == 0);
-    def rule_ok:
+    def unique_ok($arr): ($arr | length) == ($arr | unique | length);
+    def str_array_ok($arr):
+      ($arr | map(type == "string") | all) and unique_ok($arr);
+    def rule_ok($allow_gate):
       type == "object"
       and obj_keys_ok(known_rule)
-      and ((.commands // []) | map(type == "string") | all)
-      and ((.tools // []) | map(type == "string") | all)
-      and ((.paths // []) | map(type == "string") | all)
-      and ((.actions // []) | map(. as $a | known_actions | index($a)) | all);
+      and str_array_ok(.commands // [])
+      and str_array_ok(.tools // [])
+      and str_array_ok(.paths // [])
+      and ((.actions // []) | map(. as $a | known_actions | index($a)) | all)
+      and unique_ok(.actions // [])
+      and (
+        ($allow_gate | not)
+        or (
+          ((.paths // []) | length == 0)
+          and ((.actions // []) | length == 0)
+        )
+      );
     (has("id") and has("applies_to") and has("version"))
     and (.id | type == "string" and test("^[a-z0-9][a-z0-9._-]*$"))
     and (.applies_to | type == "string" and length > 0)
@@ -128,12 +139,13 @@ _policy_shape_ok() {
     and obj_keys_ok(known_root)
     and ((has("agent") | not) or (
       .agent | type == "object" and obj_keys_ok(known_agent)
-      and ((.allow // []) | map(type == "string") | all)
-      and ((.block // []) | map(type == "string") | all)
+      and ((has("env_flag") | not) or (.env_flag | type == "string"))
+      and str_array_ok(.allow // [])
+      and str_array_ok(.block // [])
     ))
-    and ((has("allow") | not) or (.allow | rule_ok))
-    and ((has("gate") | not) or (.gate | rule_ok))
-    and ((has("block") | not) or (.block | rule_ok))
+    and ((has("allow") | not) or (.allow | rule_ok(true)))
+    and ((has("gate") | not) or (.gate | rule_ok(true)))
+    and ((has("block") | not) or (.block | rule_ok(false)))
     and ((has("gates") | not) or (
       .gates | type == "object" and obj_keys_ok(known_gates)
       and ((has("no_global_install") | not) or (.no_global_install | type == "boolean"))
@@ -142,7 +154,8 @@ _policy_shape_ok() {
     ))
     and ((has("secrets") | not) or (
       .secrets | type == "object" and obj_keys_ok(known_secrets)
-      and ((.block_tools // []) | map(type == "string") | all)
+      and str_array_ok(.block_tools // [])
+      and ((has("rationale") | not) or (.rationale | type == "string"))
     ))
     and ((has("remote") | not) or (
       .remote | type == "object" and obj_keys_ok(known_remote)
@@ -150,6 +163,7 @@ _policy_shape_ok() {
     ))
     and ((has("rationale") | not) or (
       .rationale | type == "object" and obj_keys_ok(known_rationale)
+      and ((has("text") | not) or (.text | type == "string"))
     ))
   ' <<<"$1" >/dev/null
 }
@@ -240,6 +254,30 @@ _selfcheck_policy_enforcement_shape() {
   bad='{"id":"bad","applies_to":"agent","version":"0.2.0"}'
   if _policy_shape_ok "$bad"; then
     ontarch_err "policy shape selfcheck: unsupported version should fail"
+    fail=1
+  fi
+  # duplicate array items
+  bad='{"id":"bad","applies_to":"agent","version":"0.1.0","allow":{"commands":["x","x"]}}'
+  if _policy_shape_ok "$bad"; then
+    ontarch_err "policy shape selfcheck: duplicate commands should fail"
+    fail=1
+  fi
+  # authored source field (generated-only; reject on authored)
+  bad='{"id":"bad","applies_to":"agent","version":"0.1.0","source":"policies/bad.policy.toml"}'
+  if _policy_shape_ok "$bad"; then
+    ontarch_err "policy shape selfcheck: authored source should fail"
+    fail=1
+  fi
+  # non-empty allow.paths (unsupported in v0)
+  bad='{"id":"bad","applies_to":"agent","version":"0.1.0","allow":{"paths":["Build/**"]}}'
+  if _policy_shape_ok "$bad"; then
+    ontarch_err "policy shape selfcheck: allow.paths non-empty should fail"
+    fail=1
+  fi
+  # non-string nested scalar (commands member)
+  bad='{"id":"bad","applies_to":"agent","version":"0.1.0","allow":{"commands":[1]}}'
+  if _policy_shape_ok "$bad"; then
+    ontarch_err "policy shape selfcheck: non-string command should fail"
     fail=1
   fi
 }

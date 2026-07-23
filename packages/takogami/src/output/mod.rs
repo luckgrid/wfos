@@ -53,18 +53,7 @@ impl OutputSink {
         Ok(crate::exit_codes::SUCCESS)
     }
 
-    pub fn emit_plan(
-        &self,
-        command: &str,
-        plan: &SealedExecutionPlan,
-        explanation: &ResolutionExplanation,
-        freshness: Freshness,
-    ) -> io::Result<u8> {
-        let decision = dummy_allow();
-        let policy_ex = dummy_policy_explanation(plan);
-        self.emit_plan_with_policy(command, plan, explanation, &decision, &policy_ex, freshness)
-    }
-
+    #[allow(clippy::too_many_arguments)]
     pub fn emit_plan_with_policy(
         &self,
         command: &str,
@@ -73,27 +62,27 @@ impl OutputSink {
         policy_decision: &PolicyDecision,
         policy_explanation: &PolicyEvaluationExplanation,
         freshness: Freshness,
+        execution_requested: bool,
     ) -> io::Result<u8> {
+        let execution_authorized = matches!(policy_decision, PolicyDecision::Allow { .. })
+            && policy_explanation.execution_authorized;
         if self.json {
             let data = serde_json::json!({
                 "mode": "plan_only",
                 "resolved_command": plan.resolved(),
                 "plan_digest": plan.plan_digest(),
                 "policy_decision": policy_decision,
-                "execution_authorized": true,
-                "execution_requested": false,
+                "policy": {
+                    "request": policy_explanation.request,
+                    "child": policy_explanation.child,
+                    "execution_authorized": execution_authorized,
+                    "approval_transport": policy_explanation.approval_transport,
+                },
+                "execution_authorized": execution_authorized,
+                "execution_requested": execution_requested,
             });
             let mut envelope = CommandEnvelope::ok(command, Some(data));
             envelope.session_id = Some(plan.resolved().session_id.clone());
-            let mut expl = serde_json::to_value(explanation).unwrap_or_default();
-            if let Some(obj) = expl.as_object_mut() {
-                obj.insert(
-                    "policy".into(),
-                    serde_json::to_value(policy_explanation).unwrap_or_default(),
-                );
-            }
-            // plan-only JSON without --explain keeps explanation absent per prior behavior,
-            // but policy lives under data; keep explanation None for non-explain plan.
             envelope.diagnostics = plan.diagnostics().to_vec();
             envelope.metrics = Some(EnvelopeMetrics {
                 registry_cache: freshness.as_str().into(),
@@ -101,7 +90,7 @@ impl OutputSink {
                 compressor: "none".into(),
                 gain: None,
             });
-            let _ = expl;
+            let _ = explanation;
             emit_json(&envelope)?;
         } else {
             writeln!(io::stdout(), "{}", render_human_summary(explanation))?;
@@ -115,23 +104,7 @@ impl OutputSink {
         Ok(crate::exit_codes::SUCCESS)
     }
 
-    pub fn emit_explanation(
-        &self,
-        command: &str,
-        plan: &SealedExecutionPlan,
-        explanation: &ResolutionExplanation,
-        freshness: Freshness,
-    ) -> io::Result<u8> {
-        self.emit_explanation_with_policy(
-            command,
-            plan,
-            explanation,
-            &dummy_allow(),
-            &dummy_policy_explanation(plan),
-            freshness,
-        )
-    }
-
+    #[allow(clippy::too_many_arguments)]
     pub fn emit_explanation_with_policy(
         &self,
         command: &str,
@@ -140,15 +113,24 @@ impl OutputSink {
         policy_decision: &PolicyDecision,
         policy_explanation: &PolicyEvaluationExplanation,
         freshness: Freshness,
+        execution_requested: bool,
     ) -> io::Result<u8> {
+        let execution_authorized = matches!(policy_decision, PolicyDecision::Allow { .. })
+            && policy_explanation.execution_authorized;
         if self.json {
             let data = serde_json::json!({
                 "mode": "plan_only",
                 "resolved_command": plan.resolved(),
                 "plan_digest": plan.plan_digest(),
                 "policy_decision": policy_decision,
-                "execution_authorized": true,
-                "execution_requested": false,
+                "policy": {
+                    "request": policy_explanation.request,
+                    "child": policy_explanation.child,
+                    "execution_authorized": execution_authorized,
+                    "approval_transport": policy_explanation.approval_transport,
+                },
+                "execution_authorized": execution_authorized,
+                "execution_requested": execution_requested,
             });
             let mut envelope = CommandEnvelope::ok(command, Some(data));
             envelope.session_id = Some(plan.resolved().session_id.clone());
@@ -190,6 +172,7 @@ impl OutputSink {
         policy_explanation: &PolicyEvaluationExplanation,
         policy_decision: &PolicyDecision,
         freshness: Freshness,
+        execution_requested: bool,
     ) -> io::Result<u8> {
         let code = error.exit_code();
         if self.json {
@@ -201,8 +184,14 @@ impl OutputSink {
                 "resolved_command": plan.resolved(),
                 "plan_digest": plan.plan_digest(),
                 "policy_decision": policy_decision,
+                "policy": {
+                    "request": policy_explanation.request,
+                    "child": policy_explanation.child,
+                    "execution_authorized": false,
+                    "approval_transport": policy_explanation.approval_transport,
+                },
                 "execution_authorized": false,
-                "execution_requested": false,
+                "execution_requested": execution_requested,
             }));
             let mut expl = serde_json::to_value(resolution_explanation).unwrap_or_default();
             if let Some(obj) = expl.as_object_mut() {
@@ -229,6 +218,12 @@ impl OutputSink {
             if let Some(sid) = error.session_id() {
                 writeln!(io::stderr(), "session: {sid}")?;
             }
+            writeln!(io::stderr(), "plan digest: {}", plan.plan_digest())?;
+            writeln!(
+                io::stderr(),
+                "{}",
+                render_human_summary(resolution_explanation)
+            )?;
             writeln!(
                 io::stderr(),
                 "{}",
@@ -283,14 +278,33 @@ impl OutputSink {
             match error {
                 ControllerError::ExecutionUnavailable { details, .. }
                 | ControllerError::ExecutionClassUnavailable { details, .. } => {
-                    envelope.data = Some(serde_json::json!({
+                    let authorized = details
+                        .policy_explanation
+                        .as_ref()
+                        .map(|p| p.execution_authorized)
+                        .unwrap_or(false);
+                    let mut data = serde_json::json!({
                         "mode": "plan_only",
                         "session_id": details.session_id,
                         "plan_digest": details.plan_digest,
                         "policy_decision": details.policy_decision,
-                        "execution_authorized": details.policy_decision.is_some(),
-                        "execution_requested": true,
-                    }));
+                        "execution_authorized": authorized,
+                        "execution_requested": details.execution_requested,
+                    });
+                    if let Some(policy_ex) = &details.policy_explanation
+                        && let Some(obj) = data.as_object_mut()
+                    {
+                        obj.insert(
+                            "policy".into(),
+                            serde_json::json!({
+                                "request": policy_ex.request,
+                                "child": policy_ex.child,
+                                "execution_authorized": authorized,
+                                "approval_transport": policy_ex.approval_transport,
+                            }),
+                        );
+                    }
+                    envelope.data = Some(data);
                 }
                 ControllerError::PolicyContract { details, .. } => {
                     envelope.data = Some(serde_json::json!({
@@ -386,39 +400,6 @@ fn policy_explanation_from_error(error: &ControllerError) -> Option<&PolicyEvalu
             details.policy_explanation.as_ref()
         }
         _ => None,
-    }
-}
-
-fn dummy_allow() -> PolicyDecision {
-    PolicyDecision::Allow {
-        matched_rules: vec![],
-    }
-}
-
-fn dummy_policy_explanation(plan: &SealedExecutionPlan) -> PolicyEvaluationExplanation {
-    use crate::policy::{PolicyLayer, PolicyLayerResult};
-    PolicyEvaluationExplanation {
-        actor: "agent".into(),
-        profile_id: plan.resolved().profile_id.clone(),
-        plan_digest: plan.plan_digest().to_string(),
-        precedence: "deny>gate>allow".into(),
-        request: PolicyLayerResult {
-            layer: PolicyLayer::Request,
-            decision: "allow".into(),
-            matched_rules: vec![],
-            primary_rule: None,
-            intents: vec![],
-        },
-        child: PolicyLayerResult {
-            layer: PolicyLayer::Child,
-            decision: "allow".into(),
-            matched_rules: vec![],
-            primary_rule: None,
-            intents: vec![],
-        },
-        effective_decision: dummy_allow(),
-        execution_authorized: true,
-        approval_transport: "unavailable".into(),
     }
 }
 

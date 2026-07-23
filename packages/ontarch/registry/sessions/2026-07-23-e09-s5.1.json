@@ -1,0 +1,38 @@
+{
+  "session_id": "2026-07-23-e09-s5.1",
+  "epic": "E09",
+  "story": "S5.1",
+  "title": "Policy boundary integrity and evidence hardening",
+  "status": "done",
+  "started_at": "2026-07-23T02:00:00Z",
+  "ended_at": "2026-07-23T04:30:00Z",
+  "changed_paths": [
+    "packages/takogami/src/policy/",
+    "packages/takogami/src/resolution/",
+    "packages/takogami/src/commands.rs",
+    "packages/takogami/src/error.rs",
+    "packages/takogami/src/output/",
+    "packages/takogami/tests/policy_cli.rs",
+    "packages/ontarch/schemas/policy.schema.json",
+    "packages/ontarch/bin/ontarch-validate",
+    "packages/ontarch/registry/sessions/2026-07-23-e09-s5.1.json",
+    "Build/bin/wfos/SESSIONS.md",
+    "Build/bin/wfos/STATE.md"
+  ],
+  "outcome": "E09.S5.1 corrects S5 policy-boundary defects before native execution. Opaque PolicyEvaluationInput with full request/profile/policy/origin/root consistency; duplicate policy IDs fail before map collapse; fail-closed profile/policy normalization (no unwrap_or_default); reject unsupported allow/gate paths/actions + uniqueItems; Ontarch/Rust parity; bounded shell_mutation→no_shell_mutation; program-aware path operands + symlink-aware fail-closed containment + exact path-rule provenance; Allow-only AuthorizedExecutionPlan via private DualAllowProof; injectable executor seam with SpyExecutor call counts; truthful execution_authorized/execution_requested and both policy layers in JSON; removed dummy Allow emitters. Still spawn-free; --execute → unavailable exit 10.",
+  "validation": "PASS with pinned toolchain (rustc/cargo 1.96.0, moon 2.3.2): moon run takogami:build|test|lint|format-check; ontarch:sync|validate (takogami.agent in policies.json + agent→policy:takogami.agent edge); panoply:gen-check|validate-substrate; command-output schema diff identical; git diff --check clean. Lib 78 + policy_cli 14 + resolution_cli 27 + contracts_roundtrip 17. Historical ontarch:secrets-scan blocker preserved and excluded. Review env limitation (no Moon/Rust) was not present here — gates rerun for real.",
+  "decisions": [
+    "Bounded shell_mutation classifier (not reject-as-unsupported) because panoply.agent sets no_shell_mutation=true.",
+    "Reject non-empty allow/gate paths and actions as unsupported v0; keep block.paths and block.actions.",
+    "AuthorizedExecutionPlan constructible only via DualAllowProof + AllowDecision after both layers Allow.",
+    "run_lifecycle_with_executor accepts &dyn Executor; production injects only UnavailableExecutor.",
+    "execution_authorized/execution_requested derived from evaluation/request — never hardcoded Allow or false-on-Gate.",
+    "Historical S5 session JSON left unchanged; S5.1 is a new correction record."
+  ],
+  "next": "E09.S6",
+  "handoff": "E09.S6 must accept only AuthorizedExecutionPlan (dual-Allow proof invariant), use the injected Executor seam for real process spawn, persist RuntimeCommandRecord, and must not reseal/substitute PolicyEvaluationInput fields, re-resolve, or turn Gate into Allow.",
+  "blockers": [
+    "ontarch:secrets-scan detect reports pre-existing age-secret-key in git history (commit a3a4978, 2026-06-24; redacted in HEAD, persists in blob) — not introduced by migration; human decision pending (history rewrite, .gitleaksignore entry, or accept as historical fixture)"
+  ],
+  "token_note": "STATE + S5.1 addendum + S5 plan §§5–18 + S4.1 §§5.6/12 + last 2 session records vs full E09/Plan"
+}

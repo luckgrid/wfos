@@ -1,5 +1,6 @@
 //! Anchored path-scope matching and operand normalization.
 
+use std::io;
 use std::path::{Component, Path, PathBuf};
 
 use super::raw::{PolicyContractKind, RawPolicyError};
@@ -7,6 +8,7 @@ use super::raw::{PolicyContractKind, RawPolicyError};
 #[derive(Debug, Clone)]
 pub struct CompiledPathPattern {
     pub raw: String,
+    pub rule_id: String,
     segments: Vec<Seg>,
 }
 
@@ -24,6 +26,7 @@ enum Seg {
 pub fn compile_path_pattern(
     raw: &str,
     origin_id: &str,
+    rule_id: &str,
 ) -> Result<CompiledPathPattern, RawPolicyError> {
     if raw.is_empty() {
         return Err(RawPolicyError::new(
@@ -91,6 +94,7 @@ pub fn compile_path_pattern(
     }
     Ok(CompiledPathPattern {
         raw: raw.to_string(),
+        rule_id: rule_id.to_string(),
         segments,
     })
 }
@@ -160,10 +164,9 @@ fn match_segs(pat: &[Seg], path: &[&str]) -> bool {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[allow(clippy::enum_variant_names)]
 pub enum PathFactResult {
-    Allow,
-    Blocked,
+    Allow { matched_allow_rules: Vec<String> },
+    Blocked { matched_deny_rules: Vec<String> },
     OutOfScope,
     Escape,
 }
@@ -187,6 +190,33 @@ pub fn lexical_normalize(path: &Path) -> Option<PathBuf> {
     Some(out)
 }
 
+enum PathExistence {
+    /// Path exists (file, dir, or resolved symlink).
+    Present,
+    /// Path does not exist and is not a dangling symlink.
+    Absent,
+    /// Dangling symlink or metadata I/O error — fail closed.
+    Ambiguous,
+}
+
+fn classify_existence(path: &Path) -> PathExistence {
+    match std::fs::symlink_metadata(path) {
+        Ok(meta) => {
+            if meta.file_type().is_symlink() {
+                // Follow once: dangling / permission → Ambiguous.
+                match std::fs::metadata(path) {
+                    Ok(_) => PathExistence::Present,
+                    Err(_) => PathExistence::Ambiguous,
+                }
+            } else {
+                PathExistence::Present
+            }
+        }
+        Err(e) if e.kind() == io::ErrorKind::NotFound => PathExistence::Absent,
+        Err(_) => PathExistence::Ambiguous,
+    }
+}
+
 /// Normalize a path fact against policy_root. Returns workspace-relative path on success.
 pub fn normalize_path_fact(
     path: &Path,
@@ -206,7 +236,7 @@ pub fn normalize_path_fact(
         .or_else(|| lexical_normalize(policy_root))
         .ok_or(PathFactResult::Escape)?;
 
-    let canonical = canonicalize_longest(&lexical).map_err(|_| PathFactResult::Escape)?;
+    let canonical = canonicalize_longest(&lexical, &root_canon)?;
     if !canonical.starts_with(&root_canon) && canonical != root_canon {
         return Err(PathFactResult::Escape);
     }
@@ -217,29 +247,40 @@ pub fn normalize_path_fact(
     Ok(rel.to_string_lossy().replace('\\', "/"))
 }
 
-fn canonicalize_longest(path: &Path) -> Result<PathBuf, ()> {
-    if path.exists() {
-        return std::fs::canonicalize(path).map_err(|_| ());
-    }
+fn canonicalize_longest(path: &Path, root_canon: &Path) -> Result<PathBuf, PathFactResult> {
     let mut cur = path.to_path_buf();
     let mut suffix = Vec::new();
-    while !cur.exists() {
-        match cur.file_name() {
-            Some(name) => {
-                suffix.push(name.to_os_string());
-                if !cur.pop() {
-                    return Err(());
+    loop {
+        match classify_existence(&cur) {
+            PathExistence::Present => break,
+            PathExistence::Absent => match cur.file_name() {
+                Some(name) => {
+                    suffix.push(name.to_os_string());
+                    if !cur.pop() {
+                        return Err(PathFactResult::Escape);
+                    }
                 }
-            }
-            None => return Err(()),
+                None => return Err(PathFactResult::Escape),
+            },
+            PathExistence::Ambiguous => return Err(PathFactResult::Escape),
         }
     }
-    let mut canon = std::fs::canonicalize(&cur).map_err(|_| ())?;
+
+    let mut canon = std::fs::canonicalize(&cur).map_err(|_| PathFactResult::Escape)?;
+    // Ancestor (or the path itself) must remain under the policy root after symlink resolution.
+    if !canon.starts_with(root_canon) && canon != *root_canon {
+        return Err(PathFactResult::Escape);
+    }
+
     for part in suffix.into_iter().rev() {
         canon.push(part);
     }
-    // Re-lexicalize after joining non-existent suffix
-    lexical_normalize(&canon).ok_or(())
+    // Re-lexicalize after joining non-existent suffix, then recheck containment.
+    let final_path = lexical_normalize(&canon).ok_or(PathFactResult::Escape)?;
+    if !final_path.starts_with(root_canon) && final_path != *root_canon {
+        return Err(PathFactResult::Escape);
+    }
+    Ok(final_path)
 }
 
 pub fn evaluate_path_against_scopes(
@@ -247,21 +288,39 @@ pub fn evaluate_path_against_scopes(
     allowed: &[CompiledPathPattern],
     blocked: &[CompiledPathPattern],
 ) -> PathFactResult {
+    let mut matched_deny = Vec::new();
     for b in blocked {
         if path_matches(b, rel) {
-            return PathFactResult::Blocked;
+            matched_deny.push(b.rule_id.clone());
         }
     }
+    if !matched_deny.is_empty() {
+        matched_deny.sort();
+        matched_deny.dedup();
+        return PathFactResult::Blocked {
+            matched_deny_rules: matched_deny,
+        };
+    }
+    let mut matched_allow = Vec::new();
     for a in allowed {
         if path_matches(a, rel) {
-            return PathFactResult::Allow;
+            matched_allow.push(a.rule_id.clone());
         }
+    }
+    if !matched_allow.is_empty() {
+        matched_allow.sort();
+        matched_allow.dedup();
+        return PathFactResult::Allow {
+            matched_allow_rules: matched_allow,
+        };
     }
     PathFactResult::OutOfScope
 }
 
-/// Extract path-like argv operands (absolute or visibly path-like).
-pub fn extract_path_operands(program: &str, args: &[String]) -> Vec<PathBuf> {
+/// Extract path-like argv operands.
+///
+/// Returns `Err(())` when option/value grammar is ambiguous (fail closed at evaluate).
+pub fn extract_path_operands(program: &str, args: &[String]) -> Result<Vec<PathBuf>, ()> {
     let mut out = Vec::new();
     let base = std::path::Path::new(program)
         .file_name()
@@ -271,28 +330,58 @@ pub fn extract_path_operands(program: &str, args: &[String]) -> Vec<PathBuf> {
     let mut i = 0;
     while i < args.len() {
         let a = &args[i];
-        if base == "git" && a == "-C" {
-            if let Some(p) = args.get(i + 1) {
+
+        if base == "git" {
+            if a == "-C" || a == "--git-dir" || a == "--work-tree" {
+                let Some(p) = args.get(i + 1) else {
+                    return Err(());
+                };
                 out.push(PathBuf::from(p));
+                i += 2;
+                continue;
             }
-            i += 2;
-            continue;
+            if let Some(rest) = a.strip_prefix("--git-dir=") {
+                out.push(PathBuf::from(rest));
+                i += 1;
+                continue;
+            }
+            if let Some(rest) = a.strip_prefix("--work-tree=") {
+                out.push(PathBuf::from(rest));
+                i += 1;
+                continue;
+            }
         }
-        if base == "ontarch" && (a == "--scope" || a.starts_with("--scope=")) {
+
+        if base == "ontarch" {
             if let Some(rest) = a.strip_prefix("--scope=") {
                 out.push(PathBuf::from(rest));
-            } else if let Some(p) = args.get(i + 1) {
-                out.push(PathBuf::from(p));
+                i += 1; // `=` form advances by 1 only
+                continue;
             }
-            i += 2;
+            if a == "--scope" {
+                let Some(p) = args.get(i + 1) else {
+                    return Err(());
+                };
+                out.push(PathBuf::from(p));
+                i += 2;
+                continue;
+            }
+        }
+
+        if matches!(base, "rm" | "mv") {
+            if !a.starts_with('-') {
+                out.push(PathBuf::from(a));
+            }
+            i += 1;
             continue;
         }
-        if is_path_like(a) && !is_non_path_token(a) {
+
+        if is_path_like(a) && !is_moon_task_id(a) {
             out.push(PathBuf::from(a));
         }
         i += 1;
     }
-    out
+    Ok(out)
 }
 
 fn is_path_like(token: &str) -> bool {
@@ -302,9 +391,24 @@ fn is_path_like(token: &str) -> bool {
         || token.contains('/')
 }
 
-fn is_non_path_token(token: &str) -> bool {
-    // moon task ids like demo:build
-    token.contains(':') && !token.starts_with('/') && !token.starts_with('.')
+/// Narrow moon-style `demo:build` exclusion — not every colon token.
+fn is_moon_task_id(token: &str) -> bool {
+    if token.contains('/') || token.contains("..") {
+        return false;
+    }
+    let Some((left, right)) = token.split_once(':') else {
+        return false;
+    };
+    if left.is_empty() || right.is_empty() {
+        return false;
+    }
+    let left_ok = left
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-');
+    let right_ok = right
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | ':' | '-'));
+    left_ok && right_ok
 }
 
 #[cfg(test)]
@@ -313,12 +417,14 @@ mod tests {
 
     #[test]
     fn globstar_and_blocked() {
-        let pat = compile_path_pattern("Build/src/**", "p").unwrap();
+        let pat = compile_path_pattern("Build/src/**", "p", "rule-allow").unwrap();
         assert!(path_matches(&pat, "Build/src/workspaces/wfos"));
-        let blocked = compile_path_pattern("Control/**", "p").unwrap();
+        let blocked = compile_path_pattern("Control/**", "p", "rule-deny").unwrap();
         assert_eq!(
             evaluate_path_against_scopes("Control/x", &[pat], &[blocked]),
-            PathFactResult::Blocked
+            PathFactResult::Blocked {
+                matched_deny_rules: vec!["rule-deny".into()],
+            }
         );
     }
 
@@ -328,6 +434,144 @@ mod tests {
         assert_eq!(
             adjust_pattern_for_root("Workstreams/Build/bin/**", &root),
             "Build/bin/**"
+        );
+    }
+
+    #[test]
+    fn ontarch_equals_scope_advances_one() {
+        let args: Vec<String> = ["--scope=Build/src", "bin-report"]
+            .into_iter()
+            .map(str::to_string)
+            .collect();
+        let paths = extract_path_operands("ontarch", &args).unwrap();
+        assert_eq!(paths, vec![PathBuf::from("Build/src")]);
+    }
+
+    #[test]
+    fn ontarch_scope_and_outside_operand_both_extracted() {
+        let args: Vec<String> = ["--scope=Build/src", "../../outside"]
+            .into_iter()
+            .map(str::to_string)
+            .collect();
+        let paths = extract_path_operands("ontarch", &args).unwrap();
+        assert_eq!(
+            paths,
+            vec![PathBuf::from("Build/src"), PathBuf::from("../../outside"),]
+        );
+    }
+
+    #[test]
+    fn git_collects_dir_forms() {
+        let args: Vec<String> = [
+            "-C",
+            "repo",
+            "--git-dir=.git",
+            "--work-tree",
+            "tree",
+            "status",
+        ]
+        .into_iter()
+        .map(str::to_string)
+        .collect();
+        let paths = extract_path_operands("git", &args).unwrap();
+        assert_eq!(
+            paths,
+            vec![
+                PathBuf::from("repo"),
+                PathBuf::from(".git"),
+                PathBuf::from("tree"),
+            ]
+        );
+    }
+
+    #[test]
+    fn rm_collects_bare_names() {
+        let args: Vec<String> = ["-f", "foo", "bar"]
+            .into_iter()
+            .map(str::to_string)
+            .collect();
+        let paths = extract_path_operands("rm", &args).unwrap();
+        assert_eq!(paths, vec![PathBuf::from("foo"), PathBuf::from("bar")]);
+    }
+
+    #[test]
+    fn mv_collects_bare_names() {
+        let args: Vec<String> = ["-n", "src", "dst"]
+            .into_iter()
+            .map(str::to_string)
+            .collect();
+        let paths = extract_path_operands("mv", &args).unwrap();
+        assert_eq!(paths, vec![PathBuf::from("src"), PathBuf::from("dst")]);
+    }
+
+    #[test]
+    fn colon_escape_path_collected() {
+        let args: Vec<String> = ["x:/../../outside"]
+            .into_iter()
+            .map(str::to_string)
+            .collect();
+        let paths = extract_path_operands("echo", &args).unwrap();
+        assert_eq!(paths, vec![PathBuf::from("x:/../../outside")]);
+    }
+
+    #[test]
+    fn moon_task_id_excluded() {
+        let args: Vec<String> = ["demo:build"].into_iter().map(str::to_string).collect();
+        let paths = extract_path_operands("moon", &args).unwrap();
+        assert!(paths.is_empty());
+    }
+
+    #[test]
+    fn malformed_git_c_fails_closed() {
+        let args: Vec<String> = ["-C"].into_iter().map(str::to_string).collect();
+        assert!(extract_path_operands("git", &args).is_err());
+    }
+
+    #[test]
+    fn provenance_returns_rule_ids() {
+        let allow = compile_path_pattern("Build/**", "p", "allow-1").unwrap();
+        let block = compile_path_pattern("Build/secret/**", "p", "deny-1").unwrap();
+        assert_eq!(
+            evaluate_path_against_scopes("Build/secret/x", &[allow.clone()], &[block]),
+            PathFactResult::Blocked {
+                matched_deny_rules: vec!["deny-1".into()],
+            }
+        );
+        assert_eq!(
+            evaluate_path_against_scopes("Build/src", &[allow], &[]),
+            PathFactResult::Allow {
+                matched_allow_rules: vec!["allow-1".into()],
+            }
+        );
+    }
+
+    #[test]
+    fn blocked_records_only_matching_deny_ids() {
+        let allow = compile_path_pattern("Build/**", "p", "allow-1").unwrap();
+        let deny_secret = compile_path_pattern("Build/secret/**", "p", "deny-secret").unwrap();
+        let deny_control = compile_path_pattern("Control/**", "p", "deny-control").unwrap();
+        assert_eq!(
+            evaluate_path_against_scopes("Build/secret/x", &[allow], &[deny_secret, deny_control]),
+            PathFactResult::Blocked {
+                matched_deny_rules: vec!["deny-secret".into()],
+            }
+        );
+    }
+
+    #[test]
+    fn allow_records_matching_allow_ids() {
+        let allow_build = compile_path_pattern("Build/**", "p", "allow-build").unwrap();
+        let allow_src = compile_path_pattern("Build/src/**", "p", "allow-src").unwrap();
+        let allow_control = compile_path_pattern("Control/**", "p", "allow-control").unwrap();
+        assert_eq!(
+            evaluate_path_against_scopes(
+                "Build/src/x",
+                &[allow_build, allow_src, allow_control],
+                &[]
+            ),
+            PathFactResult::Allow {
+                matched_allow_rules: vec!["allow-build".into(), "allow-src".into()],
+            }
         );
     }
 }

@@ -1,4 +1,4 @@
-//! Semantic intent classifiers for git/gh/secrets/bin/wrappers.
+//! Semantic intent classifiers for git/gh/secrets/bin/wrappers/shell mutation.
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Intent {
@@ -15,6 +15,8 @@ pub enum Intent {
     BinCleanupArchive,
     BinCleanupDelete,
     ShellWrapper,
+    /// Bounded shell/dotfile/symlink mutation (see `is_shell_mutation`).
+    ShellMutation,
     GhPublish,
     UnknownGh,
 }
@@ -35,6 +37,7 @@ impl Intent {
             Self::BinCleanupArchive => "bin_cleanup_archive",
             Self::BinCleanupDelete => "bin_cleanup_delete",
             Self::ShellWrapper => "shell_wrapper",
+            Self::ShellMutation => "shell_mutation",
             Self::GhPublish => "gh_publish",
             Self::UnknownGh => "unknown_gh",
         }
@@ -89,6 +92,9 @@ pub fn classify_child(program: &str, args: &[String]) -> Vec<Intent> {
             intents.push(Intent::BinMutation);
         }
     }
+    if is_shell_mutation(base, args) {
+        intents.push(Intent::ShellMutation);
+    }
     intents.sort();
     intents.dedup();
     intents
@@ -96,6 +102,49 @@ pub fn classify_child(program: &str, args: &[String]) -> Vec<Intent> {
 
 fn looks_like_bin_path(token: &str) -> bool {
     token.contains("bin/") || token.contains("lib/") || token == "bin" || token == "lib"
+}
+
+/// Bounded shell_mutation classifier (rails: no_shell_mutation).
+///
+/// Positive forms covered:
+/// - `ln -s` / `ln -sf` (and short-option clusters containing `s`)
+/// - `chezmoi apply`
+/// - `cp` / `mv` whose destination looks like a dotfile (`.zshrc`, `.config/...`)
+///
+/// Non-mutating lookalikes (`ln` without `-s`, `ls -la`) must not fire.
+fn is_shell_mutation(base: &str, args: &[String]) -> bool {
+    match base {
+        "ln" => has_symlink_flag(args),
+        "chezmoi" => args.first().map(String::as_str) == Some("apply"),
+        "cp" | "mv" => dest_looks_like_dotfile(args),
+        _ => false,
+    }
+}
+
+fn has_symlink_flag(args: &[String]) -> bool {
+    for a in args {
+        if a == "-s" || a == "-sf" || a == "--symbolic" {
+            return true;
+        }
+        // Combined short options such as `-svn` / `-sf`.
+        if a.starts_with('-') && !a.starts_with("--") && a.contains('s') {
+            return true;
+        }
+    }
+    false
+}
+
+fn dest_looks_like_dotfile(args: &[String]) -> bool {
+    let operands: Vec<&String> = args.iter().filter(|a| !a.starts_with('-')).collect();
+    let Some(dest) = operands.last() else {
+        return false;
+    };
+    looks_like_dotfile(dest)
+}
+
+fn looks_like_dotfile(path: &str) -> bool {
+    // `.zshrc`, `.config/...`, or any `.../.hidden` segment.
+    path.starts_with('.') || path.contains("/.")
 }
 
 fn classify_git(args: &[String]) -> Vec<Intent> {
@@ -209,5 +258,66 @@ mod tests {
     fn wrapper_and_secret() {
         assert!(classify_child("bash", &["-c".into(), "x".into()]).contains(&Intent::ShellWrapper));
         assert!(classify_child("pass", &["show".into(), "x".into()]).contains(&Intent::SecretTool));
+    }
+
+    #[test]
+    fn shell_mutation_ln_symlink() {
+        let args: Vec<String> = ["-s", "/tmp/a", ".zshrc"]
+            .into_iter()
+            .map(str::to_string)
+            .collect();
+        assert!(classify_child("ln", &args).contains(&Intent::ShellMutation));
+
+        let args_sf: Vec<String> = ["-sf", "a", "b"].into_iter().map(str::to_string).collect();
+        assert!(classify_child("ln", &args_sf).contains(&Intent::ShellMutation));
+    }
+
+    #[test]
+    fn shell_mutation_non_mutating_lookalike() {
+        // `ln` without `-s` must not fire.
+        let args: Vec<String> = ["a", "b"].into_iter().map(str::to_string).collect();
+        assert!(!classify_child("ln", &args).contains(&Intent::ShellMutation));
+
+        let ls: Vec<String> = ["-la"].into_iter().map(str::to_string).collect();
+        assert!(!classify_child("ls", &ls).contains(&Intent::ShellMutation));
+    }
+
+    #[test]
+    fn shell_mutation_chezmoi_apply() {
+        let args: Vec<String> = ["apply"].into_iter().map(str::to_string).collect();
+        assert!(classify_child("chezmoi", &args).contains(&Intent::ShellMutation));
+    }
+
+    #[test]
+    fn shell_mutation_cp_dotfile_dest() {
+        let args: Vec<String> = ["src", ".bashrc"].into_iter().map(str::to_string).collect();
+        assert!(classify_child("cp", &args).contains(&Intent::ShellMutation));
+
+        let nested: Vec<String> = ["src", ".config/git/config"]
+            .into_iter()
+            .map(str::to_string)
+            .collect();
+        assert!(classify_child("cp", &nested).contains(&Intent::ShellMutation));
+
+        let plain: Vec<String> = ["src", "README.md"]
+            .into_iter()
+            .map(str::to_string)
+            .collect();
+        assert!(!classify_child("cp", &plain).contains(&Intent::ShellMutation));
+    }
+
+    #[test]
+    fn bin_mutation_still_fires() {
+        let args: Vec<String> = ["bin/foo"].into_iter().map(str::to_string).collect();
+        assert!(classify_child("rm", &args).contains(&Intent::BinMutation));
+
+        let mv: Vec<String> = ["lib/a", "lib/b"].into_iter().map(str::to_string).collect();
+        assert!(classify_child("mv", &mv).contains(&Intent::BinMutation));
+
+        let archive: Vec<String> = ["bin-cleanup", "--mode", "archive"]
+            .into_iter()
+            .map(str::to_string)
+            .collect();
+        assert!(classify_child("ontarch", &archive).contains(&Intent::BinMutation));
     }
 }
