@@ -50,7 +50,7 @@ pub fn compile_path_pattern(
     let normalized = raw.trim_start_matches('/');
     // Trailing slash means subtree: `bin/` → `bin/**`
     let normalized = if normalized.ends_with('/') && !normalized.ends_with("**/") {
-        format!("{}**", normalized)
+        format!("{normalized}**")
     } else {
         normalized.to_string()
     };
@@ -244,7 +244,8 @@ pub fn normalize_path_fact(
     let rel = canonical
         .strip_prefix(&root_canon)
         .map_err(|_| PathFactResult::Escape)?;
-    Ok(rel.to_string_lossy().replace('\\', "/"))
+    let rel = rel.to_str().ok_or(PathFactResult::Escape)?;
+    Ok(rel.replace('\\', "/"))
 }
 
 fn canonicalize_longest(path: &Path, root_canon: &Path) -> Result<PathBuf, PathFactResult> {
@@ -327,6 +328,13 @@ pub fn extract_path_operands(program: &str, args: &[String]) -> Result<Vec<PathB
         .and_then(|s| s.to_str())
         .unwrap_or(program);
 
+    if base == "rm" {
+        return extract_rm_operands(args);
+    }
+    if matches!(base, "mv" | "cp") {
+        return extract_transfer_operands(args);
+    }
+
     let mut i = 0;
     while i < args.len() {
         let a = &args[i];
@@ -368,20 +376,86 @@ pub fn extract_path_operands(program: &str, args: &[String]) -> Result<Vec<PathB
             }
         }
 
-        if matches!(base, "rm" | "mv") {
-            if !a.starts_with('-') {
-                out.push(PathBuf::from(a));
-            }
-            i += 1;
-            continue;
-        }
-
         if is_path_like(a) && !is_moon_task_id(a) {
             out.push(PathBuf::from(a));
         }
         i += 1;
     }
     Ok(out)
+}
+
+fn extract_rm_operands(args: &[String]) -> Result<Vec<PathBuf>, ()> {
+    let mut out = Vec::new();
+    let mut options_done = false;
+    for arg in args {
+        if !options_done && arg == "--" {
+            options_done = true;
+            continue;
+        }
+        if !options_done && arg.starts_with('-') && arg != "-" {
+            if ambiguous_attached_path_option(arg) {
+                return Err(());
+            }
+            continue;
+        }
+        out.push(PathBuf::from(arg));
+    }
+    Ok(out)
+}
+
+fn extract_transfer_operands(args: &[String]) -> Result<Vec<PathBuf>, ()> {
+    let mut out = Vec::new();
+    let mut options_done = false;
+    let mut i = 0;
+    while i < args.len() {
+        let arg = &args[i];
+        if !options_done && arg == "--" {
+            options_done = true;
+            i += 1;
+            continue;
+        }
+        if !options_done && matches!(arg.as_str(), "-t" | "--target-directory") {
+            let Some(target) = args.get(i + 1) else {
+                return Err(());
+            };
+            if target.is_empty() {
+                return Err(());
+            }
+            out.push(PathBuf::from(target));
+            i += 2;
+            continue;
+        }
+        if !options_done {
+            if let Some(target) = arg.strip_prefix("--target-directory=") {
+                if target.is_empty() {
+                    return Err(());
+                }
+                out.push(PathBuf::from(target));
+                i += 1;
+                continue;
+            }
+            if arg.starts_with('-') && arg != "-" {
+                if ambiguous_attached_path_option(arg) {
+                    return Err(());
+                }
+                i += 1;
+                continue;
+            }
+        }
+        out.push(PathBuf::from(arg));
+        i += 1;
+    }
+    Ok(out)
+}
+
+fn ambiguous_attached_path_option(arg: &str) -> bool {
+    let Some((name, value)) = arg.split_once('=') else {
+        return false;
+    };
+    name.starts_with("--")
+        && name != "--target-directory"
+        && !value.is_empty()
+        && is_path_like(value)
 }
 
 fn is_path_like(token: &str) -> bool {
@@ -505,6 +579,65 @@ mod tests {
     }
 
     #[test]
+    fn rm_option_terminator_keeps_dash_prefixed_operand() {
+        let args: Vec<String> = ["--", "-dash-name"]
+            .into_iter()
+            .map(str::to_string)
+            .collect();
+        assert_eq!(
+            extract_path_operands("rm", &args).unwrap(),
+            vec![PathBuf::from("-dash-name")]
+        );
+    }
+
+    #[test]
+    fn transfer_target_directory_forms_are_path_facts() {
+        for (args, expected) in [
+            (vec!["-t", "/outside", "source"], vec!["/outside", "source"]),
+            (
+                vec!["--target-directory", "/outside", "source"],
+                vec!["/outside", "source"],
+            ),
+            (
+                vec!["--target-directory=/outside", "source"],
+                vec!["/outside", "source"],
+            ),
+            (
+                vec!["--target-directory=/outside", "source-a", "source-b"],
+                vec!["/outside", "source-a", "source-b"],
+            ),
+        ] {
+            let args: Vec<String> = args.into_iter().map(str::to_string).collect();
+            let expected: Vec<PathBuf> = expected.into_iter().map(PathBuf::from).collect();
+            assert_eq!(extract_path_operands("mv", &args).unwrap(), expected);
+        }
+    }
+
+    #[test]
+    fn transfer_option_terminator_keeps_dash_prefixed_operands() {
+        let args: Vec<String> = ["--", "-source", "-dest"]
+            .into_iter()
+            .map(str::to_string)
+            .collect();
+        assert_eq!(
+            extract_path_operands("mv", &args).unwrap(),
+            vec![PathBuf::from("-source"), PathBuf::from("-dest")]
+        );
+    }
+
+    #[test]
+    fn transfer_missing_target_directory_fails_closed() {
+        for args in [
+            vec!["-t"],
+            vec!["--target-directory"],
+            vec!["--target-directory="],
+        ] {
+            let args: Vec<String> = args.into_iter().map(str::to_string).collect();
+            assert!(extract_path_operands("cp", &args).is_err());
+        }
+    }
+
+    #[test]
     fn colon_escape_path_collected() {
         let args: Vec<String> = ["x:/../../outside"]
             .into_iter()
@@ -573,5 +706,108 @@ mod tests {
                 matched_allow_rules: vec!["allow-build".into(), "allow-src".into()],
             }
         );
+    }
+
+    #[test]
+    fn overlapping_pattern_provenance_is_order_independent() {
+        let allow_build = compile_path_pattern("Build/**", "p", "allow-build").unwrap();
+        let allow_src = compile_path_pattern("Build/src/**", "p", "allow-src").unwrap();
+        let deny_src = compile_path_pattern("Build/src/**", "p", "deny-src").unwrap();
+
+        let forward = evaluate_path_against_scopes(
+            "Build/src/x",
+            &[allow_build.clone(), allow_src.clone()],
+            &[],
+        );
+        let reverse = evaluate_path_against_scopes("Build/src/x", &[allow_src, allow_build], &[]);
+        assert_eq!(forward, reverse);
+        assert_eq!(
+            forward,
+            PathFactResult::Allow {
+                matched_allow_rules: vec!["allow-build".into(), "allow-src".into()],
+            }
+        );
+
+        assert_eq!(
+            evaluate_path_against_scopes(
+                "Build/src/x",
+                &[compile_path_pattern("Build/**", "p", "allow-build").unwrap()],
+                &[deny_src]
+            ),
+            PathFactResult::Blocked {
+                matched_deny_rules: vec!["deny-src".into()],
+            }
+        );
+    }
+
+    #[test]
+    fn normalize_path_existing_nonexistent_and_escape_matrix() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("workspace");
+        let cwd = root.join("demo");
+        std::fs::create_dir_all(&cwd).unwrap();
+        std::fs::create_dir_all(cwd.join("present-dir")).unwrap();
+        std::fs::write(cwd.join("present.txt"), "ok").unwrap();
+
+        assert_eq!(
+            normalize_path_fact(Path::new("present.txt"), &cwd, &root).unwrap(),
+            "demo/present.txt"
+        );
+        assert_eq!(
+            normalize_path_fact(Path::new("present-dir"), &cwd, &root).unwrap(),
+            "demo/present-dir"
+        );
+        assert_eq!(
+            normalize_path_fact(Path::new("future/new.txt"), &cwd, &root).unwrap(),
+            "demo/future/new.txt"
+        );
+        assert!(normalize_path_fact(Path::new("../../outside"), &cwd, &root).is_err());
+        assert!(normalize_path_fact(temp.path(), &cwd, &root).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn normalize_path_symlink_matrix_fails_closed() {
+        use std::os::unix::fs::symlink;
+
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("workspace");
+        let cwd = root.join("demo");
+        let inside = root.join("inside");
+        let outside = temp.path().join("outside");
+        std::fs::create_dir_all(&cwd).unwrap();
+        std::fs::create_dir_all(&inside).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+
+        symlink(&inside, cwd.join("inside-link")).unwrap();
+        assert_eq!(
+            normalize_path_fact(Path::new("inside-link/future"), &cwd, &root).unwrap(),
+            "inside/future"
+        );
+
+        symlink(&outside, cwd.join("outside-link")).unwrap();
+        assert!(normalize_path_fact(Path::new("outside-link/file"), &cwd, &root).is_err());
+
+        symlink(cwd.join("missing-target"), cwd.join("dangling")).unwrap();
+        assert!(normalize_path_fact(Path::new("dangling/file"), &cwd, &root).is_err());
+
+        symlink(cwd.join("loop-b"), cwd.join("loop-a")).unwrap();
+        symlink(cwd.join("loop-a"), cwd.join("loop-b")).unwrap();
+        assert!(normalize_path_fact(Path::new("loop-a/file"), &cwd, &root).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn normalize_path_non_utf8_fails_closed() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("workspace");
+        let cwd = root.join("demo");
+        std::fs::create_dir_all(&cwd).unwrap();
+        let opaque = std::ffi::OsString::from_vec(vec![b'o', b'p', 0x80, b'q']);
+        std::fs::write(cwd.join(&opaque), "opaque").unwrap();
+
+        assert!(normalize_path_fact(Path::new(&opaque), &cwd, &root).is_err());
     }
 }

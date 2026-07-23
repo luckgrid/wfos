@@ -159,10 +159,21 @@ pub struct PolicyEnforcementRecord {
 
 impl PolicyEnforcementRecord {
     pub fn from_registry(record: &PolicyRecord) -> Result<Self, RawPolicyError> {
+        if !valid_policy_id(&record.id) {
+            return Err(RawPolicyError::new(
+                PolicyContractKind::PolicyContractInvalid,
+                format!(
+                    "policy id `{}` does not match the closed v0 syntax",
+                    record.id
+                ),
+                Some(record.id.clone()),
+                Some("id".into()),
+            ));
+        }
         let mut map = BTreeMap::new();
         map.insert("id".into(), Value::String(record.id.clone()));
         match &record.applies_to {
-            Some(a) if !a.is_empty() => {
+            Some(a) if !a.trim().is_empty() => {
                 map.insert("applies_to".into(), Value::String(a.clone()));
             }
             _ => {
@@ -326,9 +337,26 @@ impl ProfileEnforcement {
         let allowed_commands = string_array(&profile.rest, "allowed_commands", pid)?;
         let gated_commands = string_array(&profile.rest, "gated_commands", pid)?;
         let blocked_commands = string_array(&profile.rest, "blocked_commands", pid)?;
+        for (field, values) in [
+            ("allowed_paths", &allowed_paths),
+            ("blocked_paths", &blocked_paths),
+            ("allowed_commands", &allowed_commands),
+            ("gated_commands", &gated_commands),
+            ("blocked_commands", &blocked_commands),
+        ] {
+            ensure_unique(values, pid, field)?;
+        }
         let secret_access = bool_field(&profile.rest, "secret_access", pid)?.unwrap_or(false);
         let remote_write_policy = match profile.rest.get("remote_write_policy") {
-            None | Some(Value::Null) => RemoteWritePolicy::Blocked,
+            None => RemoteWritePolicy::Blocked,
+            Some(Value::Null) => {
+                return Err(RawPolicyError::new(
+                    PolicyContractKind::PolicyRuleInvalid,
+                    "remote_write_policy must not be null",
+                    Some(profile.id.clone()),
+                    Some("remote_write_policy".into()),
+                ));
+            }
             Some(Value::String(s)) => match s.as_str() {
                 "blocked" => RemoteWritePolicy::Blocked,
                 "local-only" => RemoteWritePolicy::LocalOnly,
@@ -405,7 +433,13 @@ fn bool_field(
     profile_id: &str,
 ) -> Result<Option<bool>, RawPolicyError> {
     match map.get(key) {
-        None | Some(Value::Null) => Ok(None),
+        None => Ok(None),
+        Some(Value::Null) => Err(RawPolicyError::new(
+            PolicyContractKind::PolicyRuleInvalid,
+            format!("{key} must not be null"),
+            Some(profile_id.into()),
+            Some(key.into()),
+        )),
         Some(Value::Bool(b)) => Ok(Some(*b)),
         Some(_) => Err(RawPolicyError::new(
             PolicyContractKind::PolicyRuleInvalid,
@@ -414,6 +448,16 @@ fn bool_field(
             Some(key.into()),
         )),
     }
+}
+
+fn valid_policy_id(id: &str) -> bool {
+    let mut chars = id.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    (first.is_ascii_lowercase() || first.is_ascii_digit())
+        && chars
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '.' | '_' | '-'))
 }
 
 #[cfg(test)]
@@ -487,6 +531,22 @@ mod tests {
     }
 
     #[test]
+    fn rejects_invalid_policy_id_syntax() {
+        for id in ["", "Bad", "-bad", "bad space"] {
+            let record = PolicyRecord {
+                id: id.into(),
+                applies_to: Some("agent".into()),
+                rest: serde_json::from_value(serde_json::json!({
+                    "version": "0.1.0"
+                }))
+                .unwrap(),
+            };
+            let err = PolicyEnforcementRecord::from_registry(&record).unwrap_err();
+            assert_eq!(err.field.as_deref(), Some("id"), "id={id:?}");
+        }
+    }
+
+    #[test]
     fn accepts_generated_source() {
         let record = PolicyRecord {
             id: "ok".into(),
@@ -545,6 +605,32 @@ mod tests {
         }));
         let err = ProfileEnforcement::from_record(&profile).unwrap_err();
         assert_eq!(err.field.as_deref(), Some("remote_write_policy"));
+    }
+
+    #[test]
+    fn profile_rejects_present_null_restrictions() {
+        for (field, value) in [
+            ("blocked_paths", serde_json::Value::Null),
+            ("allowed_commands", serde_json::Value::Null),
+            ("secret_access", serde_json::Value::Null),
+            ("remote_write_policy", serde_json::Value::Null),
+        ] {
+            let mut rest = serde_json::Map::new();
+            rest.insert("allowed_paths".into(), serde_json::json!(["Build/**"]));
+            rest.insert(field.into(), value);
+            let profile = profile_with_rest(serde_json::Value::Object(rest));
+            let err = ProfileEnforcement::from_record(&profile).unwrap_err();
+            assert_eq!(err.field.as_deref(), Some(field), "field={field}");
+        }
+    }
+
+    #[test]
+    fn profile_rejects_duplicate_array_items() {
+        let profile = profile_with_rest(serde_json::json!({
+            "allowed_paths": ["Build/**", "Build/**"]
+        }));
+        let err = ProfileEnforcement::from_record(&profile).unwrap_err();
+        assert_eq!(err.field.as_deref(), Some("allowed_paths"));
     }
 
     #[test]

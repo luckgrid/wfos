@@ -1,95 +1,6 @@
-//! Authorized execution handoff and executor seam (no production spawn in S5).
+//! Executor seam for evaluator-authorized plans (no production spawn in S5).
 
-use super::evaluate::PolicyEvaluationExplanation;
-use crate::contracts::PolicyDecision;
-use crate::resolution::{PolicyEvaluationInput, RequestedOperation, SealedExecutionPlan};
-use std::path::PathBuf;
-
-/// Private proof that both request and child layers evaluated to Allow.
-pub(super) struct DualAllowProof {
-    _private: (),
-}
-
-impl DualAllowProof {
-    pub(super) fn mint() -> Self {
-        Self { _private: () }
-    }
-}
-
-/// Allow-only decision — cannot hold Gate/Deny.
-#[derive(Debug, Clone)]
-pub struct AllowDecision {
-    matched_rules: Vec<String>,
-}
-
-impl AllowDecision {
-    pub(super) fn new(matched_rules: Vec<String>) -> Self {
-        Self { matched_rules }
-    }
-
-    pub fn matched_rules(&self) -> &[String] {
-        &self.matched_rules
-    }
-
-    pub fn to_public(&self) -> PolicyDecision {
-        PolicyDecision::Allow {
-            matched_rules: self.matched_rules.clone(),
-        }
-    }
-}
-
-/// Constructible only after dual-layer Allow.
-#[derive(Debug, Clone)]
-pub struct AuthorizedExecutionPlan {
-    plan: SealedExecutionPlan,
-    request: RequestedOperation,
-    profile_id: String,
-    policy_decision: PolicyDecision,
-    policy_explanation: PolicyEvaluationExplanation,
-    policy_root: PathBuf,
-}
-
-impl AuthorizedExecutionPlan {
-    pub(super) fn from_dual_allow(
-        input: &PolicyEvaluationInput,
-        allow: AllowDecision,
-        explanation: PolicyEvaluationExplanation,
-        _proof: DualAllowProof,
-    ) -> Self {
-        Self {
-            plan: input.plan().clone(),
-            request: input.request().clone(),
-            profile_id: input.profile().id.clone(),
-            policy_decision: allow.to_public(),
-            policy_explanation: explanation,
-            policy_root: input.policy_root().clone(),
-        }
-    }
-
-    pub fn plan(&self) -> &SealedExecutionPlan {
-        &self.plan
-    }
-
-    pub fn request(&self) -> &RequestedOperation {
-        &self.request
-    }
-
-    pub fn profile_id(&self) -> &str {
-        &self.profile_id
-    }
-
-    pub fn policy_decision(&self) -> &PolicyDecision {
-        &self.policy_decision
-    }
-
-    pub fn policy_explanation(&self) -> &PolicyEvaluationExplanation {
-        &self.policy_explanation
-    }
-
-    pub fn policy_root(&self) -> &PathBuf {
-        &self.policy_root
-    }
-}
+use super::evaluate::AuthorizedExecutionPlan;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExecutorResult {
@@ -150,7 +61,7 @@ mod tests {
 
     #[test]
     fn spy_records_reachability() {
-        // AuthorizedExecutionPlan::from_dual_allow is the only constructor (needs DualAllowProof).
+        // AuthorizedExecutionPlan construction and its proof are private to evaluate.rs.
         // Gate/Deny cannot be wrapped into an AuthorizedExecutionPlan from the public API.
         let spy = SpyExecutor::default();
         assert_eq!(spy.calls.get(), 0);
@@ -161,21 +72,16 @@ mod tests {
     fn spy_execute_increments_call_count() {
         let handoff = resolve_demo_handoff();
         let result = evaluate_policy(&handoff.input);
-        let PolicyEvaluationResult::Decided {
-            authorized: Some(plan),
-            decision,
-            explanation,
-        } = result
-        else {
+        let PolicyEvaluationResult::Authorized(plan) = result else {
             panic!("expected dual-Allow; got {result:?}");
         };
+        let decision = plan.policy_decision();
+        let explanation = plan.policy_explanation();
         assert!(
             matches!(decision, crate::contracts::PolicyDecision::Allow { .. }),
             "decision={decision:?} child={}",
             explanation.child.decision
         );
-        let _ = explanation;
-
         let spy = SpyExecutor::default();
         assert_eq!(spy.calls.get(), 0);
         assert_eq!(spy.execute(&plan), ExecutorResult::SpyReached);

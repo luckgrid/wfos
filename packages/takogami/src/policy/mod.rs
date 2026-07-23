@@ -38,13 +38,10 @@ mod normalize;
 mod paths;
 mod raw;
 
-pub use authorize::{
-    AllowDecision, AuthorizedExecutionPlan, Executor, ExecutorResult, SpyExecutor,
-    UnavailableExecutor,
-};
+pub use authorize::{Executor, ExecutorResult, SpyExecutor, UnavailableExecutor};
 pub use evaluate::{
-    PolicyContractError, PolicyEvaluationExplanation, PolicyEvaluationResult, PolicyLayer,
-    PolicyLayerResult, evaluate_policy,
+    AuthorizedExecutionPlan, PolicyContractError, PolicyEvaluationExplanation,
+    PolicyEvaluationResult, PolicyLayer, PolicyLayerResult, RejectedPolicyOutcome, evaluate_policy,
 };
 pub use explain::{render_human_policy_section, render_human_policy_summary};
 pub use normalize::{CanonicalRule, Effect, MatcherKind, NormalizedPolicySet, OriginKind};

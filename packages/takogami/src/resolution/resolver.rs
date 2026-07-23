@@ -6,7 +6,8 @@ use std::path::{Path, PathBuf};
 use crate::contracts::{RegistryGeneration, ResolvedCommand, SCHEMA_VERSION, fingerprint_file};
 use crate::error::ControllerError;
 use crate::registry::{
-    AuthoredUnitDescriptor, Freshness, RegistryAccess, ToolRecord, UnitDefinition, UnitRecord,
+    AuthoredUnitDescriptor, Freshness, PolicyRecord, ProfileRecord, RegistryAccess, ToolRecord,
+    UnitDefinition, UnitRecord,
 };
 
 use super::entrypoint::{NormalizedEntrypoint, normalize_entrypoint};
@@ -17,8 +18,8 @@ use super::explain::{
     explanation_from_plan,
 };
 use super::paths::{resolve_cwd, resolve_manifests, workspace_relative_display};
-use super::plan::{Actor, PolicyEvaluationInput, SealedExecutionPlan};
-use super::profile::{SelectedProfile, collect_policy_refs, select_profile};
+use super::plan::{Actor, RequestedOperation, SealedExecutionPlan};
+use super::profile::{collect_policy_refs, select_profile};
 use super::request::{CorrelationIdGenerator, ResolutionRequest};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -60,6 +61,7 @@ pub enum ResolutionCode {
     ProfileAmbiguous { id: String },
     PolicyNotFound { id: String },
     PolicyDuplicate { id: String },
+    InvalidPolicyRoot { message: String },
 }
 
 impl ResolutionCode {
@@ -85,6 +87,7 @@ impl ResolutionCode {
             Self::ProfileAmbiguous { .. } => "profile_ambiguous",
             Self::PolicyNotFound { .. } => "policy_not_found",
             Self::PolicyDuplicate { .. } => "policy_duplicate",
+            Self::InvalidPolicyRoot { .. } => "invalid_policy_root",
         }
     }
 
@@ -97,7 +100,8 @@ impl ResolutionCode {
             | Self::InvalidCwd { message }
             | Self::MissingManifest { message }
             | Self::UnsupportedBackend { message }
-            | Self::MissingExecutable { message } => message.clone(),
+            | Self::MissingExecutable { message }
+            | Self::InvalidPolicyRoot { message } => message.clone(),
             Self::UnitNotFound { id } => format!("unit `{id}` not found"),
             Self::UnitAmbiguous { id, candidates } => {
                 format!("unit `{id}` ambiguous: {}", candidates.join(", "))
@@ -158,35 +162,83 @@ pub struct Resolver<'a> {
     inputs: ResolverInputs<'a>,
 }
 
+/// Opaque S5 policy handoff assembled only by the successful resolver path.
+///
+/// The type is public for read-only policy evaluation, but its fields and constructor are private
+/// to this module. General crate code cannot combine an arbitrary plan, same-ID policy body, or
+/// alternate policy root into an evaluable input.
+#[derive(Debug, Clone)]
+pub struct PolicyEvaluationInput {
+    actor: Actor,
+    request: RequestedOperation,
+    plan: SealedExecutionPlan,
+    profile: ProfileRecord,
+    policies: Vec<PolicyRecord>,
+    policy_origins: Vec<(String, String)>,
+    policy_root: PathBuf,
+}
+
+impl PolicyEvaluationInput {
+    fn from_resolved_selection(
+        request: RequestedOperation,
+        plan: SealedExecutionPlan,
+        profile: ProfileRecord,
+        policies: Vec<PolicyRecord>,
+        policy_origins: Vec<(String, String)>,
+        policy_root: PathBuf,
+    ) -> Self {
+        Self {
+            actor: Actor::Agent,
+            request,
+            plan,
+            profile,
+            policies,
+            policy_origins,
+            policy_root,
+        }
+    }
+
+    pub fn actor(&self) -> Actor {
+        self.actor
+    }
+
+    pub fn request(&self) -> &RequestedOperation {
+        &self.request
+    }
+
+    pub fn plan(&self) -> &SealedExecutionPlan {
+        &self.plan
+    }
+
+    pub fn profile(&self) -> &ProfileRecord {
+        &self.profile
+    }
+
+    pub fn policies(&self) -> &[PolicyRecord] {
+        &self.policies
+    }
+
+    pub fn policy_origins(&self) -> &[(String, String)] {
+        &self.policy_origins
+    }
+
+    pub fn policy_root(&self) -> &PathBuf {
+        &self.policy_root
+    }
+}
+
 #[derive(Debug)]
 pub struct ResolveSuccess {
     pub plan: SealedExecutionPlan,
     pub explanation: ResolutionExplanation,
-    pub selected: SelectedProfile,
     pub freshness: Freshness,
-    pub explain_requested: bool,
-    pub execute_requested: bool,
-    pub policy_root: PathBuf,
+    policy_input: PolicyEvaluationInput,
 }
 
 impl ResolveSuccess {
     /// Immutable S5 handoff. Policy evaluation must not re-resolve any plan input.
     pub fn policy_evaluation_input(&self) -> PolicyEvaluationInput {
-        let resolved = self.plan.resolved();
-        PolicyEvaluationInput::new(
-            Actor::Agent,
-            super::plan::RequestedOperation::from_resolution(
-                &resolved.unit_id,
-                &resolved.verb,
-                self.explain_requested,
-                self.execute_requested,
-            ),
-            self.plan.clone(),
-            self.selected.profile.clone(),
-            self.selected.policies.clone(),
-            self.selected.policy_origins.clone(),
-            self.policy_root.clone(),
-        )
+        self.policy_input.clone()
     }
 }
 
@@ -442,18 +494,31 @@ impl<'a> Resolver<'a> {
         explanation.completed_steps = trace.completed_steps.clone();
 
         let workspace = &self.inputs.access.paths.workspace_root;
-        let policy_root = workspace
-            .canonicalize()
-            .unwrap_or_else(|_| workspace.clone());
+        let policy_root =
+            workspace
+                .canonicalize()
+                .map_err(|error| ResolutionCode::InvalidPolicyRoot {
+                    message: format!("cannot canonicalize policy root: {error}"),
+                })?;
+        let policy_input = PolicyEvaluationInput::from_resolved_selection(
+            RequestedOperation::from_resolution(
+                &request.unit_id,
+                verb_key,
+                request.explain,
+                request.execute_requested,
+            ),
+            plan.clone(),
+            selected.profile.clone(),
+            selected.policies.clone(),
+            selected.policy_origins.clone(),
+            policy_root,
+        );
 
         Ok(ResolveSuccess {
             plan,
             explanation,
-            selected,
             freshness,
-            explain_requested: request.explain,
-            execute_requested: request.execute_requested,
-            policy_root,
+            policy_input,
         })
     }
 }
@@ -983,12 +1048,42 @@ mod tests {
                 .iter()
                 .map(|policy| policy.id.as_str())
                 .collect::<Vec<_>>(),
-            a.selected
+            a.plan
+                .resolved()
                 .policy_ids
                 .iter()
                 .map(String::as_str)
                 .collect::<Vec<_>>()
         );
+    }
+
+    #[test]
+    fn policy_handoff_constructor_remains_resolver_private() {
+        let resolver_source = include_str!("resolver.rs");
+        let plan_source = include_str!("plan.rs");
+        assert!(resolver_source.contains("fn from_resolved_selection("));
+        let public_constructor = ["pub", " fn from_resolved_selection("].concat();
+        let crate_constructor = ["pub(crate)", " fn from_resolved_selection("].concat();
+        assert!(!resolver_source.contains(&public_constructor));
+        assert!(!resolver_source.contains(&crate_constructor));
+        assert!(!plan_source.contains("struct PolicyEvaluationInput"));
+
+        let src_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src");
+        for entry in std::fs::read_dir(&src_root).unwrap() {
+            let path = entry.unwrap().path();
+            if path.file_name().and_then(|name| name.to_str()) == Some("resolution") {
+                continue;
+            }
+            if path.extension().and_then(|ext| ext.to_str()) != Some("rs") {
+                continue;
+            }
+            let source = std::fs::read_to_string(&path).unwrap();
+            assert!(
+                !source.contains("PolicyEvaluationInput {"),
+                "loose policy handoff construction escaped resolver ownership: {}",
+                path.display()
+            );
+        }
     }
 
     fn copy_tree(src: &Path, dst: &Path) {

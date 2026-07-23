@@ -115,8 +115,8 @@ fn looks_like_bin_path(token: &str) -> bool {
 fn is_shell_mutation(base: &str, args: &[String]) -> bool {
     match base {
         "ln" => has_symlink_flag(args),
-        "chezmoi" => args.first().map(String::as_str) == Some("apply"),
-        "cp" | "mv" => dest_looks_like_dotfile(args),
+        "chezmoi" => chezmoi_is_apply_or_ambiguous(args),
+        "cp" | "mv" => transfer_dest_looks_like_dotfile(args),
         _ => false,
     }
 }
@@ -134,12 +134,92 @@ fn has_symlink_flag(args: &[String]) -> bool {
     false
 }
 
-fn dest_looks_like_dotfile(args: &[String]) -> bool {
-    let operands: Vec<&String> = args.iter().filter(|a| !a.starts_with('-')).collect();
-    let Some(dest) = operands.last() else {
-        return false;
-    };
-    looks_like_dotfile(dest)
+fn transfer_dest_looks_like_dotfile(args: &[String]) -> bool {
+    transfer_destination(args)
+        .map(looks_like_dotfile)
+        .unwrap_or(false)
+}
+
+fn transfer_destination(args: &[String]) -> Option<&str> {
+    let mut operands = Vec::new();
+    let mut target_directory = None;
+    let mut options_done = false;
+    let mut i = 0;
+    while i < args.len() {
+        let arg = args[i].as_str();
+        if !options_done && arg == "--" {
+            options_done = true;
+            i += 1;
+            continue;
+        }
+        if !options_done && matches!(arg, "-t" | "--target-directory") {
+            target_directory = args.get(i + 1).map(String::as_str);
+            i += 2;
+            continue;
+        }
+        if !options_done {
+            if let Some(target) = arg.strip_prefix("--target-directory=") {
+                if !target.is_empty() {
+                    target_directory = Some(target);
+                }
+                i += 1;
+                continue;
+            }
+            if arg.starts_with('-') && arg != "-" {
+                i += 1;
+                continue;
+            }
+        }
+        operands.push(arg);
+        i += 1;
+    }
+    target_directory.or_else(|| operands.last().copied())
+}
+
+fn chezmoi_is_apply_or_ambiguous(args: &[String]) -> bool {
+    match chezmoi_subcommand(args) {
+        Ok(Some(command)) => command == "apply",
+        Ok(None) => false,
+        // A malformed known global option must fail closed under no_shell_mutation.
+        Err(()) => true,
+    }
+}
+
+fn chezmoi_subcommand(args: &[String]) -> Result<Option<&str>, ()> {
+    let mut i = 0;
+    while i < args.len() {
+        let arg = args[i].as_str();
+        if arg == "--" {
+            return Ok(args.get(i + 1).map(String::as_str));
+        }
+        if matches!(
+            arg,
+            "--source" | "-S" | "--destination" | "-D" | "--config" | "--cache"
+        ) {
+            if args.get(i + 1).is_none() {
+                return Err(());
+            }
+            i += 2;
+            continue;
+        }
+        if arg.starts_with("--source=")
+            || arg.starts_with("--destination=")
+            || arg.starts_with("--config=")
+            || arg.starts_with("--cache=")
+        {
+            if arg.ends_with('=') {
+                return Err(());
+            }
+            i += 1;
+            continue;
+        }
+        if arg.starts_with('-') {
+            i += 1;
+            continue;
+        }
+        return Ok(Some(arg));
+    }
+    Ok(None)
 }
 
 fn looks_like_dotfile(path: &str) -> bool {
@@ -289,6 +369,34 @@ mod tests {
     }
 
     #[test]
+    fn shell_mutation_chezmoi_option_prefixed_apply() {
+        for args in [
+            vec!["--source", "/tmp/src", "apply"],
+            vec!["--source=/tmp/src", "apply"],
+            vec!["-D", "/tmp/dest", "apply"],
+            vec!["--", "apply"],
+        ] {
+            let args: Vec<String> = args.into_iter().map(str::to_string).collect();
+            assert!(
+                classify_child("chezmoi", &args).contains(&Intent::ShellMutation),
+                "args={args:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn shell_mutation_chezmoi_read_only_and_malformed_options() {
+        let read_only: Vec<String> = ["--source", "/tmp/src", "status"]
+            .into_iter()
+            .map(str::to_string)
+            .collect();
+        assert!(!classify_child("chezmoi", &read_only).contains(&Intent::ShellMutation));
+
+        let malformed: Vec<String> = ["--source"].into_iter().map(str::to_string).collect();
+        assert!(classify_child("chezmoi", &malformed).contains(&Intent::ShellMutation));
+    }
+
+    #[test]
     fn shell_mutation_cp_dotfile_dest() {
         let args: Vec<String> = ["src", ".bashrc"].into_iter().map(str::to_string).collect();
         assert!(classify_child("cp", &args).contains(&Intent::ShellMutation));
@@ -304,6 +412,21 @@ mod tests {
             .map(str::to_string)
             .collect();
         assert!(!classify_child("cp", &plain).contains(&Intent::ShellMutation));
+    }
+
+    #[test]
+    fn shell_mutation_transfer_target_directory() {
+        for args in [
+            vec!["-t", ".config", "source"],
+            vec!["--target-directory=.config", "source"],
+            vec!["--target-directory", ".config", "source"],
+        ] {
+            let args: Vec<String> = args.into_iter().map(str::to_string).collect();
+            assert!(
+                classify_child("cp", &args).contains(&Intent::ShellMutation),
+                "args={args:?}"
+            );
+        }
     }
 
     #[test]
