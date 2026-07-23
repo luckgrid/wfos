@@ -36,7 +36,7 @@ flowchart TD
 Evolution phases:
 
 ```txt
-v0   single-process CLI — clap commands, direct tokio::process calls (E09)
+v0   single-process CLI — clap commands, direct tokio::process calls (runtime-controller)
 v1   daemon-backed       — only if cross-provider coordination/policy needs it
 v2   multi-panel TUI     — optional operator UI; not a Herdr workspace clone
 ```

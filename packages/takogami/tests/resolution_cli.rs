@@ -1,4 +1,4 @@
-//! E09.S4 lifecycle resolution CLI matrix (hermetic fixtures).
+//! Lifecycle resolution CLI matrix (hermetic fixtures).
 
 use serde_json::Value;
 use std::fs;

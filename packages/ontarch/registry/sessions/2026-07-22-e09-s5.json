@@ -1,0 +1,43 @@
+{
+  "session_id": "2026-07-22-e09-s5",
+  "epic": "E09",
+  "story": "S5",
+  "title": "Profile and policy enforcement",
+  "status": "done",
+  "started_at": "2026-07-22T23:00:00Z",
+  "ended_at": "2026-07-22T23:45:00Z",
+  "changed_paths": [
+    "packages/ontarch/policies/takogami.agent.policy.toml",
+    "packages/ontarch/policies/panoply.agent.policy.toml",
+    "packages/ontarch/schemas/policy.schema.json",
+    "packages/ontarch/bin/ontarch-validate",
+    "packages/ontarch/registry/sessions/2026-07-22-e09-s5.json",
+    "packages/takogami/src/policy/",
+    "packages/takogami/src/resolution/",
+    "packages/takogami/src/commands.rs",
+    "packages/takogami/src/error.rs",
+    "packages/takogami/src/output/",
+    "packages/takogami/src/lib.rs",
+    "packages/takogami/tests/policy_cli.rs",
+    "packages/takogami/tests/fixtures/resolution/registry/",
+    "packages/takogami/README.md",
+    "docs/runtime-controller.md",
+    "docs/agent-rails.md"
+  ],
+  "outcome": "E09.S5 implements deterministic dual-layer policy enforcement between the sealed S4.1 plan and the unavailable S6 executor. Added closed Ontarch policy schema + takogami.agent request policy; strict normalization of current policy/profile shapes; token-aware command matching; git/gh/secret/install/bin/wrapper classifiers; anchored path-scope enforcement; Deny>Gate>Allow merge; AuthorizedExecutionPlan only on dual Allow; exits 5/6 live; production --execute still exits 10 via unavailable seam. No process spawn, state home, command records, or approval transport.",
+  "validation": "PASS: moon run takogami:build|test|lint|format-check; ontarch:sync|validate (takogami.agent in policies.json + agent blocked-by edge); panoply:gen-check|validate-substrate. Historical ontarch:secrets-scan blocker preserved and excluded.",
+  "decisions": [
+    "Keep SCHEMA_VERSION 0.1.0; PolicyDecision wire variants unchanged; additive data.policy_decision and explanation.policy.",
+    "Fixed actor=agent; default deny; Deny > Gate > Allow per layer and globally; Gate fails closed with no approval bypass.",
+    "Explicit takogami.agent policy supplies request-layer Allow for lifecycle/report operations without implementing S7 handlers.",
+    "Consume PolicyEvaluationInput once; do not reseal or change s4.1-v1 digest; AuthorizedExecutionPlan is the only S6 handoff.",
+    "Empty token-prefix remainder matches any argv (program-only allow patterns such as demo-bin).",
+    "Remove inline comments after booleans in panoply.agent so the Ontarch TOML reader preserves boolean types."
+  ],
+  "next": "E09.S6",
+  "handoff": "E09.S6 must accept AuthorizedExecutionPlan (not a bare SealedExecutionPlan + boolean), persist RuntimeCommandRecord outcomes for allow/deny/gate, implement the real process runner behind the executor trait, and must not recompute policy from mutable registry state or bypass Gate.",
+  "blockers": [
+    "ontarch:secrets-scan detect reports pre-existing age-secret-key in git history (commit a3a4978, 2026-06-24; redacted in HEAD, persists in blob) — not introduced by migration; human decision pending (history rewrite, .gitleaksignore entry, or accept as historical fixture)"
+  ],
+  "token_note": "STATE + S5 plan + E09.S5 + S4.1 addendum §§5.6/12 + agent-rails + last 2 session records vs full E09/Plan"
+}

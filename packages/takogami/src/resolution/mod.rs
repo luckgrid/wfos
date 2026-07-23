@@ -1,4 +1,4 @@
-//! Pure lifecycle resolution (E09.S4). No process spawn; no RuntimeCommandRecord.
+//! Pure lifecycle resolution. No process spawn; no RuntimeCommandRecord.
 
 // ponytail: assert at compile/test time that this tree stays spawn-free.
 #[cfg(test)]
@@ -46,7 +46,9 @@ pub use explain::{
     ResolutionStep, SafeEntrypointView, SafeSourceView, SourceExplanation, UnitExplanation,
     render_human_explanation, render_human_partial_explanation, render_human_summary,
 };
-pub use plan::{Actor, PolicyEvaluationInput, PolicyRequestView, SealedExecutionPlan};
+pub use plan::{
+    Actor, PolicyEvaluationInput, PolicyRequestView, RequestedOperation, SealedExecutionPlan,
+};
 pub use request::{
     CorrelationIdGenerator, DefaultIdGenerator, FixedIdGenerator, LifecycleVerb, ResolutionRequest,
 };

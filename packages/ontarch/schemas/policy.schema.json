@@ -2,48 +2,101 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "wfos/ontarch/schemas/policy.schema.json",
   "title": "Ontarch policy",
-  "description": "Machine-readable policy: allowed and blocked behavior, gates, and agent rails. Canon: lg_wfos_lvl_0_metadata_plane.md §10.4. Permissive by design — it accepts both the agent-rails style ([agent] allow/block, [gates], [secrets]) and the command style ([block]/[allow] commands/tools).",
+  "description": "Machine-readable policy: allowed and blocked behavior, gates, and agent rails. Canon: metadata-plane policy contract; agent-rails. Closed v0 shape covering agent-rails ([agent] allow/block, [gates], [secrets]) and command-tier ([allow]/[gate]/[block] commands/tools/paths/actions, [remote]).",
   "type": "object",
-  "required": ["id", "version"],
-  "additionalProperties": true,
+  "required": ["id", "applies_to", "version"],
+  "additionalProperties": false,
   "properties": {
     "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
-    "applies_to": { "type": "string" },
-    "version": { "type": "string" },
+    "applies_to": { "type": "string", "minLength": 1 },
+    "version": { "type": "string", "pattern": "^0\\.1(\\.[0-9]+)?$" },
     "agent": {
       "type": "object",
+      "additionalProperties": false,
       "properties": {
         "env_flag": { "type": "string" },
-        "allow": { "type": "array", "items": { "type": "string" } },
-        "block": { "type": "array", "items": { "type": "string" } }
+        "allow": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
+        "block": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        }
       }
     },
-    "block": {
+    "allow": { "$ref": "#/definitions/ruleTable" },
+    "gate": { "$ref": "#/definitions/ruleTable" },
+    "block": { "$ref": "#/definitions/ruleTable" },
+    "gates": {
       "type": "object",
+      "additionalProperties": false,
       "properties": {
-        "commands": { "type": "array", "items": { "type": "string" } },
-        "tools": { "type": "array", "items": { "type": "string" } }
+        "no_global_install": { "type": "boolean" },
+        "no_secret_read": { "type": "boolean" },
+        "no_shell_mutation": { "type": "boolean" }
       }
     },
-    "allow": {
-      "type": "object",
-      "properties": {
-        "commands": { "type": "array", "items": { "type": "string" } },
-        "tools": { "type": "array", "items": { "type": "string" } }
-      }
-    },
-    "gates": { "type": "object" },
     "secrets": {
       "type": "object",
+      "additionalProperties": false,
       "properties": {
-        "block_tools": { "type": "array", "items": { "type": "string" } },
+        "block_tools": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
         "rationale": { "type": "string" }
+      }
+    },
+    "remote": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "writes": {
+          "type": "string",
+          "enum": ["blocked", "local-only", "elevated"]
+        }
       }
     },
     "rationale": {
       "type": "object",
+      "additionalProperties": false,
       "properties": {
         "text": { "type": "string" }
+      }
+    }
+  },
+  "definitions": {
+    "ruleTable": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "commands": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
+        "tools": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
+        "paths": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
+        "actions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["delete untracked files"]
+          },
+          "uniqueItems": true
+        }
       }
     }
   }

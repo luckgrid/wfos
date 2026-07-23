@@ -68,7 +68,7 @@ is intentionally not exposed as a task (it is human-only — see [agent-rails.md
 
 ## Rust workspace
 
-The Cargo workspace landed with E09.S1. Root `Cargo.toml` lists `packages/takogami` as the
+The Cargo workspace landed with the runtime-controller foundation. Root `Cargo.toml` lists `packages/takogami` as the
 member crate; `Cargo.lock` is committed. `.moon/toolchains.yml` already enables the rust
 toolchain with `clippy` and `rustfmt`. See the [runtime controller (Takogami)](runtime-controller.md)
 guide and [`packages/takogami/README.md`](../packages/takogami/README.md) for the current

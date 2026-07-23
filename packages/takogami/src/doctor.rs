@@ -1,4 +1,4 @@
-//! Doctor readiness checks (E09.S3 — extends S1 PATH skeleton).
+//! Doctor readiness checks (extends PATH skeleton).
 
 use std::env;
 use std::fs;

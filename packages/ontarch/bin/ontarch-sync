@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ontarch sync — generate the registry from descriptors, policies, and the .agents layer.
 # Reads sources (descriptors/policies/tools.json/.agents) and writes only generated output
-# under registry/ (and, from E04.S3, .agents/tools/local-toolkit.yml). Agent-safe: no
+# under registry/ (and .agents/tools/local-toolkit.yml). Agent-safe: no
 # install, no secret read, no dotfile edit.
 set -uo pipefail
 
@@ -58,7 +58,7 @@ if [ -f "$ONTARCH_REGISTRY/tools.json" ]; then
     && ontarch_ok "local-toolkit.yml ($(grep -c '^  - ' "$AGENTS_HOME/tools/local-toolkit.yml") tools) -> .agents/tools/"
 fi
 
-# Manifest beside generated registry outputs (E08.S2).
+# Manifest beside generated registry outputs.
 _sync_outputs=(units.json skills.json profiles.json policies.json)
 [ -f "$ONTARCH_REGISTRY/graph.json" ] && _sync_outputs+=(graph.json graph.dot)
 ontarch_emit_manifest \

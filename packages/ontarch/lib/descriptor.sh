@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Ontarch descriptor reader: parse the canon TOML descriptor subset into JSON.
 # Sourced after common.sh (uses jq). Dependency-free TOML handling via awk, mirroring
-# the Panoply manifest reader. Supports the regular subset the canon uses (§10.1):
+# the Panoply manifest reader. Supports the regular subset descriptors use:
 #   top-level   key = "value" | true/false | number | ["a", "b"]
 #   tables       [section] with the same key forms
 # Arrays must be single-line and inline. Inline comments after a value are not supported

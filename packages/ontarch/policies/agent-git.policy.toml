@@ -1,4 +1,4 @@
-# Ontarch policy — agent git command rails (WfOS Level 0 §13.4).
+# Ontarch policy — agent git command rails (agent-rails).
 # The authoritative allow / gate / block tiers for agent git usage. Reading and inspecting are
 # safe; committing/pulling/branching are gated (human-initiated or elevated); pushing, history
 # rewrites, and destructive cleanups are blocked by default. Remote writes require elevated

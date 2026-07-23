@@ -1,0 +1,19 @@
+# Ontarch policy — Takogami controller request-layer rails (runtime-controller / agent-rails).
+# Authorizes recognized report/lifecycle Takogami operations at the request layer.
+# Child intent (resolved program + argv) is authorized separately by other policies.
+# Adding this metadata does not implement deferred graph/bin handlers.
+id = "takogami.agent"
+applies_to = "agent"
+version = "0.1.0"
+
+[allow]
+commands = ["takogami dev", "takogami build", "takogami check", "takogami graph", "takogami bin report", "takogami bin cleanup --mode report-only"]
+
+[gate]
+commands = ["takogami bin cleanup --mode dry-run"]
+
+[block]
+commands = ["takogami bin cleanup --mode archive", "takogami bin cleanup --mode delete-approved"]
+
+[rationale]
+text = "Takogami may plan and route recognized report/lifecycle operations; cleanup mutation stays gated or blocked. Child intent is authorized separately."

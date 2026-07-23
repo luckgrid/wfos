@@ -48,5 +48,5 @@ swappable — the archetype id is what other layers depend on.
 Implemented today: **`native-toolchain` (Panoply)** and **`metadata-plane` (Ontarch)**.
 In progress: **`runtime-controller` (Takogami)**.
 Planned: **`package-translator` (Polytope)**, **`portable-component-runtime` (Wisp)**.
-See each guide for scope and roadmap; build position lives in `Build/bin/wfos/STATE.md`
-and `SESSIONS.md`.
+See each guide for scope and roadmap; build-session provenance lives in
+`packages/ontarch/registry/sessions/`.

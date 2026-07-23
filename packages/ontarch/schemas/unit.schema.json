@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "wfos/ontarch/schemas/unit.schema.json",
   "title": "Ontarch unit descriptor",
-  "description": "Machine-readable descriptor for a WfOS unit (workspace, package, app, tool). Canon: lg_wfos_lvl_0_metadata_plane.md §10.1. A descriptor answers everything an agent needs to act on a unit, replacing a repo scan.",
+  "description": "Machine-readable descriptor for a WfOS unit (workspace, package, app, tool). Canon: metadata-plane descriptors. A descriptor answers everything an agent needs to act on a unit, replacing a repo scan.",
   "type": "object",
   "required": ["id", "kind", "title", "status", "paths"],
   "additionalProperties": true,

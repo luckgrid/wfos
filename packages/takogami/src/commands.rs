@@ -1,12 +1,13 @@
-//! Command handlers for discovery / query / doctor (E09.S3) and lifecycle planning (E09.S4).
+//! Command handlers for discovery / query / doctor and lifecycle planning.
 
 use std::path::{Path, PathBuf};
 
 use crate::cli::{Command, ListTarget};
 use crate::contracts::ExecutionClass;
 use crate::doctor::{self, DoctorInputs};
-use crate::error::ControllerError;
+use crate::error::{ControllerError, ExecutionDeferredDetails, PolicyOutcomeDetails};
 use crate::output::OutputSink;
+use crate::policy::Executor;
 use crate::registry::{
     ExternalAdapters, Freshness, ProcessAdapters, RefreshKind, RegistryAccess, discover_from_scan,
     filter_tools, filter_units, find_unit, parse_filters, resolve_registry_paths,
@@ -54,7 +55,7 @@ fn run_lifecycle(
     cli_profile: Option<&str>,
     cli_state_home: Option<&Path>,
 ) -> Result<u8, ControllerError> {
-    // S4 must not create operational state.
+    // S5 must not create operational state.
     let _ = cli_state_home;
 
     let access = access()?;
@@ -90,16 +91,92 @@ fn run_lifecycle(
         }
     };
 
-    // Class unavailable after a valid plan.
+    // Policy evaluation precedes class/executor checks.
+    let policy_input = success.policy_evaluation_input();
+    let policy_result = crate::policy::evaluate_policy(&policy_input);
+    let (policy_decision, policy_explanation, authorized) = match policy_result {
+        crate::policy::PolicyEvaluationResult::Contract(err) => {
+            let err = ControllerError::from_policy_contract(*err);
+            return sink
+                .emit_error_with_explanation(
+                    verb.as_str(),
+                    &err,
+                    Some(&success.explanation),
+                    Some(success.freshness),
+                )
+                .map_err(|e| ControllerError::internal(e.to_string()));
+        }
+        crate::policy::PolicyEvaluationResult::Decided {
+            decision,
+            explanation,
+            authorized,
+        } => match &decision {
+            crate::contracts::PolicyDecision::Deny { reason, .. } => {
+                let err = ControllerError::PolicyDeny {
+                    reason: reason.clone(),
+                    details: Box::new(PolicyOutcomeDetails {
+                        reason: reason.clone(),
+                        session_id: session_id.clone(),
+                        plan_digest: success.plan.plan_digest().to_string(),
+                        decision: decision.clone(),
+                        explanation: explanation.as_ref().clone(),
+                    }),
+                };
+                return sink
+                    .emit_policy_outcome(
+                        verb.as_str(),
+                        &err,
+                        &success.plan,
+                        &success.explanation,
+                        &explanation,
+                        &decision,
+                        success.freshness,
+                    )
+                    .map_err(|e| ControllerError::internal(e.to_string()));
+            }
+            crate::contracts::PolicyDecision::Gate { reason, .. } => {
+                let err = ControllerError::PolicyGate {
+                    reason: reason.clone(),
+                    details: Box::new(PolicyOutcomeDetails {
+                        reason: reason.clone(),
+                        session_id: session_id.clone(),
+                        plan_digest: success.plan.plan_digest().to_string(),
+                        decision: decision.clone(),
+                        explanation: explanation.as_ref().clone(),
+                    }),
+                };
+                return sink
+                    .emit_policy_outcome(
+                        verb.as_str(),
+                        &err,
+                        &success.plan,
+                        &success.explanation,
+                        &explanation,
+                        &decision,
+                        success.freshness,
+                    )
+                    .map_err(|e| ControllerError::internal(e.to_string()));
+            }
+            crate::contracts::PolicyDecision::Allow { .. } => {
+                (decision, explanation.as_ref().clone(), authorized)
+            }
+        },
+    };
+
+    // Class unavailable after Allow.
     if success.plan.resolved().execution_class != ExecutionClass::Direct {
         let err = ControllerError::ExecutionClassUnavailable {
             message: format!(
-                "execution_class={} with provider {:?} is not executable in S4",
+                "execution_class={} with provider {:?} is not executable in S5",
                 success.plan.resolved().execution_class.as_str(),
                 success.plan.resolved().runtime_provider
             ),
-            session_id: session_id.clone(),
-            plan_digest: Some(success.plan.plan_digest().to_string()),
+            details: Box::new(ExecutionDeferredDetails {
+                session_id: session_id.clone(),
+                plan_digest: Some(success.plan.plan_digest().to_string()),
+                policy_decision: Some(policy_decision.clone()),
+                policy_explanation: Some(policy_explanation.clone()),
+            }),
         };
         return sink
             .emit_error_with_explanation(
@@ -112,9 +189,16 @@ fn run_lifecycle(
     }
 
     if execute {
+        let auth = authorized.expect("Allow must produce AuthorizedExecutionPlan");
+        let _ = crate::policy::UnavailableExecutor.execute(&auth);
         let err = ControllerError::ExecutionUnavailable {
             session_id: session_id.clone(),
-            plan_digest: Some(success.plan.plan_digest().to_string()),
+            details: Box::new(ExecutionDeferredDetails {
+                session_id: session_id.clone(),
+                plan_digest: Some(success.plan.plan_digest().to_string()),
+                policy_decision: Some(policy_decision.clone()),
+                policy_explanation: Some(policy_explanation.clone()),
+            }),
         };
         return sink
             .emit_error_with_explanation(
@@ -126,19 +210,24 @@ fn run_lifecycle(
             .map_err(|e| ControllerError::internal(e.to_string()));
     }
 
+    // Plan-only Allow: never reach executor.
     if explain {
-        sink.emit_explanation(
+        sink.emit_explanation_with_policy(
             verb.as_str(),
             &success.plan,
             &success.explanation,
+            &policy_decision,
+            &policy_explanation,
             success.freshness,
         )
         .map_err(|e| ControllerError::internal(e.to_string()))
     } else {
-        sink.emit_plan(
+        sink.emit_plan_with_policy(
             verb.as_str(),
             &success.plan,
             &success.explanation,
+            &policy_decision,
+            &policy_explanation,
             success.freshness,
         )
         .map_err(|e| ControllerError::internal(e.to_string()))

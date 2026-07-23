@@ -25,6 +25,37 @@ pub struct PolicyRequestView {
     pub profile_id: String,
 }
 
+/// Canonical Takogami operation for request-layer policy matching.
+#[derive(Debug, Clone, Serialize)]
+pub struct RequestedOperation {
+    pub program: String,
+    pub argv: Vec<String>,
+    pub unit_id: String,
+    pub verb: String,
+    pub explain_requested: bool,
+    pub execute_requested: bool,
+}
+
+impl RequestedOperation {
+    pub fn from_resolution(unit_id: &str, verb: &str, explain: bool, execute: bool) -> Self {
+        let mut argv = vec![verb.to_string(), unit_id.to_string()];
+        if explain {
+            argv.push("--explain".into());
+        }
+        if execute {
+            argv.push("--execute".into());
+        }
+        Self {
+            program: "takogami".into(),
+            argv,
+            unit_id: unit_id.into(),
+            verb: verb.into(),
+            explain_requested: explain,
+            execute_requested: execute,
+        }
+    }
+}
+
 /// Sealed plan: constructible only via [`SealedExecutionPlan::seal`].
 #[derive(Debug, Clone)]
 pub struct SealedExecutionPlan {
@@ -114,14 +145,16 @@ impl SealedExecutionPlan {
     }
 }
 
-/// S5 input seam — not evaluated in S4.
+/// S5 input seam — evaluated by the policy module.
 #[derive(Debug, Clone)]
 pub struct PolicyEvaluationInput {
     pub actor: Actor,
-    pub request: PolicyRequestView,
+    pub request: RequestedOperation,
     pub plan: SealedExecutionPlan,
     pub profile: ProfileRecord,
     pub policies: Vec<PolicyRecord>,
+    pub policy_origins: Vec<(String, String)>,
+    pub policy_root: PathBuf,
 }
 
 fn compute_plan_digest(

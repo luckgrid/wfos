@@ -1,4 +1,4 @@
-# Ontarch policy — Panoply agent rails (WfOS Level 0 §13).
+# Ontarch policy — Panoply agent rails (native-toolchain / agent-rails).
 # Enforced by lib/common.sh via the PANOPLY_AGENT environment variable.
 id = "panoply.agent"
 applies_to = "panoply"
@@ -12,9 +12,9 @@ block = ["bootstrap"]
 
 [gates]
 # Capabilities agents must never exercise directly at Level 0.
-no_global_install = true        # no brew/mise installs
-no_secret_read = true           # no pass/age/sops invocation
-no_shell_mutation = true        # no edits to ~/.zshrc or ~/.config symlinks
+no_global_install = true
+no_secret_read = true
+no_shell_mutation = true
 
 [secrets]
 # Hard block for the no_secret_read gate. The manifest `agent_safe = false` flags on these

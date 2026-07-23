@@ -22,12 +22,12 @@ generated output under `registry/` — agent-safe.
 | Path | Kind | Purpose |
 |------|------|---------|
 | `descriptors/*.descriptor.toml` | descriptor | central unit descriptors (`panoply`, planned `ds`); colocated descriptors live beside their units (e.g. `wfos.descriptor.toml` at the workspace root) |
-| `schemas/unit.schema.json` | schema | contract for unit descriptors (canon §10.1) |
+| `schemas/unit.schema.json` | schema | contract for unit descriptors (metadata-plane) |
 | `schemas/policy.schema.json` | schema | contract for policies (agent-rails + command styles) |
 | `schemas/panoply.tools.schema.json` | schema | contract for the generated tools registry |
 | `policies/panoply.agent.policy.toml` | policy | native-toolchain agent rails (allow/block, gates) |
 | `policies/no-agent-git-push.policy.toml` | policy | agents never push or publish (human-only) |
-| `graphs/edges.schema.json` | schema | contract for the project graph (nodes + directed edges, canon §10.5) |
+| `graphs/edges.schema.json` | schema | contract for the project graph (metadata-plane graphs) |
 | `lib/`, `bin/ontarch{,-sync,-validate}` | code | the registry generator + validator (bash/awk/jq) |
 | `registry/QUERIES.md`, `registry/queries/*.jq` | query | the jq cookbook over the registry |
 | `registry/{units,skills,profiles,policies,tools}.json` | registry | generated indexes (gitignored — host-specific) |

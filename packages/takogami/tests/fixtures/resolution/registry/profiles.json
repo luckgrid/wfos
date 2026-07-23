@@ -9,17 +9,64 @@
       "rails_bin": "agent-bin",
       "isolation_mode": "worktree",
       "isolation_jj": "opt-in",
-      "session_state_home": null
+      "session_state_home": null,
+      "allowed_paths": ["**"],
+      "blocked_paths": [".env*", "secrets/**"],
+      "allowed_commands": [
+        "git status",
+        "git diff",
+        "git log",
+        "git branch --show-current",
+        "git worktree list",
+        "moon run",
+        "moon query",
+        "panoply doctor",
+        "panoply list",
+        "panoply gen",
+        "panoply env",
+        "demo-bin",
+        "rg"
+      ],
+      "gated_commands": [
+        "git add",
+        "git commit",
+        "git pull",
+        "git checkout -b",
+        "git branch",
+        "git switch"
+      ],
+      "blocked_commands": [
+        "git push",
+        "git push --force",
+        "git push --force-with-lease",
+        "git reset --hard",
+        "git clean",
+        "gh release create",
+        "gh pr merge",
+        "rm -rf",
+        "panoply bootstrap",
+        "brew install",
+        "mise install"
+      ],
+      "secret_access": false,
+      "remote_write_policy": "local-only"
     },
     {
       "id": "alt-profile",
       "title": "Alt",
-      "purpose": "test alt",
+      "purpose": "test alt restrictive",
       "rails": "panoply.agent",
       "rails_bin": "agent-bin",
       "isolation_mode": "branch",
       "isolation_jj": "opt-in",
-      "session_state_home": null
+      "session_state_home": null,
+      "allowed_paths": ["demo/**"],
+      "blocked_paths": ["**/.env*"],
+      "allowed_commands": ["git status", "moon run"],
+      "gated_commands": [],
+      "blocked_commands": ["git push", "git commit"],
+      "secret_access": false,
+      "remote_write_policy": "blocked"
     }
   ]
 }

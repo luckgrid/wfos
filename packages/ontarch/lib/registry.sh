@@ -346,7 +346,7 @@ ontarch_profile_record() {
   }' <<<"$1"
 }
 
-# profiles.json — populated by E05 from .agents/profiles/*.toml. Each profile is read by the
+# profiles.json — populated from .agents/profiles/*.toml. Each profile is read by the
 # Ontarch TOML reader and flattened by ontarch_profile_record into a compact record.
 ontarch_emit_profiles() {
   local arr='[]' f full rec

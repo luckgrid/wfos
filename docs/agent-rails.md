@@ -37,10 +37,11 @@ stage changes (`git status`, `git diff`, `git add`, `git commit`) but must not p
 remote (`git push`, `gh release create`, `gh pr merge`). The policy appears in the generated
 project graph (`agent → blocked-by → policy:no-agent-git-push`) and in agent guides.
 
-At Level 0 this is **policy metadata**, not runtime enforcement in the native-toolchain: an agent can still invoke
-`git push` or `gh` directly on `PATH` unless a future runtime-controller (Takogami) command router blocks it — the same
-boundary as secret tools above. Treat the policy as authoritative intent for agent behavior; OS-level
-interception is deferred to the runtime-controller (Takogami).
+At Level 0 the native-toolchain does **not** intercept arbitrary `git`/`gh` on `PATH`. The
+runtime-controller (Takogami) evaluates these policies for commands it routes (dual-layer
+request + child authorization; Gate fails closed). Direct shell invocation outside Takogami
+remains unconstrained by that router — treat the policy as authoritative intent for agent
+behavior, and prefer entering through Takogami for gated work.
 
 ## Git command rails (allow / gate / block)
 
@@ -55,10 +56,9 @@ authoritative tiers for agent git usage:
 
 Remote writes require **elevated policy plus human approval** (`[remote] writes = "elevated"`).
 `agent-git` is the superset git policy; `no-agent-git-push` remains the publish-specific statement,
-and both appear in the project graph as `agent → blocked-by → policy`. As with the publish rails,
-this is authoritative **intent** and graph metadata at Level 0; OS-level interception of
-`git push`/`reset --hard`/`clean` is deferred to the runtime-controller (Takogami) command router — the same boundary as
-the secret tools below.
+and both appear in the project graph as `agent → blocked-by → policy`. The runtime-controller
+evaluates these tiers for routed child commands; it is not an OS sandbox for arbitrary `PATH`
+binaries.
 
 ## Bin/archive mutation rails
 
@@ -74,8 +74,8 @@ select `agent-bin` via an optional `rails_bin` field.
 
 Belt-and-suspenders: `ontarch-bin-cleanup` refuses `archive`/`delete-approved` when `PANOPLY_AGENT=1`,
 and at the draft gateway those modes validate arguments then refuse without calling `rm`/`mv`.
-Runtime interception of bare `rm`/`mv` on `PATH` is deferred to the runtime-controller (Takogami) — the same boundary as
-git and secret rails. See [bin-archive.md](bin-archive.md).
+Runtime interception of bare `rm`/`mv` on `PATH` outside the router remains unconstrained; Takogami
+blocks those intents when they appear as resolved child commands. See [bin-archive.md](bin-archive.md).
 
 ## Worktree isolation
 
@@ -110,8 +110,9 @@ in [`packages/panoply/dotfiles/SECRETS.md`](../packages/panoply/dotfiles/SECRETS
 The guard applies to **native-toolchain-owned code paths** that would resolve a secret value (today:
 `panoply doctor`, validators, and any future substrate command that shells out to a vault tool).
 Agents can still invoke `pass`/`age`/`sops` directly on `PATH` unless a shell wrapper or the
-planned runtime-controller command routing blocks them. Level 0 intentionally stops at policy +
-manifest flags + doctor assertion; broader OS-level interception is deferred to the runtime-controller (Takogami).
+runtime-controller command router blocks them. Takogami denies secret-tool child intents under
+`no_secret_read` / `secret_access=false` when those commands are routed through it; that is not
+an OS-wide sandbox.
 
 ## Conventions
 

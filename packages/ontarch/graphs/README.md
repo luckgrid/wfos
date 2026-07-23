@@ -2,7 +2,7 @@
 
 The project graph: how units, capabilities, and policies relate. This is WfOS's local
 **project graph**, analogous to the dependency graphs monorepo tools expose for AI agent
-navigation. Canon: `lg_wfos_lvl_0_metadata_plane.md` §10.5.
+navigation. Canon: metadata-plane graphs.
 
 ## Edge contract
 

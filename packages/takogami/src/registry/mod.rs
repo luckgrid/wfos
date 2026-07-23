@@ -1,4 +1,4 @@
-//! Read-only Ontarch registry access, freshness, and query helpers (E09.S3).
+//! Read-only Ontarch registry access, freshness, and query helpers.
 
 mod access;
 mod adapters;

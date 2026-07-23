@@ -157,7 +157,7 @@ pub struct WorkspaceScanEntry {
     pub git_root: Option<String>,
     #[serde(default)]
     pub native_manifests: Vec<String>,
-    /// Evidence only — never auto-executed (E09.S3).
+    /// Evidence only — never auto-executed.
     #[serde(default)]
     pub lint_check_commands: Vec<Value>,
 }

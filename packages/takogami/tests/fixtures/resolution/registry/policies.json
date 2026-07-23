@@ -2,28 +2,126 @@
   "generated_at": "2026-07-21T00:00:00Z",
   "policies": [
     {
-      "id": "panoply.agent",
+      "id": "takogami.agent",
       "applies_to": "agent",
       "version": "0.1.0",
-      "allow": {},
-      "block": {},
-      "gate": {}
+      "allow": {
+        "commands": [
+          "takogami dev",
+          "takogami build",
+          "takogami check",
+          "takogami graph",
+          "takogami bin report",
+          "takogami bin cleanup --mode report-only"
+        ]
+      },
+      "gate": {
+        "commands": ["takogami bin cleanup --mode dry-run"]
+      },
+      "block": {
+        "commands": [
+          "takogami bin cleanup --mode archive",
+          "takogami bin cleanup --mode delete-approved"
+        ]
+      }
+    },
+    {
+      "id": "panoply.agent",
+      "applies_to": "panoply",
+      "version": "0.1.0",
+      "agent": {
+        "env_flag": "PANOPLY_AGENT",
+        "allow": ["doctor", "list", "gen", "env", "version", "help"],
+        "block": ["bootstrap"]
+      },
+      "gates": {
+        "no_global_install": true,
+        "no_secret_read": true,
+        "no_shell_mutation": true
+      },
+      "secrets": {
+        "block_tools": ["pass", "age", "sops"]
+      }
     },
     {
       "id": "agent-bin",
       "applies_to": "agent",
       "version": "0.1.0",
-      "allow": {},
-      "block": {},
-      "gate": {}
+      "allow": {
+        "commands": [
+          "ontarch bin-report",
+          "ontarch bin-cleanup --mode report-only",
+          "du",
+          "fd",
+          "stat"
+        ]
+      },
+      "gate": {
+        "commands": ["ontarch bin-cleanup --mode dry-run"]
+      },
+      "block": {
+        "commands": [
+          "ontarch bin-cleanup --mode archive",
+          "ontarch bin-cleanup --mode delete-approved",
+          "rm",
+          "mv",
+          "git clean"
+        ],
+        "paths": ["bin/", "lib/"]
+      }
     },
     {
       "id": "agent-git",
       "applies_to": "agent",
       "version": "0.1.0",
-      "allow": {},
-      "block": {},
-      "gate": {}
+      "allow": {
+        "commands": [
+          "git status",
+          "git diff",
+          "git log",
+          "git branch --show-current",
+          "git worktree list"
+        ]
+      },
+      "gate": {
+        "commands": ["git commit", "git pull", "git checkout -b"]
+      },
+      "block": {
+        "commands": [
+          "git push",
+          "git push --force",
+          "git push --force-with-lease",
+          "git reset --hard",
+          "git clean"
+        ],
+        "actions": ["delete untracked files"]
+      },
+      "remote": {
+        "writes": "elevated"
+      }
+    },
+    {
+      "id": "no-agent-git-push",
+      "applies_to": "agent",
+      "version": "0.1.0",
+      "block": {
+        "commands": [
+          "git push",
+          "git push --force",
+          "git push --force-with-lease"
+        ],
+        "tools": ["gh release create", "gh pr merge"]
+      },
+      "allow": {
+        "commands": [
+          "git status",
+          "git diff",
+          "git log",
+          "git fetch",
+          "git add",
+          "git commit"
+        ]
+      }
     }
   ]
 }

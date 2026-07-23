@@ -6,5 +6,6 @@ pub mod doctor;
 pub mod error;
 pub mod exit_codes;
 pub mod output;
+pub mod policy;
 pub mod registry;
 pub mod resolution;

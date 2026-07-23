@@ -263,7 +263,7 @@ pub fn explanation_from_plan(
     }
 }
 
-/// Human `--explain` field order per plan §9.1.
+/// Human `--explain` field order (stable resolution provenance).
 pub fn render_human_explanation(ex: &ResolutionExplanation) -> String {
     let mut lines = Vec::new();
     lines.push("Plan only — no process started".into());

@@ -1,4 +1,4 @@
-# Ontarch policy — agents never push or publish (WfOS Level 0 §10.4).
+# Ontarch policy — agents never push or publish (agent-rails / publish rails).
 # Reading and staging are safe for agents; publishing to a remote is a human action.
 id = "no-agent-git-push"
 applies_to = "agent"

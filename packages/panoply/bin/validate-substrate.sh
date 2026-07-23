@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# validate-substrate.sh — dry-run gate for the Panoply native toolchain (WfOS Level 0 E03).
+# validate-substrate.sh — dry-run gate for the Panoply native toolchain.
 #
 # Read-only and agent-safe: never installs, writes outside a temp dir, or reads secrets.
 # Sections:

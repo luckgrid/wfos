@@ -1,6 +1,37 @@
-use crate::exit_codes::{CONTRACT, INTERNAL, NOT_IMPLEMENTED, RESOLUTION, USAGE};
+use crate::contracts::PolicyDecision;
+use crate::exit_codes::{
+    CONTRACT, INTERNAL, NOT_IMPLEMENTED, POLICY_DENY, POLICY_GATE, RESOLUTION, USAGE,
+};
+use crate::policy::{PolicyContractError, PolicyEvaluationExplanation};
 use miette::Diagnostic;
 use thiserror::Error;
+
+#[derive(Debug, Clone)]
+pub struct PolicyContractDetails {
+    pub code: String,
+    pub message: String,
+    pub session_id: String,
+    pub plan_digest: String,
+    pub policy_id: Option<String>,
+    pub field: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct PolicyOutcomeDetails {
+    pub reason: String,
+    pub session_id: String,
+    pub plan_digest: String,
+    pub decision: PolicyDecision,
+    pub explanation: PolicyEvaluationExplanation,
+}
+
+#[derive(Debug, Clone)]
+pub struct ExecutionDeferredDetails {
+    pub session_id: String,
+    pub plan_digest: Option<String>,
+    pub policy_decision: Option<PolicyDecision>,
+    pub policy_explanation: Option<PolicyEvaluationExplanation>,
+}
 
 #[derive(Debug, Error, Diagnostic)]
 pub enum ControllerError {
@@ -46,22 +77,43 @@ pub enum ControllerError {
         code: String,
         message: String,
         session_id: Option<String>,
-        explanation_partial: Option<serde_json::Value>,
+        explanation_partial: Option<Box<serde_json::Value>>,
     },
 
-    #[error("execution unavailable in S4 (plan-only): session={session_id}")]
+    #[error("policy contract invalid ({code}): {message}")]
+    #[diagnostic(code(takogami::policy_contract))]
+    PolicyContract {
+        code: String,
+        message: String,
+        details: Box<PolicyContractDetails>,
+    },
+
+    #[error("policy deny: {reason}")]
+    #[diagnostic(code(takogami::policy_deny))]
+    PolicyDeny {
+        reason: String,
+        details: Box<PolicyOutcomeDetails>,
+    },
+
+    #[error("policy gate: {reason}")]
+    #[diagnostic(code(takogami::policy_gate))]
+    PolicyGate {
+        reason: String,
+        details: Box<PolicyOutcomeDetails>,
+    },
+
+    #[error("execution unavailable in S5 (plan-only): session={session_id}")]
     #[diagnostic(code(takogami::execution_unavailable))]
     ExecutionUnavailable {
         session_id: String,
-        plan_digest: Option<String>,
+        details: Box<ExecutionDeferredDetails>,
     },
 
     #[error("execution class unavailable: {message}")]
     #[diagnostic(code(takogami::execution_class_unavailable))]
     ExecutionClassUnavailable {
         message: String,
-        session_id: String,
-        plan_digest: Option<String>,
+        details: Box<ExecutionDeferredDetails>,
     },
 
     #[error("internal error: {message}")]
@@ -132,11 +184,43 @@ impl ControllerError {
         }
     }
 
+    pub fn from_policy_contract(err: PolicyContractError) -> Self {
+        let code = err.kind.code().to_string();
+        Self::PolicyContract {
+            code: code.clone(),
+            message: err.message.clone(),
+            details: Box::new(PolicyContractDetails {
+                code,
+                message: err.message,
+                session_id: err.session_id,
+                plan_digest: err.plan_digest,
+                policy_id: err.policy_id,
+                field: err.field,
+            }),
+        }
+    }
+
     pub fn session_id(&self) -> Option<&str> {
         match self {
             Self::Resolution { session_id, .. } => session_id.as_deref(),
-            Self::ExecutionUnavailable { session_id, .. }
-            | Self::ExecutionClassUnavailable { session_id, .. } => Some(session_id.as_str()),
+            Self::PolicyContract { details, .. } => Some(details.session_id.as_str()),
+            Self::PolicyDeny { details, .. } | Self::PolicyGate { details, .. } => {
+                Some(details.session_id.as_str())
+            }
+            Self::ExecutionUnavailable { session_id, .. } => Some(session_id.as_str()),
+            Self::ExecutionClassUnavailable { details, .. } => Some(details.session_id.as_str()),
+            _ => None,
+        }
+    }
+
+    pub fn plan_digest(&self) -> Option<&str> {
+        match self {
+            Self::PolicyContract { details, .. } => Some(details.plan_digest.as_str()),
+            Self::PolicyDeny { details, .. } | Self::PolicyGate { details, .. } => {
+                Some(details.plan_digest.as_str())
+            }
+            Self::ExecutionUnavailable { details, .. }
+            | Self::ExecutionClassUnavailable { details, .. } => details.plan_digest.as_deref(),
             _ => None,
         }
     }
@@ -147,9 +231,13 @@ impl ControllerError {
             Self::NotImplemented { .. }
             | Self::ExecutionUnavailable { .. }
             | Self::ExecutionClassUnavailable { .. } => NOT_IMPLEMENTED,
-            Self::Contract { .. } | Self::InvalidRegistry { .. } => CONTRACT,
+            Self::Contract { .. } | Self::InvalidRegistry { .. } | Self::PolicyContract { .. } => {
+                CONTRACT
+            }
             Self::NotFound { .. } | Self::Ambiguous { .. } | Self::InvalidFilter { .. } => USAGE,
             Self::Resolution { .. } => RESOLUTION,
+            Self::PolicyDeny { .. } => POLICY_DENY,
+            Self::PolicyGate { .. } => POLICY_GATE,
             Self::UnavailableSource { .. } | Self::Internal { .. } => INTERNAL,
         }
     }
@@ -165,6 +253,9 @@ impl ControllerError {
             Self::InvalidFilter { .. } => "invalid_filter",
             Self::UnavailableSource { .. } => "unavailable_source",
             Self::Resolution { code, .. } => code.as_str(),
+            Self::PolicyContract { code, .. } => code.as_str(),
+            Self::PolicyDeny { .. } => "policy_deny",
+            Self::PolicyGate { .. } => "policy_gate",
             Self::ExecutionUnavailable { .. } => "execution_unavailable",
             Self::ExecutionClassUnavailable { .. } => "execution_class_unavailable",
             Self::Internal { .. } => "internal",

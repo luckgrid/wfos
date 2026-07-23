@@ -1,4 +1,4 @@
-//! Ordered deterministic resolution pipeline (plan §8).
+//! Ordered deterministic resolution pipeline.
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -17,7 +17,7 @@ use super::explain::{
     explanation_from_plan,
 };
 use super::paths::{resolve_cwd, resolve_manifests, workspace_relative_display};
-use super::plan::{Actor, PolicyEvaluationInput, PolicyRequestView, SealedExecutionPlan};
+use super::plan::{Actor, PolicyEvaluationInput, SealedExecutionPlan};
 use super::profile::{SelectedProfile, collect_policy_refs, select_profile};
 use super::request::{CorrelationIdGenerator, ResolutionRequest};
 
@@ -138,7 +138,7 @@ impl ResolutionCode {
             code: self.code().into(),
             message: self.message(),
             session_id: Some(explanation_partial.session_id.clone()),
-            explanation_partial: serde_json::to_value(explanation_partial).ok(),
+            explanation_partial: serde_json::to_value(explanation_partial).ok().map(Box::new),
         }
     }
 }
@@ -161,21 +161,28 @@ pub struct ResolveSuccess {
     pub explanation: ResolutionExplanation,
     pub selected: SelectedProfile,
     pub freshness: Freshness,
+    pub explain_requested: bool,
+    pub execute_requested: bool,
+    pub policy_root: PathBuf,
 }
 
 impl ResolveSuccess {
     /// Immutable S5 handoff. Policy evaluation must not re-resolve any plan input.
     pub fn policy_evaluation_input(&self) -> PolicyEvaluationInput {
+        let resolved = self.plan.resolved();
         PolicyEvaluationInput {
             actor: Actor::Agent,
-            request: PolicyRequestView {
-                unit_id: self.plan.resolved().unit_id.clone(),
-                verb: self.plan.resolved().verb.clone(),
-                profile_id: self.plan.resolved().profile_id.clone(),
-            },
+            request: super::plan::RequestedOperation::from_resolution(
+                &resolved.unit_id,
+                &resolved.verb,
+                self.explain_requested,
+                self.execute_requested,
+            ),
             plan: self.plan.clone(),
             profile: self.selected.profile.clone(),
             policies: self.selected.policies.clone(),
+            policy_origins: self.selected.policy_origins.clone(),
+            policy_root: self.policy_root.clone(),
         }
     }
 }
@@ -436,6 +443,9 @@ impl<'a> Resolver<'a> {
             explanation,
             selected,
             freshness,
+            explain_requested: request.explain,
+            execute_requested: request.execute_requested,
+            policy_root: self.inputs.access.paths.workspace_root.clone(),
         })
     }
 }
@@ -954,7 +964,10 @@ mod tests {
         let handoff = a.policy_evaluation_input();
         assert_eq!(handoff.request.unit_id, "demo");
         assert_eq!(handoff.request.verb, "build");
-        assert_eq!(handoff.request.profile_id, "workspace-dev");
+        assert_eq!(handoff.request.program, "takogami");
+        assert_eq!(handoff.profile.id, "workspace-dev");
+        assert!(!handoff.policy_origins.is_empty());
+        assert!(handoff.policy_root.exists() || !handoff.policy_root.as_os_str().is_empty());
         assert_eq!(handoff.plan.plan_digest(), a.plan.plan_digest());
         assert_eq!(
             handoff

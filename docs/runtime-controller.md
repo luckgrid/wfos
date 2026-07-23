@@ -11,11 +11,11 @@ Those belong to optional providers (tmux / Herdr for terminals; Hammerspoon and 
 desktop layout; an external gateway such as Push for message/schedule ingress). See
 [native-toolchain.md](native-toolchain.md).
 
-Status: **in progress; deterministic resolution hardening complete (plan-only).** Discovery,
-list/info/tools/interfaces, doctor, the command-record contract, and deterministic lifecycle
-resolution/`--explain` are implemented. Sealed plans bind canonical private execution inputs;
-failed resolution returns a safely redacted typed partial trace. Policy evaluation, process
-execution, and persisted **command execution records** remain ahead. See
+Status: **in progress; policy enforcement complete (still plan-only for child processes).**
+Discovery, list/info/tools/interfaces, doctor, the command-record contract, deterministic
+lifecycle resolution/`--explain`, and dual-layer profile/policy evaluation are implemented.
+Allowed `--execute` reaches only an unavailable executor seam (`execution_unavailable`). Process
+execution and persisted **command execution records** remain ahead. See
 [`packages/takogami/README.md`](../packages/takogami/README.md) for the proved surface;
 implementation provenance lives in [`packages/ontarch/registry/sessions/`](../packages/ontarch/registry/sessions/).
 
@@ -39,16 +39,18 @@ takogami info <unit>  show resolved metadata for a unit
 takogami doctor       validate local machine readiness
 takogami tools        report tools from Panoply / Ontarch projections
 takogami interfaces   validate descriptors, schemas, policies, registry entries
-takogami dev|build|check <unit> [--explain] [--execute]   plan-only resolution
+takogami dev|build|check <unit> [--explain] [--execute]   resolve + policy (plan-only)
 takogami graph        project metadata-plane graph
 takogami bin report|cleanup   project bin/archive contracts
 takogami session list|show|latest   read command execution records (not work sessions)
 ```
 
-Lifecycle verbs resolve a sealed pre-policy plan (no spawn). `--explain` prints provenance;
-resolution failures print the safely completed portion without a digest. `--execute` returns
-`execution_unavailable` until policy and native execution are implemented. Profile precedence is CLI
-`--profile` → `TAKOGAMI_PROFILE` → `workspace-dev` → fail closed.
+Lifecycle verbs resolve a sealed plan, then evaluate dual-layer policy (Takogami request +
+child intent) with Deny > Gate > Allow. `--explain` prints resolution and policy provenance;
+resolution failures print the safely completed portion without a digest. Gate fails closed (no
+CLI/env/file approval bypass). Allowed `--execute` returns `execution_unavailable` until native
+execution is implemented. Profile precedence is CLI `--profile` → `TAKOGAMI_PROFILE` →
+`workspace-dev` → fail closed. Policy does not claim an OS sandbox after spawn.
 
 `takogami session *` is the future operational **command-record** query surface. It does not
 start/stop composed work sessions. Replaying a record does not restore a terminal pane or
@@ -57,13 +59,13 @@ window layout.
 ### Post-MVP (aspirational — not part of the runtime MVP)
 
 ```txt
-takogami portable <c>   portable WASM/WASI components (Wisp / E11)
+takogami portable <c>   portable WASM/WASI components (Wisp)
 takogami native <c>     host-native tooling inspection (beyond tools/doctor)
 takogami meta <c>       metadata-plane operator surface
-takogami package …      package translator (Polytope / E11)
+takogami package …      package translator (Polytope)
 takogami workstream …   Workstreams / gateway routing
 takogami integrate <c>  runtime integrations (archetype runtime-integration; deferred)
-takogami agent          scoped agent rails / agent-interface (E10; brand pending)
+takogami agent          scoped agent rails / agent-interface (brand pending)
 takogami work-session … composed multi-provider restore (post-MVP)
 ```
 
@@ -96,13 +98,14 @@ sequenceDiagram
   U->>K: takogami build unit
   K->>C: read descriptor and policy
   C-->>K: unit metadata
-  Note over K: Seal plan + explain; stop here (no spawn)
-  Note over K,D: Policy then spawn/records (not yet)
+  Note over K: Seal plan, evaluate policy, explain
+  Note over K,D: Spawn/records deferred
   K--xD: deferred until native execution
 ```
 
-The current phase stops at the sealed plan. Policy and spawn/records are later. Registry write-back
-after every routed command is **not** runtime MVP; Ontarch remains the registry owner.
+The current phase stops after policy: dual-layer Allow/Gate/Deny is enforced, but child
+processes and command records are not yet started. Registry write-back after every routed
+command is **not** runtime MVP; Ontarch remains the registry owner.
 
 ## Composition boundary
 

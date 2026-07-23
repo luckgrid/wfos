@@ -43,7 +43,7 @@ d=$(jq -r '.summary.dirty' "$ONTARCH_REGISTRY/scan.json")
 ontarch_ok "scan.json     ($n workspaces: $c clean, $d dirty)"
 ontarch_ok "SCAN.md       -> registry/SCAN.md"
 
-# Manifest beside generated scan outputs (E08.S2). Overwrites registry/manifest.json
+# Manifest beside generated scan outputs. Overwrites registry/manifest.json
 # with the latest Ontarch run contract (sync or scan — whichever ran last).
 ontarch_emit_manifest \
   --id "ontarch-scan-$(date -u +%Y%m%d-%H%M%S)" \

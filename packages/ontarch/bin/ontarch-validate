@@ -101,6 +101,59 @@ _validate_descriptors() {
   ontarch_info "validated $count descriptor(s)"
 }
 
+# Closed v0 policy shape checker (mirrors policy.schema.json additionalProperties:false).
+# Args: <policy-json>
+_policy_shape_ok() {
+  jq -e '
+    def known_root: ["id","applies_to","version","agent","allow","gate","block","gates","secrets","remote","rationale","source"];
+    def known_agent: ["env_flag","allow","block"];
+    def known_rule: ["commands","tools","paths","actions"];
+    def known_gates: ["no_global_install","no_secret_read","no_shell_mutation"];
+    def known_secrets: ["block_tools","rationale"];
+    def known_remote: ["writes"];
+    def known_rationale: ["text"];
+    def known_actions: ["delete untracked files"];
+    def obj_keys_ok($known): (type != "object") or ((keys - $known) | length == 0);
+    def rule_ok:
+      type == "object"
+      and obj_keys_ok(known_rule)
+      and ((.commands // []) | map(type == "string") | all)
+      and ((.tools // []) | map(type == "string") | all)
+      and ((.paths // []) | map(type == "string") | all)
+      and ((.actions // []) | map(. as $a | known_actions | index($a)) | all);
+    (has("id") and has("applies_to") and has("version"))
+    and (.id | type == "string" and test("^[a-z0-9][a-z0-9._-]*$"))
+    and (.applies_to | type == "string" and length > 0)
+    and (.version | type == "string" and test("^0\\.1(\\.[0-9]+)?$"))
+    and obj_keys_ok(known_root)
+    and ((has("agent") | not) or (
+      .agent | type == "object" and obj_keys_ok(known_agent)
+      and ((.allow // []) | map(type == "string") | all)
+      and ((.block // []) | map(type == "string") | all)
+    ))
+    and ((has("allow") | not) or (.allow | rule_ok))
+    and ((has("gate") | not) or (.gate | rule_ok))
+    and ((has("block") | not) or (.block | rule_ok))
+    and ((has("gates") | not) or (
+      .gates | type == "object" and obj_keys_ok(known_gates)
+      and ((has("no_global_install") | not) or (.no_global_install | type == "boolean"))
+      and ((has("no_secret_read") | not) or (.no_secret_read | type == "boolean"))
+      and ((has("no_shell_mutation") | not) or (.no_shell_mutation | type == "boolean"))
+    ))
+    and ((has("secrets") | not) or (
+      .secrets | type == "object" and obj_keys_ok(known_secrets)
+      and ((.block_tools // []) | map(type == "string") | all)
+    ))
+    and ((has("remote") | not) or (
+      .remote | type == "object" and obj_keys_ok(known_remote)
+      and ((has("writes") | not) or (.writes | . == "blocked" or . == "local-only" or . == "elevated"))
+    ))
+    and ((has("rationale") | not) or (
+      .rationale | type == "object" and obj_keys_ok(known_rationale)
+    ))
+  ' <<<"$1" >/dev/null
+}
+
 _validate_policies() {
   local schema="$ONTARCH_SCHEMAS/policy.schema.json"
   [ -f "$schema" ] || ontarch_die "missing schema: $schema"
@@ -127,6 +180,11 @@ _validate_policies() {
       pol_fail=1
     fi
 
+    if ! _policy_shape_ok "$full"; then
+      ontarch_err "policy $id: closed v0 enforcement shape failed"
+      pol_fail=1
+    fi
+
     if [ "$pol_fail" -eq 0 ]; then
       printf '  %sok%s  %-20s %s%s%s\n' "$_C_GREEN" "$_C_RESET" "$id" "$_C_DIM" "$f" "$_C_RESET"
     else
@@ -136,6 +194,54 @@ _validate_policies() {
 
   [ "$count" -gt 0 ] || { ontarch_warn "no policies found"; }
   [ "$count" -gt 0 ] && ontarch_info "validated $count policy/policies"
+}
+
+# Positive/negative fixtures for closed policy enforcement shape.
+_selfcheck_policy_enforcement_shape() {
+  ontarch_info "policy enforcement shape (selfcheck)"
+  local good bad
+  good='{"id":"takogami.agent","applies_to":"agent","version":"0.1.0","allow":{"commands":["takogami build"]},"gate":{"commands":["takogami bin cleanup --mode dry-run"]},"block":{"commands":["takogami bin cleanup --mode archive"],"actions":["delete untracked files"]},"remote":{"writes":"elevated"},"gates":{"no_secret_read":true}}'
+  if ! _policy_shape_ok "$good"; then
+    ontarch_err "policy shape selfcheck: positive fixture should pass"
+    fail=1
+  fi
+
+  # misspelled rule-table field
+  bad='{"id":"bad","applies_to":"agent","version":"0.1.0","allow":{"command":["x"]}}'
+  if _policy_shape_ok "$bad"; then
+    ontarch_err "policy shape selfcheck: misspelled commands field should fail"
+    fail=1
+  fi
+  # non-boolean capability gate
+  bad='{"id":"bad","applies_to":"agent","version":"0.1.0","gates":{"no_secret_read":"yes"}}'
+  if _policy_shape_ok "$bad"; then
+    ontarch_err "policy shape selfcheck: non-boolean gate should fail"
+    fail=1
+  fi
+  # unsupported action
+  bad='{"id":"bad","applies_to":"agent","version":"0.1.0","block":{"actions":["format disk"]}}'
+  if _policy_shape_ok "$bad"; then
+    ontarch_err "policy shape selfcheck: unsupported action should fail"
+    fail=1
+  fi
+  # bad remote enum
+  bad='{"id":"bad","applies_to":"agent","version":"0.1.0","remote":{"writes":"always"}}'
+  if _policy_shape_ok "$bad"; then
+    ontarch_err "policy shape selfcheck: bad remote enum should fail"
+    fail=1
+  fi
+  # unknown top-level enforcement table
+  bad='{"id":"bad","applies_to":"agent","version":"0.1.0","deny":{"commands":["x"]}}'
+  if _policy_shape_ok "$bad"; then
+    ontarch_err "policy shape selfcheck: unknown enforcement table should fail"
+    fail=1
+  fi
+  # unsupported version
+  bad='{"id":"bad","applies_to":"agent","version":"0.2.0"}'
+  if _policy_shape_ok "$bad"; then
+    ontarch_err "policy shape selfcheck: unsupported version should fail"
+    fail=1
+  fi
 }
 
 # SkillSpector gate pairing: loads_external=true requires skillspector_scan in required_validators.
@@ -362,14 +468,14 @@ _validate_profiles() {
         || { ontarch_err "profile $id: policy.secret_access must be boolean"; pr_fail=1; }
     fi
 
-    # SkillSpector gate (E05.S4): any profile that loads external skills MUST require a
+    # SkillSpector gate: any profile that loads external skills MUST require a
     # skillspector_scan. An unscanned skill is an unreviewed dependency and does not load.
     if ! _profile_skillspector_gate_ok "$full"; then
       ontarch_err "profile $id: loads_external skills but required_validators is missing 'skillspector_scan' (SkillSpector gate)"
       pr_fail=1
     fi
 
-    # Cross-ref allowed_skill_ids against the curated skill registry (E06.S2).
+    # Cross-ref allowed_skill_ids against the curated skill registry.
     local sid skill_ids
     skill_ids="$(_ontarch_skill_ids_from_sources)"
     for sid in $(jq -r '.skills.allowed_skill_ids // [] | .[]' <<<"$full" 2>/dev/null); do
@@ -377,7 +483,7 @@ _validate_profiles() {
         || { ontarch_err "profile $id: allowed_skill_ids references unknown skill '$sid'"; pr_fail=1; }
     done
 
-    # Loadable-skill scan gate (E06.S5): listed skills need a passing, non-stale scan.
+    # Loadable-skill scan gate: listed skills need a passing, non-stale scan.
     for sid in $(jq -r '.skills.allowed_skill_ids // [] | .[]' <<<"$full" 2>/dev/null); do
       _skill_loadable_scan_ok "$sid" "$id" || pr_fail=1
     done
@@ -601,7 +707,7 @@ _selfcheck_routing_schema() {
   fi
 }
 
-# Registry generation fingerprints must be present on units.json after sync (FR-14 / E09.S3).
+# Registry generation fingerprints must be present on units.json after sync.
 _selfcheck_registry_generation() {
   ontarch_info "registry generation (selfcheck)"
   local tmp gen units
@@ -782,6 +888,7 @@ main() {
   _validate_skills
   _selfcheck_skillspector_gate
   _selfcheck_skill_scan_gate
+  _selfcheck_policy_enforcement_shape
   _selfcheck_routing_projection
   _selfcheck_routing_schema
   _selfcheck_registry_generation

@@ -7,13 +7,12 @@ policy, command execution records, and explain output. It coordinates the
 
 It does not own persistent terminal PTYs (tmux / optional Herdr) or desktop window restore.
 
-**Status: deterministic resolution hardening complete (plan-only).** Lifecycle `dev` / `build` /
-`check` resolve a sealed pre-policy plan and optional `--explain` output. Failed resolution emits
-a safely redacted partial trace; successful plans bind canonical executable, cwd, manifest, and
-selection provenance into the plan digest. The commands do **not** spawn processes, evaluate
-policy, or persist `RuntimeCommandRecord`. `--execute` returns `execution_unavailable` (exit 10).
-Non-`direct` execution classes return `execution_class_unavailable` (exit 10). Next: policy
-enforcement.
+**Status: policy enforcement complete (still plan-only for child processes).** Lifecycle
+`dev` / `build` / `check` resolve a sealed plan, evaluate dual-layer profile/policy rules
+(request + child), and emit Allow / Gate / Deny with safe provenance. Allowed `--execute`
+reaches only an unavailable executor seam and returns `execution_unavailable` (exit 10). The
+commands do **not** spawn processes or persist `RuntimeCommandRecord`. Next: native execution
+and command records.
 
 ## Build
 
@@ -37,7 +36,8 @@ takogami info <unit> [--json]
 takogami tools [--json]
 takogami interfaces [--validate] [--json]
 takogami dev|build|check <unit> [--explain] [--execute] [--json]
-  → plan-only resolution; --execute → execution_unavailable
+  → resolve + policy; plan-only Allow; --execute → execution_unavailable
+  → policy deny exit 5; policy gate exit 6 (fail closed; no approval bypass)
 takogami graph|bin|session …
   → not_implemented (exit 10) until later runtime-controller phases
 ```
@@ -59,6 +59,9 @@ Registry override for tests/fixtures: `TAKOGAMI_ONTARCH_REGISTRY`, `TAKOGAMI_WOR
 - Native/Moon use ordered, deduplicated `PATH`; unordered Panoply candidates fail as
   `executable_ambiguous`.
 - Failure explanations stop at the exact failed step and never invent a plan digest.
+- Policy: fixed actor=`agent`; Deny > Gate > Allow across request and child layers; default deny;
+  profiles may narrow but never weaken a cross-cutting block; Gate fails closed (no CLI/env/file
+  approval bypass). Malformed policy is exit 3 (contract).
 
 `takogami build <unit>` is the unit lifecycle verb. A separate `workstream` namespace is
 post-MVP. The future `takogami session *` surface reads **command execution records**, not composed work
@@ -71,10 +74,10 @@ sessions.
 | 0 | Success |
 | 1 | Internal / unavailable source |
 | 2 | Usage (invalid flags, not-found, ambiguous, invalid-filter) |
-| 3 | Contract / invalid-registry |
+| 3 | Contract / invalid-registry / policy-contract |
 | 4 | Resolution failure |
-| 5 | Policy deny (reserved) |
-| 6 | Policy gate (reserved) |
+| 5 | Policy deny |
+| 6 | Policy gate (fail closed) |
 | 10 | Not implemented / execution_unavailable / execution_class_unavailable |
 
 ## Freshness (S3)

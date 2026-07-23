@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "wfos/ontarch/schemas/manifest.schema.json",
   "title": "Ontarch run manifest",
-  "description": "Provenance contract for a generated run. One small JSON read answers \"what is this, can I delete it\" without inspecting output files. Day-one writers: ontarch sync and ontarch scan (registry/manifest.json). Other bin/ writers are advised to emit the same shape. Canon: toolkit foundation §4.4.",
+  "description": "Provenance contract for a generated run. One small JSON read answers \"what is this, can I delete it\" without inspecting output files. Day-one writers: ontarch sync and ontarch scan (registry/manifest.json). Other bin/ writers are advised to emit the same shape. Canon: bin-archive provenance.",
   "type": "object",
   "required": ["id", "workflow", "source", "created_at", "tool", "outputs", "retention"],
   "additionalProperties": true,

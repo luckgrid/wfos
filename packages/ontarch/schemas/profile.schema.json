@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "wfos/ontarch/schemas/profile.schema.json",
   "title": "Ontarch agent profile",
-  "description": "A shared agent operating profile authored under Workstreams/.agents/profiles/*.toml: one declaration of scope, policy, gates, and logs consumed by every agent app (Claude, Cursor, Zed, Factory, OpenCode, CLI). Ontarch policies remain the enforcement authority; a profile selects a policy via `rails` and scopes it. Canon: lg_wfos_lvl_0_agent_rails.md §13. Indexed (flattened) into registry/profiles.json by `ontarch sync`.",
+  "description": "A shared agent operating profile authored under Workstreams/.agents/profiles/*.toml: one declaration of scope, policy, gates, and logs consumed by every agent app (Claude, Cursor, Zed, Factory, OpenCode, CLI). Ontarch policies remain the enforcement authority; a profile selects a policy via `rails` and scopes it. Canon: agent-rails. Indexed (flattened) into registry/profiles.json by `ontarch sync`.",
   "type": "object",
   "required": ["id", "purpose"],
   "additionalProperties": true,

@@ -1,4 +1,4 @@
-//! Contract round-trip and schema validation tests (E09.S2 / S2.1).
+//! Contract round-trip and schema validation tests.
 //!
 //! NOTE: these tests document behavior before relying on later stories.
 //! They validate wire contracts only — no discovery, resolution, spawn, or session I/O.
