@@ -1,13 +1,15 @@
 //! Two-layer policy evaluation and merge.
 
 use std::collections::BTreeSet;
+use std::path::PathBuf;
 
 use serde::Serialize;
 
-use super::authorize::{AllowDecision, AuthorizedExecutionPlan, DualAllowProof};
 use super::classify::{Intent, classify_child};
 use super::command::matches_command;
 use super::explain::render_human_policy_section;
+#[cfg(test)]
+use super::normalize::OriginKind;
 use super::normalize::{
     CanonicalRule, Effect, MatcherKind, MatcherPayload, NormalizedPolicySet, normalize_policies,
 };
@@ -16,7 +18,129 @@ use super::paths::{
 };
 use super::raw::{PolicyContractKind, RawPolicyError};
 use crate::contracts::PolicyDecision;
-use crate::resolution::{Actor, PolicyEvaluationInput, RequestedOperation};
+use crate::resolution::{Actor, PolicyEvaluationInput, RequestedOperation, SealedExecutionPlan};
+
+/// Evaluator-private proof that both policy layers reached Allow.
+struct DualAllowProof {
+    _private: (),
+}
+
+impl DualAllowProof {
+    fn mint() -> Self {
+        Self { _private: () }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct AllowDecision {
+    matched_rules: Vec<String>,
+}
+
+impl AllowDecision {
+    fn new(matched_rules: Vec<String>) -> Self {
+        Self { matched_rules }
+    }
+
+    fn to_public(&self) -> PolicyDecision {
+        PolicyDecision::Allow {
+            matched_rules: self.matched_rules.clone(),
+        }
+    }
+}
+
+/// Execution handoff whose construction and proof remain private to this evaluator module.
+#[derive(Debug, Clone)]
+pub struct AuthorizedExecutionPlan {
+    plan: SealedExecutionPlan,
+    request: RequestedOperation,
+    profile_id: String,
+    policy_decision: PolicyDecision,
+    policy_explanation: PolicyEvaluationExplanation,
+    policy_root: PathBuf,
+}
+
+impl AuthorizedExecutionPlan {
+    fn from_dual_allow(
+        input: &PolicyEvaluationInput,
+        allow: AllowDecision,
+        explanation: PolicyEvaluationExplanation,
+        _proof: DualAllowProof,
+    ) -> Self {
+        Self {
+            plan: input.plan().clone(),
+            request: input.request().clone(),
+            profile_id: input.profile().id.clone(),
+            policy_decision: allow.to_public(),
+            policy_explanation: explanation,
+            policy_root: input.policy_root().clone(),
+        }
+    }
+
+    pub fn plan(&self) -> &SealedExecutionPlan {
+        &self.plan
+    }
+
+    pub fn request(&self) -> &RequestedOperation {
+        &self.request
+    }
+
+    pub fn profile_id(&self) -> &str {
+        &self.profile_id
+    }
+
+    pub fn policy_decision(&self) -> &PolicyDecision {
+        &self.policy_decision
+    }
+
+    pub fn policy_explanation(&self) -> &PolicyEvaluationExplanation {
+        &self.policy_explanation
+    }
+
+    pub fn policy_root(&self) -> &PathBuf {
+        &self.policy_root
+    }
+}
+
+/// Gate/Deny outcome. It intentionally has no authorization proof or mutable authorization flag.
+#[derive(Debug, Clone)]
+pub struct RejectedPolicyOutcome {
+    plan: SealedExecutionPlan,
+    decision: PolicyDecision,
+    explanation: PolicyEvaluationExplanation,
+    execution_requested: bool,
+}
+
+impl RejectedPolicyOutcome {
+    fn new(
+        input: &PolicyEvaluationInput,
+        decision: PolicyDecision,
+        explanation: PolicyEvaluationExplanation,
+    ) -> Self {
+        debug_assert!(!matches!(decision, PolicyDecision::Allow { .. }));
+        Self {
+            plan: input.plan().clone(),
+            decision,
+            explanation,
+            execution_requested: input.request().execute_requested,
+        }
+    }
+
+    pub fn plan(&self) -> &SealedExecutionPlan {
+        &self.plan
+    }
+
+    pub fn decision(&self) -> &PolicyDecision {
+        &self.decision
+    }
+
+    pub fn explanation(&self) -> &PolicyEvaluationExplanation {
+        &self.explanation
+    }
+
+    pub fn execution_requested(&self) -> bool {
+        self.execution_requested
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -29,6 +153,10 @@ pub enum PolicyLayer {
 pub struct PolicyLayerResult {
     pub layer: PolicyLayer,
     pub decision: String,
+    /// True only when an explicit command Allow matched this layer.
+    ///
+    /// Path-scope Allow is a constraint result and never command authority.
+    pub command_authorized: bool,
     pub matched_rules: Vec<String>,
     pub primary_rule: Option<String>,
     pub intents: Vec<String>,
@@ -73,11 +201,8 @@ impl From<(RawPolicyError, String, String)> for PolicyContractError {
 #[derive(Debug)]
 pub enum PolicyEvaluationResult {
     Contract(Box<PolicyContractError>),
-    Decided {
-        decision: PolicyDecision,
-        explanation: Box<PolicyEvaluationExplanation>,
-        authorized: Option<Box<AuthorizedExecutionPlan>>,
-    },
+    Rejected(Box<RejectedPolicyOutcome>),
+    Authorized(Box<AuthorizedExecutionPlan>),
 }
 
 pub fn evaluate_policy(input: &PolicyEvaluationInput) -> PolicyEvaluationResult {
@@ -144,22 +269,21 @@ pub fn evaluate_policy(input: &PolicyEvaluationInput) -> PolicyEvaluationResult 
         approval_transport: "unavailable".into(),
     };
 
-    let authorized = if dual_allow {
-        Some(Box::new(AuthorizedExecutionPlan::from_dual_allow(
+    if dual_allow {
+        let authorized = AuthorizedExecutionPlan::from_dual_allow(
             input,
             AllowDecision::new(allow_matched),
-            explanation.clone(),
+            explanation,
             DualAllowProof::mint(),
-        )))
+        );
+        PolicyEvaluationResult::Authorized(Box::new(authorized))
     } else {
-        None
-    };
-
-    let _ = render_human_policy_section(&explanation); // keep linked
-    PolicyEvaluationResult::Decided {
-        decision,
-        explanation: Box::new(explanation),
-        authorized,
+        let _ = render_human_policy_section(&explanation); // keep linked
+        PolicyEvaluationResult::Rejected(Box::new(RejectedPolicyOutcome::new(
+            input,
+            decision,
+            explanation,
+        )))
     }
 }
 
@@ -271,8 +395,20 @@ fn assert_input_consistency(input: &PolicyEvaluationInput) -> Result<(), RawPoli
     }
 
     let root = input.policy_root();
-    if root.as_os_str().is_empty() {
-        return Err(mismatch("policy_root must be non-empty", "policy_root"));
+    if root.as_os_str().is_empty() || !root.is_absolute() {
+        return Err(mismatch(
+            "policy_root must be a non-empty absolute path",
+            "policy_root",
+        ));
+    }
+    match root.canonicalize() {
+        Ok(canonical) if canonical == *root => {}
+        _ => {
+            return Err(mismatch(
+                "policy_root must remain the canonical resolver root",
+                "policy_root",
+            ));
+        }
     }
 
     Ok(())
@@ -478,7 +614,9 @@ fn reduce_layer(
 
     let has_deny = matched.iter().any(|r| r.effect == Effect::Deny);
     let has_gate = matched.iter().any(|r| r.effect == Effect::Gate);
-    let has_allow = matched.iter().any(|r| r.effect == Effect::Allow);
+    let has_command_allow = matched
+        .iter()
+        .any(|r| r.effect == Effect::Allow && r.matcher == MatcherKind::Command);
 
     let (decision, primary) = if has_deny {
         let winners: Vec<_> = matched
@@ -502,10 +640,10 @@ fn reduce_layer(
             .min()
             .map(str::to_string);
         ("gate".into(), primary)
-    } else if has_allow {
+    } else if has_command_allow {
         let winners: Vec<_> = matched
             .iter()
-            .filter(|r| r.effect == Effect::Allow)
+            .filter(|r| r.effect == Effect::Allow && r.matcher == MatcherKind::Command)
             .collect();
         let primary = winners
             .iter()
@@ -520,6 +658,7 @@ fn reduce_layer(
     PolicyLayerResult {
         layer,
         decision,
+        command_authorized: has_command_allow,
         matched_rules: matched.iter().map(|r| r.rule_id.clone()).collect(),
         primary_rule: primary,
         intents: intents.to_vec(),
@@ -660,14 +799,11 @@ mod tests {
     fn well_formed_handoff_evaluates_allow_with_layers() {
         let handoff = resolve_demo_handoff(false);
         let result = evaluate_policy(&handoff.input);
-        let PolicyEvaluationResult::Decided {
-            decision,
-            explanation,
-            authorized,
-        } = result
-        else {
-            panic!("expected Decided, got contract error");
+        let PolicyEvaluationResult::Authorized(authorized) = result else {
+            panic!("expected Authorized, got {result:?}");
         };
+        let decision = authorized.policy_decision();
+        let explanation = authorized.policy_explanation();
         assert!(
             matches!(decision, PolicyDecision::Allow { .. }),
             "decision={decision:?} request={} child={} rules_req={:?} rules_child={:?}",
@@ -683,10 +819,120 @@ mod tests {
             !explanation.child.matched_rules.is_empty(),
             "child should carry path/command rule provenance"
         );
-        assert!(
-            authorized.is_some(),
-            "dual-Allow must mint AuthorizedExecutionPlan"
+        assert_eq!(authorized.profile_id(), "workspace-dev");
+    }
+
+    #[test]
+    fn path_allow_never_grants_unknown_child_command() {
+        let path_allow = test_rule("path-allow", Effect::Allow, MatcherKind::Path);
+        let result = reduce_layer(PolicyLayer::Child, vec![&path_allow], &[]);
+        assert_eq!(result.decision, "deny");
+        assert_eq!(result.primary_rule.as_deref(), Some("default_deny"));
+        assert!(!result.command_authorized);
+        assert_eq!(result.matched_rules, vec!["path-allow"]);
+    }
+
+    #[test]
+    fn command_allow_plus_path_allow_authorizes_child() {
+        let command_allow = test_rule("command-allow", Effect::Allow, MatcherKind::Command);
+        let path_allow = test_rule("path-allow", Effect::Allow, MatcherKind::Path);
+        let result = reduce_layer(PolicyLayer::Child, vec![&path_allow, &command_allow], &[]);
+        assert_eq!(result.decision, "allow");
+        assert_eq!(result.primary_rule.as_deref(), Some("command-allow"));
+        assert!(result.command_authorized);
+    }
+
+    #[test]
+    fn deny_and_gate_constraints_override_command_allow_in_both_orders() {
+        let command_allow = test_rule("command-allow", Effect::Allow, MatcherKind::Command);
+        for (constraint, expected) in [
+            (
+                test_rule("constraint-gate", Effect::Gate, MatcherKind::RemoteWrite),
+                "gate",
+            ),
+            (
+                test_rule("constraint-deny", Effect::Deny, MatcherKind::Path),
+                "deny",
+            ),
+        ] {
+            for reversed in [false, true] {
+                let matched = if reversed {
+                    vec![&constraint, &command_allow]
+                } else {
+                    vec![&command_allow, &constraint]
+                };
+                let result = reduce_layer(PolicyLayer::Child, matched, &[]);
+                assert_eq!(result.decision, expected);
+                assert!(result.command_authorized);
+            }
+        }
+    }
+
+    #[test]
+    fn nine_layer_merge_combinations_are_order_independent() {
+        let cases = [
+            (Effect::Allow, Effect::Allow, Effect::Allow),
+            (Effect::Allow, Effect::Gate, Effect::Gate),
+            (Effect::Allow, Effect::Deny, Effect::Deny),
+            (Effect::Gate, Effect::Allow, Effect::Gate),
+            (Effect::Gate, Effect::Gate, Effect::Gate),
+            (Effect::Gate, Effect::Deny, Effect::Deny),
+            (Effect::Deny, Effect::Allow, Effect::Deny),
+            (Effect::Deny, Effect::Gate, Effect::Deny),
+            (Effect::Deny, Effect::Deny, Effect::Deny),
+        ];
+        for (request, child, expected) in cases {
+            assert_eq!(strongest(&[request, child]), expected);
+            assert_eq!(strongest(&[child, request]), expected);
+        }
+    }
+
+    #[test]
+    fn policy_registry_order_does_not_change_public_allow_result() {
+        let forward = resolve_demo_handoff_with_policy_order(false, false);
+        let reversed = resolve_demo_handoff_with_policy_order(false, true);
+        let PolicyEvaluationResult::Authorized(forward) = evaluate_policy(&forward.input) else {
+            panic!("forward registry order did not authorize");
+        };
+        let PolicyEvaluationResult::Authorized(reversed) = evaluate_policy(&reversed.input) else {
+            panic!("reversed registry order did not authorize");
+        };
+        assert_eq!(
+            serde_json::to_vec(forward.policy_decision()).unwrap(),
+            serde_json::to_vec(reversed.policy_decision()).unwrap()
         );
+        let mut forward_explanation = forward.policy_explanation().clone();
+        let mut reversed_explanation = reversed.policy_explanation().clone();
+        // Each fixture has a distinct canonical workspace root, so its sealed plan digest must
+        // differ. Registry order must not change any policy-derived public field.
+        forward_explanation.plan_digest.clear();
+        reversed_explanation.plan_digest.clear();
+        assert_eq!(
+            serde_json::to_vec(&forward_explanation).unwrap(),
+            serde_json::to_vec(&reversed_explanation).unwrap()
+        );
+    }
+
+    fn test_rule(id: &str, effect: Effect, matcher: MatcherKind) -> CanonicalRule {
+        let payload = match matcher {
+            MatcherKind::Command => MatcherPayload::Command(vec!["unknown".into()]),
+            MatcherKind::Path => MatcherPayload::Path("**".into()),
+            MatcherKind::RemoteWrite => {
+                MatcherPayload::RemoteWrite(super::super::raw::RemoteWritePolicy::Blocked)
+            }
+            MatcherKind::Capability => MatcherPayload::Capability("test"),
+            MatcherKind::SemanticAction => MatcherPayload::SemanticAction("test"),
+        };
+        CanonicalRule {
+            rule_id: id.into(),
+            origin_kind: OriginKind::Controller,
+            origin_id: "test".into(),
+            effect,
+            matcher,
+            payload,
+            required_approval: None,
+            safe_reason: "test".into(),
+        }
     }
 
     #[test]
@@ -726,11 +972,29 @@ mod tests {
     }
 
     fn resolve_demo_handoff(execute: bool) -> DemoHandoff {
+        resolve_demo_handoff_with_policy_order(execute, false)
+    }
+
+    fn resolve_demo_handoff_with_policy_order(
+        execute: bool,
+        reverse_policies: bool,
+    ) -> DemoHandoff {
         let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/resolution");
         let temp = tempfile::tempdir().unwrap();
         let workspace = temp.path().join("ws");
         fs::create_dir_all(&workspace).unwrap();
         copy_tree(&fixture, &workspace);
+        if reverse_policies {
+            let policy_path = workspace.join("registry/policies.json");
+            let mut document: serde_json::Value =
+                serde_json::from_str(&fs::read_to_string(&policy_path).unwrap()).unwrap();
+            document["policies"].as_array_mut().unwrap().reverse();
+            fs::write(
+                &policy_path,
+                serde_json::to_string_pretty(&document).unwrap(),
+            )
+            .unwrap();
+        }
 
         let path_dir = workspace.join("bin");
         fs::create_dir_all(&path_dir).unwrap();

@@ -46,8 +46,9 @@ impl Harness {
         write_marker_exe(&path_dir.join("moon"), &marker);
         write_marker_exe(&path_dir.join("demo-bin"), &marker);
         write_marker_exe(&path_dir.join("rg"), &marker);
-        write_marker_exe(&path_dir.join("git"), &marker);
-        write_marker_exe(&path_dir.join("pass"), &marker);
+        for name in ["git", "pass", "gh", "ontarch", "mystery"] {
+            write_marker_exe(&path_dir.join(name), &marker);
+        }
 
         let mut h = Self {
             temp,
@@ -543,5 +544,128 @@ adapter = "direct""#,
     let err = stderr(&out);
     assert!(err.contains("plan digest:"), "{err}");
     assert!(err.contains("Policy:"), "{err}");
+    h.assert_marker_untouched();
+}
+
+#[test]
+fn unknown_git_form_is_not_authorized_by_allowed_paths() {
+    let mut h = Harness::new();
+    let path = h.registry.join("sources/descriptors/demo.descriptor.toml");
+    let text = fs::read_to_string(&path).unwrap().replace(
+        r#"program = "moon"
+args = ["run", "demo:build"]
+cwd = "demo"
+env_keys = ["PATH"]
+backend = "moon"
+adapter = "moon-task""#,
+        r#"program = "git"
+args = ["pushy"]
+cwd = "demo"
+env_keys = ["PATH"]
+backend = "native"
+adapter = "direct""#,
+    );
+    fs::write(&path, text).unwrap();
+    h.write_hit_units();
+
+    let out = h.run(&["--json", "build", "demo"]);
+    assert_eq!(
+        out.status.code(),
+        Some(POLICY_DENY as i32),
+        "{}",
+        stderr(&out)
+    );
+    let v = parse_json(&out);
+    assert_eq!(v["data"]["policy_decision"]["outcome"], "deny");
+    assert_eq!(v["data"]["policy"]["child"]["primary_rule"], "default_deny");
+    assert_eq!(v["data"]["policy"]["child"]["command_authorized"], false);
+    h.assert_marker_untouched();
+}
+
+#[test]
+fn unknown_child_forms_are_not_authorized_by_in_scope_paths() {
+    for (program, arguments) in [
+        ("mystery", r#"["demo/file"]"#),
+        ("gh", r#"["mystery", "demo/file"]"#),
+        ("ontarch", r#"["mystery", "demo/file"]"#),
+    ] {
+        let mut h = Harness::new();
+        let path = h.registry.join("sources/descriptors/demo.descriptor.toml");
+        let text = fs::read_to_string(&path).unwrap().replace(
+            r#"program = "moon"
+args = ["run", "demo:build"]
+cwd = "demo"
+env_keys = ["PATH"]
+backend = "moon"
+adapter = "moon-task""#,
+            &format!(
+                r#"program = "{program}"
+args = {arguments}
+cwd = "demo"
+env_keys = ["PATH"]
+backend = "native"
+adapter = "direct""#
+            ),
+        );
+        fs::write(&path, text).unwrap();
+        h.write_hit_units();
+
+        let out = h.run(&["--json", "build", "demo"]);
+        assert_eq!(
+            out.status.code(),
+            Some(POLICY_DENY as i32),
+            "program={program}: {}",
+            stderr(&out)
+        );
+        let v = parse_json(&out);
+        assert_eq!(v["data"]["policy"]["child"]["primary_rule"], "default_deny");
+        assert_eq!(v["data"]["policy"]["child"]["command_authorized"], false);
+        assert!(
+            v["data"]["policy"]["child"]["matched_rules"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|rule| rule.as_str().unwrap().contains(":allow:path:")),
+            "program={program}: {v}"
+        );
+        h.assert_marker_untouched();
+    }
+}
+
+#[test]
+fn denied_secret_operand_is_redacted_from_json_and_human_output() {
+    let mut h = Harness::new();
+    let path = h.registry.join("sources/descriptors/demo.descriptor.toml");
+    let sensitive = "customer/private-token-name";
+    let text = fs::read_to_string(&path).unwrap().replace(
+        r#"program = "moon"
+args = ["run", "demo:build"]
+cwd = "demo"
+env_keys = ["PATH"]
+backend = "moon"
+adapter = "moon-task""#,
+        &format!(
+            r#"program = "pass"
+args = ["show", "{sensitive}"]
+cwd = "demo"
+env_keys = ["PATH"]
+backend = "native"
+adapter = "direct""#
+        ),
+    );
+    fs::write(&path, text).unwrap();
+    h.write_hit_units();
+
+    for args in [vec!["--json", "build", "demo"], vec!["build", "demo"]] {
+        let out = h.run(&args);
+        assert_eq!(
+            out.status.code(),
+            Some(POLICY_DENY as i32),
+            "{}",
+            stderr(&out)
+        );
+        assert!(!stdout(&out).contains(sensitive), "{}", stdout(&out));
+        assert!(!stderr(&out).contains(sensitive), "{}", stderr(&out));
+    }
     h.assert_marker_untouched();
 }

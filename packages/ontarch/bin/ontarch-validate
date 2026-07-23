@@ -116,20 +116,27 @@ _policy_shape_ok() {
     def obj_keys_ok($known): (type != "object") or ((keys - $known) | length == 0);
     def unique_ok($arr): ($arr | length) == ($arr | unique | length);
     def str_array_ok($arr):
-      ($arr | map(type == "string") | all) and unique_ok($arr);
+      ($arr | type == "array")
+      and ($arr | map(type == "string") | all)
+      and unique_ok($arr);
     def rule_ok($allow_gate):
       type == "object"
       and obj_keys_ok(known_rule)
-      and str_array_ok(.commands // [])
-      and str_array_ok(.tools // [])
-      and str_array_ok(.paths // [])
-      and ((.actions // []) | map(. as $a | known_actions | index($a)) | all)
-      and unique_ok(.actions // [])
+      and ((has("commands") | not) or (.commands | str_array_ok(.)))
+      and ((has("tools") | not) or (.tools | str_array_ok(.)))
+      and ((has("paths") | not) or (.paths | str_array_ok(.)))
+      and ((has("actions") | not) or (
+        .actions
+        | type == "array"
+        and (map(type == "string") | all)
+        and (map(. as $a | known_actions | index($a)) | all)
+        and unique_ok(.)
+      ))
       and (
         ($allow_gate | not)
         or (
-          ((.paths // []) | length == 0)
-          and ((.actions // []) | length == 0)
+          ((has("paths") | not) or (.paths | length == 0))
+          and ((has("actions") | not) or (.actions | length == 0))
         )
       );
     (has("id") and has("applies_to") and has("version"))
@@ -140,8 +147,8 @@ _policy_shape_ok() {
     and ((has("agent") | not) or (
       .agent | type == "object" and obj_keys_ok(known_agent)
       and ((has("env_flag") | not) or (.env_flag | type == "string"))
-      and str_array_ok(.allow // [])
-      and str_array_ok(.block // [])
+      and ((has("allow") | not) or (.allow | str_array_ok(.)))
+      and ((has("block") | not) or (.block | str_array_ok(.)))
     ))
     and ((has("allow") | not) or (.allow | rule_ok(true)))
     and ((has("gate") | not) or (.gate | rule_ok(true)))
@@ -154,7 +161,7 @@ _policy_shape_ok() {
     ))
     and ((has("secrets") | not) or (
       .secrets | type == "object" and obj_keys_ok(known_secrets)
-      and str_array_ok(.block_tools // [])
+      and ((has("block_tools") | not) or (.block_tools | str_array_ok(.)))
       and ((has("rationale") | not) or (.rationale | type == "string"))
     ))
     and ((has("remote") | not) or (
@@ -260,6 +267,17 @@ _selfcheck_policy_enforcement_shape() {
   bad='{"id":"bad","applies_to":"agent","version":"0.1.0","allow":{"commands":["x","x"]}}'
   if _policy_shape_ok "$bad"; then
     ontarch_err "policy shape selfcheck: duplicate commands should fail"
+    fail=1
+  fi
+  # present null is malformed, not an absent array/default
+  bad='{"id":"bad","applies_to":"agent","version":"0.1.0","allow":{"commands":null}}'
+  if _policy_shape_ok "$bad"; then
+    ontarch_err "policy shape selfcheck: null commands should fail"
+    fail=1
+  fi
+  bad='{"id":"bad","applies_to":"agent","version":"0.1.0","remote":{"writes":null}}'
+  if _policy_shape_ok "$bad"; then
+    ontarch_err "policy shape selfcheck: null remote writes should fail"
     fail=1
   fi
   # authored source field (generated-only; reject on authored)

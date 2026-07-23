@@ -46,12 +46,11 @@ pub use explain::{
     ResolutionStep, SafeEntrypointView, SafeSourceView, SourceExplanation, UnitExplanation,
     render_human_explanation, render_human_partial_explanation, render_human_summary,
 };
-pub use plan::{
-    Actor, PolicyEvaluationInput, PolicyRequestView, RequestedOperation, SealedExecutionPlan,
-};
+pub use plan::{Actor, PolicyRequestView, RequestedOperation, SealedExecutionPlan};
 pub use request::{
     CorrelationIdGenerator, DefaultIdGenerator, FixedIdGenerator, LifecycleVerb, ResolutionRequest,
 };
 pub use resolver::{
-    BackendKind, ResolutionCode, ResolveSuccess, Resolver, ResolverInputs, resolve,
+    BackendKind, PolicyEvaluationInput, ResolutionCode, ResolveSuccess, Resolver, ResolverInputs,
+    resolve,
 };

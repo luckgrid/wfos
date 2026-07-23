@@ -2,7 +2,10 @@ use crate::contracts::PolicyDecision;
 use crate::exit_codes::{
     CONTRACT, INTERNAL, NOT_IMPLEMENTED, POLICY_DENY, POLICY_GATE, RESOLUTION, USAGE,
 };
-use crate::policy::{PolicyContractError, PolicyEvaluationExplanation};
+use crate::policy::{
+    AuthorizedExecutionPlan, PolicyContractError, PolicyEvaluationExplanation,
+    RejectedPolicyOutcome,
+};
 use miette::Diagnostic;
 use thiserror::Error;
 
@@ -18,20 +21,64 @@ pub struct PolicyContractDetails {
 
 #[derive(Debug, Clone)]
 pub struct PolicyOutcomeDetails {
-    pub reason: String,
-    pub session_id: String,
-    pub plan_digest: String,
-    pub decision: PolicyDecision,
-    pub explanation: PolicyEvaluationExplanation,
+    session_id: String,
+    plan_digest: String,
+    explanation: PolicyEvaluationExplanation,
 }
 
 #[derive(Debug, Clone)]
 pub struct ExecutionDeferredDetails {
-    pub session_id: String,
-    pub plan_digest: Option<String>,
-    pub policy_decision: Option<PolicyDecision>,
-    pub policy_explanation: Option<PolicyEvaluationExplanation>,
-    pub execution_requested: bool,
+    session_id: String,
+    plan_digest: String,
+    policy_decision: PolicyDecision,
+    policy_explanation: PolicyEvaluationExplanation,
+    execution_requested: bool,
+}
+
+impl PolicyOutcomeDetails {
+    pub(crate) fn from_rejected(rejected: &RejectedPolicyOutcome) -> Self {
+        Self {
+            session_id: rejected.plan().resolved().session_id.clone(),
+            plan_digest: rejected.plan().plan_digest().to_string(),
+            explanation: rejected.explanation().clone(),
+        }
+    }
+
+    pub fn explanation(&self) -> &PolicyEvaluationExplanation {
+        &self.explanation
+    }
+}
+
+impl ExecutionDeferredDetails {
+    pub(crate) fn from_authorized(authorized: &AuthorizedExecutionPlan) -> Self {
+        Self {
+            session_id: authorized.plan().resolved().session_id.clone(),
+            plan_digest: authorized.plan().plan_digest().to_string(),
+            policy_decision: authorized.policy_decision().clone(),
+            policy_explanation: authorized.policy_explanation().clone(),
+            execution_requested: authorized.request().execute_requested,
+        }
+    }
+
+    pub fn session_id(&self) -> &str {
+        &self.session_id
+    }
+
+    pub fn plan_digest(&self) -> &str {
+        &self.plan_digest
+    }
+
+    pub fn policy_decision(&self) -> &PolicyDecision {
+        &self.policy_decision
+    }
+
+    pub fn policy_explanation(&self) -> &PolicyEvaluationExplanation {
+        &self.policy_explanation
+    }
+
+    pub fn execution_requested(&self) -> bool {
+        self.execution_requested
+    }
 }
 
 #[derive(Debug, Error, Diagnostic)]
@@ -221,7 +268,7 @@ impl ControllerError {
                 Some(details.plan_digest.as_str())
             }
             Self::ExecutionUnavailable { details, .. }
-            | Self::ExecutionClassUnavailable { details, .. } => details.plan_digest.as_deref(),
+            | Self::ExecutionClassUnavailable { details, .. } => Some(details.plan_digest()),
             _ => None,
         }
     }

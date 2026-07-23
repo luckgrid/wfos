@@ -98,75 +98,45 @@ pub(crate) fn run_lifecycle_with_executor(
     // Policy evaluation precedes class/executor checks.
     let policy_input = success.policy_evaluation_input();
     let policy_result = crate::policy::evaluate_policy(&policy_input);
-    let (policy_decision, policy_explanation, authorized) = match policy_result {
+    let authorized = match policy_result {
         crate::policy::PolicyEvaluationResult::Contract(err) => {
             let err = ControllerError::from_policy_contract(*err);
             return sink
-                .emit_error_with_explanation(
+                .emit_policy_contract_outcome(
                     verb.as_str(),
                     &err,
-                    Some(&success.explanation),
-                    Some(success.freshness),
+                    &success.plan,
+                    success.freshness,
+                    execute,
                 )
                 .map_err(|e| ControllerError::internal(e.to_string()));
         }
-        crate::policy::PolicyEvaluationResult::Decided {
-            decision,
-            explanation,
-            authorized,
-        } => match &decision {
+        crate::policy::PolicyEvaluationResult::Rejected(rejected) => match rejected.decision() {
             crate::contracts::PolicyDecision::Deny { reason, .. } => {
                 let err = ControllerError::PolicyDeny {
                     reason: reason.clone(),
-                    details: Box::new(PolicyOutcomeDetails {
-                        reason: reason.clone(),
-                        session_id: session_id.clone(),
-                        plan_digest: success.plan.plan_digest().to_string(),
-                        decision: decision.clone(),
-                        explanation: explanation.as_ref().clone(),
-                    }),
+                    details: Box::new(PolicyOutcomeDetails::from_rejected(&rejected)),
                 };
                 return sink
-                    .emit_policy_outcome(
-                        verb.as_str(),
-                        &err,
-                        &success.plan,
-                        &success.explanation,
-                        &explanation,
-                        &decision,
-                        success.freshness,
-                        execute,
-                    )
+                    .emit_policy_outcome(verb.as_str(), &err, &rejected, success.freshness)
                     .map_err(|e| ControllerError::internal(e.to_string()));
             }
             crate::contracts::PolicyDecision::Gate { reason, .. } => {
                 let err = ControllerError::PolicyGate {
                     reason: reason.clone(),
-                    details: Box::new(PolicyOutcomeDetails {
-                        reason: reason.clone(),
-                        session_id: session_id.clone(),
-                        plan_digest: success.plan.plan_digest().to_string(),
-                        decision: decision.clone(),
-                        explanation: explanation.as_ref().clone(),
-                    }),
+                    details: Box::new(PolicyOutcomeDetails::from_rejected(&rejected)),
                 };
                 return sink
-                    .emit_policy_outcome(
-                        verb.as_str(),
-                        &err,
-                        &success.plan,
-                        &success.explanation,
-                        &explanation,
-                        &decision,
-                        success.freshness,
-                        execute,
-                    )
+                    .emit_policy_outcome(verb.as_str(), &err, &rejected, success.freshness)
                     .map_err(|e| ControllerError::internal(e.to_string()));
             }
             crate::contracts::PolicyDecision::Allow { .. } => {
-                (decision, explanation.as_ref().clone(), authorized)
+                return Err(ControllerError::internal(
+                    "policy evaluator returned Allow without authorization",
+                ));
             }
         },
+        crate::policy::PolicyEvaluationResult::Authorized(authorized) => authorized,
     };
 
     // Class unavailable after Allow — executor must not run.
@@ -177,13 +147,7 @@ pub(crate) fn run_lifecycle_with_executor(
                 success.plan.resolved().execution_class.as_str(),
                 success.plan.resolved().runtime_provider
             ),
-            details: Box::new(ExecutionDeferredDetails {
-                session_id: session_id.clone(),
-                plan_digest: Some(success.plan.plan_digest().to_string()),
-                policy_decision: Some(policy_decision.clone()),
-                policy_explanation: Some(policy_explanation.clone()),
-                execution_requested: execute,
-            }),
+            details: Box::new(ExecutionDeferredDetails::from_authorized(&authorized)),
         };
         return sink
             .emit_error_with_explanation(
@@ -196,17 +160,10 @@ pub(crate) fn run_lifecycle_with_executor(
     }
 
     if execute {
-        let auth = authorized.expect("Allow must produce AuthorizedExecutionPlan");
-        let _ = executor.execute(&auth);
+        let _ = executor.execute(&authorized);
         let err = ControllerError::ExecutionUnavailable {
             session_id: session_id.clone(),
-            details: Box::new(ExecutionDeferredDetails {
-                session_id: session_id.clone(),
-                plan_digest: Some(success.plan.plan_digest().to_string()),
-                policy_decision: Some(policy_decision.clone()),
-                policy_explanation: Some(policy_explanation.clone()),
-                execution_requested: true,
-            }),
+            details: Box::new(ExecutionDeferredDetails::from_authorized(&authorized)),
         };
         return sink
             .emit_error_with_explanation(
@@ -222,23 +179,17 @@ pub(crate) fn run_lifecycle_with_executor(
     if explain {
         sink.emit_explanation_with_policy(
             verb.as_str(),
-            &success.plan,
+            &authorized,
             &success.explanation,
-            &policy_decision,
-            &policy_explanation,
             success.freshness,
-            false,
         )
         .map_err(|e| ControllerError::internal(e.to_string()))
     } else {
         sink.emit_plan_with_policy(
             verb.as_str(),
-            &success.plan,
+            &authorized,
             &success.explanation,
-            &policy_decision,
-            &policy_explanation,
             success.freshness,
-            false,
         )
         .map_err(|e| ControllerError::internal(e.to_string()))
     }
@@ -529,10 +480,13 @@ fn writeln_human(line: &str) -> Result<(), ControllerError> {
 mod tests {
     use super::*;
     use crate::contracts::{RegistryGeneration, fingerprint_file};
-    use crate::exit_codes::{NOT_IMPLEMENTED, POLICY_DENY, POLICY_GATE, SUCCESS};
+    use crate::exit_codes::{
+        CONTRACT, NOT_IMPLEMENTED, POLICY_DENY, POLICY_GATE, RESOLUTION, SUCCESS,
+    };
     use crate::output::OutputSink;
-    use crate::policy::SpyExecutor;
+    use crate::policy::{Executor, ExecutorResult, SpyExecutor};
     use crate::resolution::LifecycleVerb;
+    use std::cell::Cell;
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::sync::Mutex;
@@ -679,6 +633,37 @@ adapter = "direct""#,
             self.write_hit_units();
         }
 
+        fn patch_request_policy(&self, effect: &str) {
+            let path = self.registry.join("policies.json");
+            let mut document: serde_json::Value =
+                serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+            let policies = document["policies"].as_array_mut().unwrap();
+            let request_policy = policies
+                .iter_mut()
+                .find(|policy| policy["id"] == "takogami.agent")
+                .unwrap();
+            let allow = request_policy["allow"]["commands"].as_array_mut().unwrap();
+            allow.retain(|command| command.as_str() != Some("takogami build"));
+            request_policy[effect]["commands"]
+                .as_array_mut()
+                .unwrap()
+                .push(serde_json::Value::String("takogami build".into()));
+            fs::write(&path, serde_json::to_string_pretty(&document).unwrap()).unwrap();
+        }
+
+        fn patch_policy_contract_invalid(&self) {
+            let path = self.registry.join("profiles.json");
+            let mut document: serde_json::Value =
+                serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+            let profiles = document["profiles"].as_array_mut().unwrap();
+            let profile = profiles
+                .iter_mut()
+                .find(|profile| profile["id"] == "workspace-dev")
+                .unwrap();
+            profile["allowed_commands"] = serde_json::Value::Null;
+            fs::write(&path, serde_json::to_string_pretty(&document).unwrap()).unwrap();
+        }
+
         fn assert_marker_untouched(&self) {
             assert!(!self.marker.exists(), "marker must never run");
         }
@@ -710,11 +695,11 @@ adapter = "direct""#,
         }
     }
 
-    fn run(
+    fn run_with_executor(
         unit: &str,
         execute: bool,
         profile: Option<&str>,
-        spy: &SpyExecutor,
+        executor: &dyn Executor,
     ) -> Result<u8, ControllerError> {
         let sink = OutputSink {
             json: true,
@@ -728,8 +713,29 @@ adapter = "direct""#,
             execute,
             profile,
             None,
-            spy,
+            executor,
         )
+    }
+
+    fn run(
+        unit: &str,
+        execute: bool,
+        profile: Option<&str>,
+        spy: &SpyExecutor,
+    ) -> Result<u8, ControllerError> {
+        run_with_executor(unit, execute, profile, spy)
+    }
+
+    #[derive(Default)]
+    struct RecordingUnavailableExecutor {
+        calls: Cell<u32>,
+    }
+
+    impl Executor for RecordingUnavailableExecutor {
+        fn execute(&self, _plan: &crate::policy::AuthorizedExecutionPlan) -> ExecutorResult {
+            self.calls.set(self.calls.get() + 1);
+            ExecutorResult::Unavailable
+        }
     }
 
     #[test]
@@ -764,6 +770,19 @@ adapter = "direct""#,
     }
 
     #[test]
+    fn request_gate_and_deny_never_invoke_spy() {
+        for (effect, expected) in [("gate", POLICY_GATE), ("block", POLICY_DENY)] {
+            let fx = Fixture::new();
+            fx.patch_request_policy(effect);
+            let spy = SpyExecutor::default();
+            let code = run("demo", true, None, &spy).expect("lifecycle");
+            assert_eq!(code, expected, "effect={effect}");
+            assert_eq!(spy.calls.get(), 0, "effect={effect}");
+            fx.assert_marker_untouched();
+        }
+    }
+
+    #[test]
     fn deny_with_execute_never_invokes_spy() {
         let mut fx = Fixture::new();
         // Force a hard deny via blocked `rm` child (alt-profile path allow no longer denies demo-bin).
@@ -790,6 +809,43 @@ adapter = "direct""#,
         let code = run("demo", true, None, &spy).expect("lifecycle");
         assert_eq!(code, POLICY_DENY);
         assert_eq!(spy.calls.get(), 0);
+        fx.assert_marker_untouched();
+    }
+
+    #[test]
+    fn resolution_and_policy_contract_failures_never_invoke_spy() {
+        let fx = Fixture::new();
+        let spy = SpyExecutor::default();
+        let code = run("missing-unit", true, None, &spy).expect("resolution envelope");
+        assert_eq!(code, RESOLUTION);
+        assert_eq!(spy.calls.get(), 0);
+        fx.assert_marker_untouched();
+
+        fx.patch_policy_contract_invalid();
+        let code = run("demo", true, None, &spy).expect("contract envelope");
+        assert_eq!(code, CONTRACT);
+        assert_eq!(spy.calls.get(), 0);
+        fx.assert_marker_untouched();
+    }
+
+    #[test]
+    fn execution_class_unavailable_never_invokes_spy() {
+        let fx = Fixture::new();
+        let spy = SpyExecutor::default();
+        let code = run("interactive-demo", true, None, &spy).expect("class envelope");
+        assert_eq!(code, NOT_IMPLEMENTED);
+        assert_eq!(spy.calls.get(), 0);
+        fx.assert_marker_untouched();
+    }
+
+    #[test]
+    fn unavailable_executor_is_invoked_once_after_dual_allow() {
+        let fx = Fixture::new();
+        let executor = RecordingUnavailableExecutor::default();
+        let code = run_with_executor("demo", true, None, &executor)
+            .expect("execution-unavailable envelope");
+        assert_eq!(code, NOT_IMPLEMENTED);
+        assert_eq!(executor.calls.get(), 1);
         fx.assert_marker_untouched();
     }
 }

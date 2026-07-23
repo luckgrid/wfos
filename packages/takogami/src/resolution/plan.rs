@@ -5,10 +5,8 @@ use std::path::{Path, PathBuf};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
-use crate::contracts::{DiagnosticRecord, ResolvedCommand};
-use crate::registry::{PolicyRecord, ProfileRecord};
-
 use super::explain::ExecutableProvenance;
+use crate::contracts::{DiagnosticRecord, ResolvedCommand};
 
 const DIGEST_PAYLOAD_VERSION: &str = "s4.1-v1";
 
@@ -142,70 +140,6 @@ impl SealedExecutionPlan {
 
     pub fn plan_digest(&self) -> &str {
         &self.plan_digest
-    }
-}
-
-/// S5 input seam — evaluated by the policy module.
-///
-/// Opaque: constructible only via [`PolicyEvaluationInput::new`] from a successful resolve.
-#[derive(Debug, Clone)]
-pub struct PolicyEvaluationInput {
-    actor: Actor,
-    request: RequestedOperation,
-    plan: SealedExecutionPlan,
-    profile: ProfileRecord,
-    policies: Vec<PolicyRecord>,
-    policy_origins: Vec<(String, String)>,
-    policy_root: PathBuf,
-}
-
-impl PolicyEvaluationInput {
-    pub(crate) fn new(
-        actor: Actor,
-        request: RequestedOperation,
-        plan: SealedExecutionPlan,
-        profile: ProfileRecord,
-        policies: Vec<PolicyRecord>,
-        policy_origins: Vec<(String, String)>,
-        policy_root: PathBuf,
-    ) -> Self {
-        Self {
-            actor,
-            request,
-            plan,
-            profile,
-            policies,
-            policy_origins,
-            policy_root,
-        }
-    }
-
-    pub fn actor(&self) -> Actor {
-        self.actor
-    }
-
-    pub fn request(&self) -> &RequestedOperation {
-        &self.request
-    }
-
-    pub fn plan(&self) -> &SealedExecutionPlan {
-        &self.plan
-    }
-
-    pub fn profile(&self) -> &ProfileRecord {
-        &self.profile
-    }
-
-    pub fn policies(&self) -> &[PolicyRecord] {
-        &self.policies
-    }
-
-    pub fn policy_origins(&self) -> &[(String, String)] {
-        &self.policy_origins
-    }
-
-    pub fn policy_root(&self) -> &PathBuf {
-        &self.policy_root
     }
 }
 

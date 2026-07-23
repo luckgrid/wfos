@@ -52,6 +52,12 @@ CLI/env/file approval bypass). Allowed `--execute` returns `execution_unavailabl
 execution is implemented. Profile precedence is CLI `--profile` → `TAKOGAMI_PROFILE` →
 `workspace-dev` → fail closed. Policy does not claim an OS sandbox after spawn.
 
+Child authorization requires an explicit matching command Allow. An allowed cwd, manifest, or
+operand path only satisfies path scope; it never grants command authority. Unknown command forms
+therefore remain default Deny even when every referenced path is inside the workspace. Gate,
+Deny, and policy-contract output uses a safe plan summary and omits raw rejected argv, secret
+identifiers, executable paths, cwd, manifests, and outside-workspace operands.
+
 `takogami session *` is the future operational **command-record** query surface. It does not
 start/stop composed work sessions. Replaying a record does not restore a terminal pane or
 window layout.
@@ -103,10 +109,11 @@ sequenceDiagram
   K--xD: deferred until native execution
 ```
 
-The current phase stops after policy: dual-layer Allow/Gate/Deny is enforced against one opaque
-sealed handoff; `AuthorizedExecutionPlan` requires a private dual-Allow proof. Child processes
-and command records are not yet started. Registry write-back after every routed command is
-**not** runtime MVP; Ontarch remains the registry owner.
+The current phase stops after policy: dual-layer Allow/Gate/Deny is enforced against one opaque,
+resolver-owned handoff; `AuthorizedExecutionPlan` and its proof can be created only inside the
+evaluator after both layers Allow. Rejected and authorized outcomes are distinct types. Child
+processes and command records are not yet started. Registry write-back after every routed command
+is **not** runtime MVP; Ontarch remains the registry owner.
 
 ## Composition boundary
 
