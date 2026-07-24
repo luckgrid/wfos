@@ -1,0 +1,32 @@
+{
+  "session_id": "2026-07-24-e09-s5.2-validation",
+  "epic": "E09",
+  "story": "S5.2",
+  "title": "Policy evidence portability and order-invariance correction",
+  "status": "done",
+  "started_at": "2026-07-24T22:34:00Z",
+  "ended_at": "2026-07-24T22:45:00Z",
+  "changed_paths": [
+    "packages/takogami/src/policy/evaluate.rs",
+    "packages/takogami/src/policy/paths.rs",
+    "packages/ontarch/registry/sessions/2026-07-24-e09-s5.2-validation.json",
+    "Build/bin/wfos/SESSIONS.md",
+    "Build/bin/wfos/STATE.md"
+  ],
+  "outcome": "Corrected the two residual S5.2 evidence defects found in follow-up review. The nine-case request/child merge matrix now uses distinct layer-specific rule IDs, reverses two genuine rules within each layer, reverses policy-registry order, swaps request/child source order, and asserts byte-identical serialized public decisions plus deterministic primary rules. The Unix permission-denied path test now probes the same metadata boundary used by path normalization and returns only when a privileged runner cannot reproduce PermissionDenied, so root-owned containers no longer fail for retaining traversal through mode 000. Production policy behavior remains unchanged and spawn-free.",
+  "validation": "PASS in the available compatibility environment: cargo test --ignore-rust-version -p takogami (105 library + 78 integration = 183); focused merge and permission tests; cargo check --ignore-rust-version; Ontarch sync + validate; Panoply Brewfile generation check + substrate validation; bash syntax; JSON parse; git diff --check. Compatibility toolchain was rustc/cargo 1.88.0. Repository-pinned Rust 1.96.0, Moon 2.3.2, rustfmt, and Clippy were unavailable in this review environment and are not claimed as rerun for this follow-up delta.",
+  "decisions": [
+    "Layer-order determinism is evidenced with different request and child rule IDs; identical IDs cannot prove primary-rule tie-breaking.",
+    "Rule-order determinism is evidenced by reversing two distinct same-effect command rules rather than duplicating one rule.",
+    "Policy-registry and request/child source-order variants must serialize to the same public PolicyDecision.",
+    "Permission-denied evidence is capability-based: assert fail-closed behavior when PermissionDenied is reproducible, otherwise return after restoring permissions on privileged runners.",
+    "The historical S5, S5.1, and S5.2 session records remain unchanged; this follow-up record preserves the original evidence and documents its correction."
+  ],
+  "next": "E09.S6",
+  "handoff": "E09.S6 must accept only AuthorizedExecutionPlan and preserve the corrected S5.2 evidence. Before treating this follow-up as a pinned-gate closure, rerun repository-pinned format and Clippy/Moon gates or confirm equivalent CI.",
+  "blockers": [
+    "Follow-up delta still needs repository-pinned Rust 1.96.0 / Moon 2.3.2 format and Clippy confirmation; those tools were unavailable in this environment.",
+    "ontarch:secrets-scan detect reports a pre-existing age-secret-key in git history (commit a3a4978, 2026-06-24; redacted in HEAD, persists in blob) — not introduced by this correction; human decision pending."
+  ],
+  "token_note": "STATE + S5.2 validation follow-up + S5.2 addendum + last 2 session records vs full E09/Plan"
+}

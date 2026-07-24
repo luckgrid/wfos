@@ -788,10 +788,26 @@ mod tests {
         let root = temp.path().join("workspace");
         let cwd = root.join("demo");
         let locked = cwd.join("locked");
-        std::fs::create_dir_all(locked.join("nested")).unwrap();
-        std::fs::write(locked.join("nested/secret.txt"), "x").unwrap();
+        let protected = locked.join("nested/secret.txt");
+        std::fs::create_dir_all(protected.parent().unwrap()).unwrap();
+        std::fs::write(&protected, "x").unwrap();
         // Remove search permission on the ancestor so canonicalize/metadata fails closed.
         std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000)).unwrap();
+
+        // Privileged runners (notably root-owned containers) can retain traversal through mode
+        // 000. Probe the same metadata boundary used by classify_existence and return only when
+        // this environment cannot reproduce PermissionDenied.
+        let permission_error = match std::fs::symlink_metadata(&protected) {
+            Ok(_) => {
+                std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755)).unwrap();
+                return;
+            }
+            Err(error) => error,
+        };
+        if permission_error.kind() != std::io::ErrorKind::PermissionDenied {
+            std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755)).unwrap();
+            panic!("expected PermissionDenied probe, got {permission_error}");
+        }
 
         let result = normalize_path_fact(Path::new("locked/nested/secret.txt"), &cwd, &root);
         // Restore before asserting so TempDir cleanup can remove the tree.

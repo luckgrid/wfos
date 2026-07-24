@@ -870,34 +870,98 @@ mod tests {
 
     #[test]
     fn nine_layer_merge_combinations_are_order_independent() {
-        let command_allow = test_rule("command-allow", Effect::Allow, MatcherKind::Command);
-        let command_gate = test_rule("command-gate", Effect::Gate, MatcherKind::Command);
-        let command_deny = test_rule("command-deny", Effect::Deny, MatcherKind::Command);
         let rules = [
-            command_allow.clone(),
-            command_gate.clone(),
-            command_deny.clone(),
+            test_rule("request-allow-a", Effect::Allow, MatcherKind::Command),
+            test_rule("request-allow-z", Effect::Allow, MatcherKind::Command),
+            test_rule("request-gate-a", Effect::Gate, MatcherKind::Command),
+            test_rule("request-gate-z", Effect::Gate, MatcherKind::Command),
+            test_rule("request-deny-a", Effect::Deny, MatcherKind::Command),
+            test_rule("request-deny-z", Effect::Deny, MatcherKind::Command),
+            test_rule("child-allow-a", Effect::Allow, MatcherKind::Command),
+            test_rule("child-allow-z", Effect::Allow, MatcherKind::Command),
+            test_rule("child-gate-a", Effect::Gate, MatcherKind::Command),
+            test_rule("child-gate-z", Effect::Gate, MatcherKind::Command),
+            test_rule("child-deny-a", Effect::Deny, MatcherKind::Command),
+            test_rule("child-deny-z", Effect::Deny, MatcherKind::Command),
         ];
 
         let layer = |effect: Effect, which: PolicyLayer| -> PolicyLayerResult {
-            let rule = match effect {
-                Effect::Allow => &command_allow,
-                Effect::Gate => &command_gate,
-                Effect::Deny => &command_deny,
+            let prefix = match which {
+                PolicyLayer::Request => "request",
+                PolicyLayer::Child => "child",
             };
-            reduce_layer(which, vec![rule], &[])
+            let suffix = effect.as_str();
+            let first_id = format!("{prefix}-{suffix}-a");
+            let second_id = format!("{prefix}-{suffix}-z");
+            let first = rules
+                .iter()
+                .find(|rule| rule.rule_id == first_id)
+                .unwrap();
+            let second = rules
+                .iter()
+                .find(|rule| rule.rule_id == second_id)
+                .unwrap();
+
+            let forward = reduce_layer(which, vec![first, second], &[]);
+            let reversed = reduce_layer(which, vec![second, first], &[]);
+            assert_eq!(
+                serde_json::to_vec(&forward).unwrap(),
+                serde_json::to_vec(&reversed).unwrap(),
+                "{prefix} {suffix} changed under rule-order reversal"
+            );
+            forward
         };
 
         let cases = [
-            (Effect::Allow, Effect::Allow, "allow", Some("command-allow")),
-            (Effect::Allow, Effect::Gate, "gate", Some("command-gate")),
-            (Effect::Allow, Effect::Deny, "deny", Some("command-deny")),
-            (Effect::Gate, Effect::Allow, "gate", Some("command-gate")),
-            (Effect::Gate, Effect::Gate, "gate", Some("command-gate")),
-            (Effect::Gate, Effect::Deny, "deny", Some("command-deny")),
-            (Effect::Deny, Effect::Allow, "deny", Some("command-deny")),
-            (Effect::Deny, Effect::Gate, "deny", Some("command-deny")),
-            (Effect::Deny, Effect::Deny, "deny", Some("command-deny")),
+            (Effect::Allow, Effect::Allow, "allow", None),
+            (
+                Effect::Allow,
+                Effect::Gate,
+                "gate",
+                Some("child-gate-a"),
+            ),
+            (
+                Effect::Allow,
+                Effect::Deny,
+                "deny",
+                Some("child-deny-a"),
+            ),
+            (
+                Effect::Gate,
+                Effect::Allow,
+                "gate",
+                Some("request-gate-a"),
+            ),
+            (
+                Effect::Gate,
+                Effect::Gate,
+                "gate",
+                Some("child-gate-a"),
+            ),
+            (
+                Effect::Gate,
+                Effect::Deny,
+                "deny",
+                Some("child-deny-a"),
+            ),
+            (
+                Effect::Deny,
+                Effect::Allow,
+                "deny",
+                Some("request-deny-a"),
+            ),
+            (
+                Effect::Deny,
+                Effect::Gate,
+                "deny",
+                Some("request-deny-a"),
+            ),
+            (
+                Effect::Deny,
+                Effect::Deny,
+                "deny",
+                Some("child-deny-a"),
+            ),
         ];
 
         for (request_effect, child_effect, expected_outcome, expected_primary) in cases {
@@ -914,10 +978,22 @@ mod tests {
             ]);
             let forward = build_public_decision(effective, &request, &child, &rules);
             let reversed_layers = build_public_decision(effective, &child, &request, &rules);
+            let mut reversed_rules = rules.clone();
+            reversed_rules.reverse();
+            let reversed_registry =
+                build_public_decision(effective, &request, &child, &reversed_rules);
 
-            // Layer role (request vs child) is part of the public contract; swap would change
-            // pick_primary when both layers share the same effect. Assert strongest merge and
-            // same-role reduction stay stable, and forward public decision matches the table.
+            assert_eq!(
+                serde_json::to_vec(&forward).unwrap(),
+                serde_json::to_vec(&reversed_layers).unwrap(),
+                "public decision changed when request/child source order reversed"
+            );
+            assert_eq!(
+                serde_json::to_vec(&forward).unwrap(),
+                serde_json::to_vec(&reversed_registry).unwrap(),
+                "public decision changed when policy registry order reversed"
+            );
+
             let outcome = match &forward {
                 PolicyDecision::Allow { .. } => "allow",
                 PolicyDecision::Gate { .. } => "gate",
@@ -926,27 +1002,20 @@ mod tests {
             assert_eq!(outcome, expected_outcome);
             match &forward {
                 PolicyDecision::Allow { matched_rules } => {
-                    assert!(matched_rules.contains(&"command-allow".to_string()));
+                    assert_eq!(
+                        matched_rules.as_slice(),
+                        &[
+                            "child-allow-a".to_string(),
+                            "child-allow-z".to_string(),
+                            "request-allow-a".to_string(),
+                            "request-allow-z".to_string(),
+                        ]
+                    );
                 }
                 PolicyDecision::Gate { rule_id, .. } | PolicyDecision::Deny { rule_id, .. } => {
                     assert_eq!(rule_id.as_str(), expected_primary.unwrap());
                 }
             }
-
-            // Rule-order reversal inside each layer must not change layer decision/primary.
-            for effect in [request_effect, child_effect] {
-                let rule = match effect {
-                    Effect::Allow => &command_allow,
-                    Effect::Gate => &command_gate,
-                    Effect::Deny => &command_deny,
-                };
-                let a = reduce_layer(PolicyLayer::Child, vec![rule], &[]);
-                let b = reduce_layer(PolicyLayer::Child, vec![rule, rule], &[]);
-                assert_eq!(a.decision, b.decision);
-                assert_eq!(a.primary_rule, b.primary_rule);
-            }
-
-            let _ = reversed_layers; // documents request/child roles are asymmetric by design
         }
     }
 
