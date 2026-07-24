@@ -765,6 +765,43 @@ mod tests {
         assert!(normalize_path_fact(temp.path(), &cwd, &root).is_err());
     }
 
+    #[test]
+    fn longest_existing_ancestor_preserves_nonexistent_suffix() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("workspace");
+        let cwd = root.join("demo");
+        std::fs::create_dir_all(cwd.join("present-dir")).unwrap();
+
+        // Only `demo/present-dir` exists; suffix `a/b.txt` must stay relative under root.
+        let rel = normalize_path_fact(Path::new("present-dir/a/b.txt"), &cwd, &root).unwrap();
+        assert_eq!(rel, "demo/present-dir/a/b.txt");
+        assert!(!root.join(&rel).exists());
+        assert!(root.join("demo/present-dir").is_dir());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn permission_denied_ancestor_fails_closed() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("workspace");
+        let cwd = root.join("demo");
+        let locked = cwd.join("locked");
+        std::fs::create_dir_all(locked.join("nested")).unwrap();
+        std::fs::write(locked.join("nested/secret.txt"), "x").unwrap();
+        // Remove search permission on the ancestor so canonicalize/metadata fails closed.
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000)).unwrap();
+
+        let result = normalize_path_fact(Path::new("locked/nested/secret.txt"), &cwd, &root);
+        // Restore before asserting so TempDir cleanup can remove the tree.
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(
+            result.is_err(),
+            "permission-denied ancestor must not become an in-scope Allow path"
+        );
+    }
+
     #[cfg(unix)]
     #[test]
     fn normalize_path_symlink_matrix_fails_closed() {
@@ -806,7 +843,11 @@ mod tests {
         let cwd = root.join("demo");
         std::fs::create_dir_all(&cwd).unwrap();
         let opaque = std::ffi::OsString::from_vec(vec![b'o', b'p', 0x80, b'q']);
-        std::fs::write(cwd.join(&opaque), "opaque").unwrap();
+        // macOS/APFS often rejects illegal byte sequences at create time — that is already
+        // fail-closed. Where the OS permits the name, normalization must still not Allow it.
+        if std::fs::write(cwd.join(&opaque), "opaque").is_err() {
+            return;
+        }
 
         assert!(normalize_path_fact(Path::new(&opaque), &cwd, &root).is_err());
     }

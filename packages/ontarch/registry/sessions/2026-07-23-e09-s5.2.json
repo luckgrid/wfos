@@ -1,0 +1,47 @@
+{
+  "session_id": "2026-07-23-e09-s5.2",
+  "epic": "E09",
+  "story": "S5.2",
+  "title": "Policy authorization closure and adversarial evidence",
+  "status": "done",
+  "started_at": "2026-07-23T18:00:00Z",
+  "ended_at": "2026-07-24T22:30:00Z",
+  "changed_paths": [
+    "packages/takogami/src/policy/evaluate.rs",
+    "packages/takogami/src/policy/authorize.rs",
+    "packages/takogami/src/policy/paths.rs",
+    "packages/takogami/src/policy/classify.rs",
+    "packages/takogami/src/policy/raw.rs",
+    "packages/takogami/src/policy/mod.rs",
+    "packages/takogami/src/resolution/plan.rs",
+    "packages/takogami/src/resolution/resolver.rs",
+    "packages/takogami/src/resolution/mod.rs",
+    "packages/takogami/src/commands.rs",
+    "packages/takogami/src/error.rs",
+    "packages/takogami/src/output/mod.rs",
+    "packages/takogami/tests/policy_cli.rs",
+    "packages/ontarch/schemas/policy.schema.json",
+    "packages/ontarch/bin/ontarch-validate",
+    "docs/runtime-controller.md",
+    "packages/ontarch/registry/sessions/2026-07-23-e09-s5.2.json",
+    "Build/bin/wfos/SESSIONS.md",
+    "Build/bin/wfos/STATE.md"
+  ],
+  "outcome": "E09.S5.2 closes remaining S5.1 authorization-boundary gaps before native execution. Child Allow requires explicit MatcherKind::Command Allow (path Allow is constraint/provenance only — unknown git/gh/ontarch/mystery stay default_deny). PolicyEvaluationInput is resolver-owned via private from_resolved_selection on ResolveSuccess (no crate-wide multipart forge). Gate/Deny/contract emit PolicyFailurePlanSummary (argv/operands redacted). DualAllowProof is evaluator-private; PolicyEvaluationResult splits Contract/Rejected/Authorized; authorized emitters take AuthorizedExecutionPlan only. Schema/Ontarch/Rust parity: maxItems:0 allow/gate paths/actions, null≠absent, ID regex, uniqueItems. Program-aware rm/mv/cp -- and -t/--target-directory; option-prefixed Chezmoi apply → ShellMutation. Residual §5.7 evidence added: nine-combo layer reduction + public decision, command Allow + out-of-scope path Deny, longest-existing ancestor, permission-denied ancestor fail-closed. Still spawn-free; --execute → unavailable exit 10.",
+  "validation": "PASS with pinned toolchain (rustc/cargo 1.96.0, moon 2.3.2): moon run takogami:build|test|lint|format-check; ontarch:sync|validate (takogami.agent in policies.json + agent→policy:takogami.agent edge); panoply:gen-check|validate-substrate; command-output schema diff identical; git diff --check clean. Lib 105 + policy_cli 17 + resolution_cli 27. Implementation landed in wfos 4ec6e86 (a341481..4ec6e86) plus residual matrix follow-ups. Historical ontarch:secrets-scan blocker preserved and excluded. Review-env Moon/Rust gap closed by re-running gates here.",
+  "decisions": [
+    "Command authority and path scope are independent: has_command_allow gate in reduce_layer; path Allow never populates command grants.",
+    "Handoff construction is resolution-module-private from_resolved_selection; defensive assert_input_consistency remains defense-in-depth.",
+    "Policy failures use safe projection (program basename + correlation) — never serialize raw ResolvedCommand argv.",
+    "execution_authorized=true is renderable only from AuthorizedExecutionPlan; RejectedPolicyOutcome has no authorization setter.",
+    "Allow/gate paths and actions constrained to empty (maxItems:0) in schema and both validators.",
+    "Historical S5 and S5.1 session JSON left unchanged; S5.2 is a new correction record.",
+    "macOS may refuse non-UTF-8 filename create (illegal byte sequence); test treats OS refusal as already fail-closed."
+  ],
+  "next": "E09.S6",
+  "handoff": "E09.S6 must accept only AuthorizedExecutionPlan, use the injected Executor seam for real process spawn, persist RuntimeCommandRecord, and must not treat path Allow as command authority, forge PolicyEvaluationInput from independent parts, re-resolve, turn Gate into Allow, or serialize denied operands on failure paths.",
+  "blockers": [
+    "ontarch:secrets-scan detect reports pre-existing age-secret-key in git history (commit a3a4978, 2026-06-24; redacted in HEAD, persists in blob) — not introduced by migration; human decision pending (history rewrite, .gitleaksignore entry, or accept as historical fixture)"
+  ],
+  "token_note": "STATE + S5.2 addendum + S5.1 addendum + S5 plan + last 2 session records vs full E09/Plan"
+}
