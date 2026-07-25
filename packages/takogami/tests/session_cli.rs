@@ -327,6 +327,48 @@ fn session_latest_surfaces_skipped_record_diagnostics() {
     );
 }
 
+// S6.1-08: malformed-only store must still surface skip diagnostics on `session latest`
+// (not a bare not_found that looks like an empty store).
+#[test]
+fn session_latest_malformed_only_surfaces_skipped_diagnostics() {
+    let h = Harness::new();
+    fs::write(
+        h.state_home.join("tkg_bad.json"),
+        b"{\"schema_version\":\"0.1.0\",\"record_kind\":\"command_execution\",\"session_id\":\"tkg_bad\"}\n",
+    )
+    .unwrap();
+
+    let list = h.run(&["--json", "session", "list"]);
+    let lv = parse_json(&list);
+    assert_eq!(lv["data"]["count"], 0);
+    assert!(
+        lv["data"]["diagnostics"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|d| d.as_str().unwrap_or_default().contains("tkg_bad")),
+        "list must report the skipped malformed record: {lv}"
+    );
+
+    let latest = h.run(&["--json", "session", "latest"]);
+    assert_eq!(
+        latest.status.code(),
+        Some(USAGE as i32),
+        "malformed-only latest remains not_found, got exit={:?} stdout={}",
+        latest.status.code(),
+        stdout(&latest)
+    );
+    let latest_v = parse_json(&latest);
+    assert_eq!(latest_v["diagnostics"][0]["code"], "not_found");
+    let mentions_skip = latest_v["diagnostics"]
+        .as_array()
+        .is_some_and(|arr| arr.iter().any(|d| d.to_string().contains("tkg_bad")));
+    assert!(
+        mentions_skip,
+        "session latest on a malformed-only store must surface skipped-record diagnostics: {latest_v}"
+    );
+}
+
 // S6.1-09: unknown explicit CLI profile must fail closed (no XDG/HOME fallthrough).
 #[test]
 fn session_list_with_unknown_profile_must_fail_closed() {

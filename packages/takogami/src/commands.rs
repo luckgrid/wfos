@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use crate::cli::{Command, ListTarget, SessionCommand};
 use crate::contracts::types::{
-    ExecutionRecord, OutputSummary, RECORD_KIND_COMMAND_EXECUTION, RequestRecord,
+    DiagnosticRecord, ExecutionRecord, OutputSummary, RECORD_KIND_COMMAND_EXECUTION, RequestRecord,
     RuntimeCommandRecord, SCHEMA_VERSION,
 };
 use crate::contracts::{
@@ -669,19 +669,29 @@ fn run_session(
             emit_session_record(sink, &record, &[])
         }
         SessionCommand::Latest => {
-            // S6.1-08: surface the same skipped-record diagnostics `list` reports, instead of
-            // discarding them.
-            let (record, diagnostics) =
-                show_latest_with_diagnostics(&store).map_err(|e| match e {
-                    crate::sessions::SessionStoreError::NotFound(_) => {
-                        ControllerError::not_found("no command execution records")
-                    }
-                    other => ControllerError::StateIo {
-                        message: other.to_string(),
-                        code: other.code().into(),
-                    },
+            // S6.1-08: surface the same skipped-record diagnostics `list` reports, including
+            // when every record is invalid (malformed-only store must not look silently empty).
+            let (maybe_record, diagnostics) =
+                show_latest_with_diagnostics(&store).map_err(|e| ControllerError::StateIo {
+                    message: e.to_string(),
+                    code: e.code().into(),
                 })?;
-            emit_session_record(sink, &record, &diagnostics.skipped)
+            match maybe_record {
+                Some(record) => emit_session_record(sink, &record, &diagnostics.skipped),
+                None => {
+                    let extras: Vec<DiagnosticRecord> = diagnostics
+                        .skipped
+                        .iter()
+                        .map(|message| DiagnosticRecord {
+                            code: "skipped_record".into(),
+                            message: message.clone(),
+                        })
+                        .collect();
+                    let err = ControllerError::not_found("no command execution records");
+                    sink.emit_error_with_explanation("session", &err, None, None, &extras)
+                        .map_err(|e| ControllerError::internal(e.to_string()))
+                }
+            }
         }
     }
 }

@@ -236,7 +236,7 @@
         "3 new Python fixtures: sleep_default_signals.py, ignore_term_sleep.py, spawn_descendant.py"
       ],
       "gate_evidence": {
-        "baseline_commit": "2be414e20963f476c4ffd289255005f27600b8f8 (HEAD unchanged; this phase's diff is uncommitted at write time)",
+        "baseline_commit": "2be414e20963f476c4ffd289255005f27600b8f8 (HEAD at phase start; close-out landed as fd5a5e01178669ae677cee164bbdccd291419431)",
         "macos-aarch64": {
           "rustc": "1.96.0",
           "cargo": "1.96.0",
@@ -279,10 +279,10 @@
     "S6.1-13": "P2 - fixed in Phase 2 (AtomicU32, no unsafe impl Sync)",
     "S6.1-14": "P2 - DONE: E09_DEFERRED.md complete and accurate; STATE/SESSIONS honest; S7 unblocked"
   },
-  "next": "E09.S6.1 is closed. Commit this session's diff, then proceed to E09.S7.",
+  "next": "E09.S6.1 is closed. Proceed to E09.S7.",
   "blockers": [
     "ontarch:secrets-scan historical age-secret-key finding (commit a3a4978, 2026-06-24) preserved verbatim; unrelated to S6.1, not a gate blocker. See E09_DEFERRED.md D3."
   ],
-  "token_note": "Final close-out after review-followup-2: closed every remaining D2 \u00a77 coverage-map row, found and fixed one real production bug (broken-pipe exit-code fidelity in output/mod.rs::emit_executed), re-ran the full pinned gate on both macOS and Linux (279/279 tests each). D1+D2 done; S6.1 complete; S7 unblocked. This session's diff was uncommitted at write time.",
-  "final_commit": "2be414e20963f476c4ffd289255005f27600b8f8 (HEAD at write time; this session's diff on top is uncommitted)"
+  "token_note": "Final close-out after review-followup-2: closed every remaining D2 \u00a77 coverage-map row, found and fixed one real production bug (broken-pipe exit-code fidelity in output/mod.rs::emit_executed), re-ran the full pinned gate on both macOS and Linux (279/279 tests each). D1+D2 done; S6.1 complete; S7 unblocked. Close-out commit fd5a5e0 (later 6cd91a9 is MAINT.agents-pattern only).",
+  "final_commit": "fd5a5e01178669ae677cee164bbdccd291419431"
 }

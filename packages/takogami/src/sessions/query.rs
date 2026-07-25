@@ -147,20 +147,22 @@ pub fn show_session(
 }
 
 pub fn show_latest(store: &CommandRecordStore) -> Result<RuntimeCommandRecord, SessionStoreError> {
-    show_latest_with_diagnostics(store).map(|(record, _)| record)
+    match show_latest_with_diagnostics(store)? {
+        (Some(record), _) => Ok(record),
+        (None, _) => Err(SessionStoreError::NotFound("latest".into())),
+    }
 }
 
 /// Same parsed ordering as [`list_sessions`], but also returns the skipped-record diagnostics
 /// instead of discarding them (S6.1-08): a malformed-only store must not look silently empty.
+///
+/// Returns `Ok((None, diagnostics))` when no valid record exists so callers can still surface
+/// `diagnostics.skipped` on the not-found path.
 pub fn show_latest_with_diagnostics(
     store: &CommandRecordStore,
-) -> Result<(RuntimeCommandRecord, QueryDiagnostics), SessionStoreError> {
+) -> Result<(Option<RuntimeCommandRecord>, QueryDiagnostics), SessionStoreError> {
     let (records, diagnostics) = load_sorted(store)?;
-    let record = records
-        .into_iter()
-        .next()
-        .ok_or_else(|| SessionStoreError::NotFound("latest".into()))?;
-    Ok((record, diagnostics))
+    Ok((records.into_iter().next(), diagnostics))
 }
 
 pub fn is_regular_record_file(path: &Path) -> bool {
