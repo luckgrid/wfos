@@ -7,7 +7,7 @@
   "started_at": "2026-07-25T03:00:00Z",
   "baseline": {
     "wfos": "d760a3f2913156ae1b383f486cdc95970fc685ab",
-    "note": "S6.1 correction baseline d760a3f2; review follow-up builds on commit 802e6eb (prior S6.1 work). Final commit SHA filled after this session commits."
+    "note": "S6.1 correction baseline d760a3f2; review follow-up final commit 4ee864ce1f266616702463925c69a0fb6be1ffd3"
   },
   "addendum": "Build/bin/wfos/2026-07-24-wfos-e09-s6.1-execution-record-integrity-harderning-addendum.md",
   "locked_decisions": [
@@ -234,5 +234,6 @@
     "E09_DEFERRED.md D2: remaining \u00a77.1-7.7 matrix gaps (signal/descendant integration, broken-pipe peers, concurrent writers, malformed profiles, etc.) \u2014 see coverage map.",
     "ontarch:secrets-scan historical age-secret-key finding (commit a3a4978, 2026-06-24) preserved verbatim. See E09_DEFERRED.md D3."
   ],
-  "token_note": "Review follow-up after S6.1 phases 1-5: deferred file, transition identity, RTK projection, wait re-await, matrix expansion, Linux lima gate PASS; D2 remains open."
+  "token_note": "Review follow-up after S6.1 phases 1-5: deferred file, transition identity, RTK projection, wait re-await, matrix expansion, Linux lima gate PASS; D2 remains open.",
+  "final_commit": "4ee864ce1f266616702463925c69a0fb6be1ffd3"
 }
