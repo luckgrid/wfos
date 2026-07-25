@@ -3,10 +3,12 @@
 The metadata-plane is data and contracts. [`README.md`](README.md) and
 [`../../docs/metadata-plane.md`](../../docs/metadata-plane.md) are the source of truth.
 
-**Profiles:** agent operating profiles are authored under
-[`Workstreams/.agents/profiles/`](../../../../../.agents/profiles/README.md) (tracked TOML);
+**Profiles:** agent operating profiles are authored under the working navigation layer
+(`$AGENTS_HOME/profiles/`, usually [`Workstreams/.agents/profiles/`](../../../../../.agents/profiles/README.md));
 `ontarch validate` checks them against `schemas/profile.schema.json` and `ontarch sync` flattens
-them into `registry/profiles.json`. See [agent-configs.md](../../docs/agent-configs.md).
+them into `registry/profiles.json`. The reusable seed is
+[`patterns/agents/`](patterns/agents/README.md) — materialize with `moon run ontarch:agents-init`.
+See [agent-configs.md](../../docs/agent-configs.md).
 
 ## Rules
 
@@ -18,9 +20,11 @@ them into `registry/profiles.json`. See [agent-configs.md](../../docs/agent-conf
 - **`moon run ontarch:validate` is the gate.** It validates every descriptor, policy, profile,
   skill record, and the generated graph against its JSON schema (`schemas/*.schema.json`,
   `graphs/edges.schema.json`).
-- **Skill records** are authored under [`Workstreams/.agents/skills/`](../../../../../.agents/skills/README.md);
+- **Skill records** are authored under `$AGENTS_HOME/skills/` (see
+  [`Workstreams/.agents/skills/`](../../../../../.agents/skills/README.md));
   `ontarch skills resolve|scan|map` are report-only on-demand tools. See [agent-skills.md](../../docs/agent-skills.md).
   `validate` and `sync` are agent-safe: they read contracts and write only generated output.
+  `agents-init` seeds `$AGENTS_HOME` from `patterns/agents/` (skips existing files unless `--force`).
 - **Policies define the rails you operate under.** `policies/panoply.agent.policy.toml` is enforced
   by the native-toolchain when `PANOPLY_AGENT=1` (mutating substrate commands exit non-zero). `policies/no-agent-git-push.policy.toml`
   is metadata-plane policy metadata for publish actions (push, release, merge) — authoritative intent and

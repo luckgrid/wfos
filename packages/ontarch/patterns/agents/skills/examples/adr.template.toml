@@ -1,0 +1,24 @@
+id = "adr"
+title = "Architecture Decision Record"
+source = "wfos"
+kind = "template"
+body_ref = "templates/adr.md"
+version = "adr00001"
+supported_agent_apps = ["factory", "claude", "cursor"]
+allowed_contexts = ["build", "docs"]
+touches = ["none"]
+risks = ["generates markdown only"]
+validator = "frontmatter"
+
+[inputs]
+title = "string"
+status = "string?"
+
+[outputs]
+document = "markdown"
+
+[scan]
+status = "unscanned"
+scanner = "skillspector"
+hash = ""
+scanned_at = ""

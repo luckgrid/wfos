@@ -1,0 +1,39 @@
+# Agent profile — agent-safe-maintenance (generic seed example).
+# Customize allowed_paths / blocked_paths / session_log_target for your workspace.
+# Authoring rules: flat [tables], inline double-quoted arrays, no nested tables,
+# no inline comments (the Ontarch TOML reader subset). See profiles/README.md.
+id = "agent-safe-maintenance"
+title = "Agent-safe maintenance"
+purpose = "Toolkit-wide read and gated cleanup under PANOPLY_AGENT=1: detection and reporting only, never install or secret read"
+rails = "panoply.agent"
+rails_bin = "agent-bin"
+
+[scope]
+allowed_paths = ["**", ".agents/**"]
+blocked_paths = [".env*", "**/secrets/**", "**/private_dot_config/**", "**/policies/**"]
+
+[commands]
+allowed_commands = ["git status", "git diff", "git log", "git branch --show-current", "git worktree list", "rg", "moon run panoply:doctor", "moon run ontarch:validate", "moon run ontarch:sync", "panoply doctor", "panoply list", "panoply env"]
+gated_commands = ["git add", "git commit", "git pull", "git checkout -b"]
+blocked_commands = ["git push", "git push --force", "git push --force-with-lease", "git reset --hard", "git clean", "gh release create", "gh pr merge", "rm -rf", "panoply bootstrap", "brew install", "mise install", "chezmoi apply"]
+
+[policy]
+secret_access = false
+remote_write_policy = "blocked"
+
+[isolation]
+mode = "worktree"
+jj = "opt-in"
+
+[skills]
+loads_external = true
+allowed_skill_ids = ["review", "improve"]
+
+[validators]
+required_validators = ["frontmatter", "skillspector_scan"]
+
+[output]
+compressor = "rtk"
+
+[logs]
+session_log_target = "packages/ontarch/registry/sessions"

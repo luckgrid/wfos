@@ -9,10 +9,10 @@ or body.
 
 | Layer | Location | Role |
 |-------|----------|------|
-| Authoring | `Workstreams/.agents/skills/*.toml` | Curated records (tracked) |
+| Authoring | `$AGENTS_HOME/skills/*.toml` | Curated records (tracked) |
 | Generated | `ontarch/registry/skills.json` | Flattened index (gitignored) |
 | Bodies | `$SKILLS_HOME/<body_ref>/SKILL.md` | Installed skill home (default `~/.agents/skills`) |
-| Templates | `.agents/skills/templates/*.md` | Repo-local template bodies |
+| Templates | `$AGENTS_HOME/skills/templates/*.md` (optional override) or `packages/ontarch/patterns/agents/skills/templates/*.md` | Template bodies — pattern seed is default; working copy may override |
 
 Override the skill home with `SKILLS_HOME` when your layout differs — it is an override point,
 not a canonical filesystem layout.
@@ -62,9 +62,12 @@ in [agent-rails.md](agent-rails.md).
 
 ## Templates
 
-Common I/O workflows are `kind=template` records pointing at markdown + frontmatter under
-`.agents/skills/templates/` (ADR, agent prompt, workflow manifest). Each declares a validator
-(`frontmatter` for the POC set). The toolkit RD/PRD/TRD/ARD/SOP family extends the same pattern.
+Common I/O workflows are `kind=template` records pointing at markdown + frontmatter. Bodies
+default from the Ontarch agents pattern
+(`packages/ontarch/patterns/agents/skills/templates/` — ADR, agent prompt, workflow manifest).
+A working `$AGENTS_HOME/skills/templates/` file wins when present (workspace override).
+Each record declares a validator (`frontmatter` for the POC set). The toolkit RD/PRD/TRD/ARD/SOP
+family extends the same pattern.
 
 ## Fabric patterns
 

@@ -19,6 +19,7 @@ usage: ontarch <command>
 commands:
   validate      validate descriptors and policies against their JSON schemas (gate)
   sync          generate the registry (units/skills/profiles/policies + graph) from sources
+  agents-init   seed a working .agents/ from packages/ontarch/patterns/agents
   scan          read-only polyrepo scan report (scan.json + SCAN.md) — report-only
   bin-report    read-only bin inventory (bin-inventory.json + BIN-INVENTORY.md)
   bin-cleanup   draft-safe cleanup planner (report-only|dry-run; archive/delete refuse)
@@ -26,7 +27,8 @@ commands:
   secrets-scan  report-only secret scan (gitleaks) — detect | staged | dir <path>
   help          show this help
 
-These are wired as moon tasks: \`moon run ontarch:validate\`, \`moon run ontarch:sync\`.
+These are wired as moon tasks: \`moon run ontarch:validate\`, \`moon run ontarch:sync\`,
+\`moon run ontarch:agents-init\`.
 EOF
 }
 
@@ -35,6 +37,7 @@ main() {
   case "$cmd" in
     validate)     exec "$_self/ontarch-validate" "$@" ;;
     sync)         exec "$_self/ontarch-sync" "$@" ;;
+    agents-init)  exec "$_self/ontarch-agents-init" "$@" ;;
     scan)         exec "$_self/ontarch-scan" "$@" ;;
     bin-report)   exec "$_self/ontarch-bin-report" "$@" ;;
     bin-cleanup)  exec "$_self/ontarch-bin-cleanup" "$@" ;;

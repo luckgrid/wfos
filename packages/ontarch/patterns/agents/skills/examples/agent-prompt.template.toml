@@ -1,0 +1,24 @@
+id = "agent-prompt"
+title = "Agent task prompt"
+source = "wfos"
+kind = "template"
+body_ref = "templates/agent-prompt.md"
+version = "agp00001"
+supported_agent_apps = ["factory", "claude", "cursor"]
+allowed_contexts = ["build"]
+touches = ["none"]
+risks = ["generates markdown only"]
+validator = "frontmatter"
+
+[inputs]
+task = "string"
+scope = "string?"
+
+[outputs]
+prompt = "markdown"
+
+[scan]
+status = "unscanned"
+scanner = "skillspector"
+hash = ""
+scanned_at = ""

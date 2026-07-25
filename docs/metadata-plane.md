@@ -30,7 +30,7 @@ Packages      define package-translator-managed deliverable interfaces (planned)
 | `schemas/unit.schema.json` | schema | contract for unit descriptors (id, kind, paths, structured/legacy entrypoints, capabilities, policy) |
 | `schemas/policy.schema.json` | schema | contract for policies (agent-rails + command styles) |
 | `schemas/profile.schema.json` | schema | contract for agent operating profiles (scope, commands, validators, optional `[runtime] session_state_home`) |
-| `schemas/skill.schema.json` | schema | contract for curated skill/template/pattern records (authored under `Workstreams/.agents/skills/`) |
+| `schemas/skill.schema.json` | schema | contract for curated skill/template/pattern records (authored under `$AGENTS_HOME/skills/`) |
 | `schemas/command-output.schema.json` | schema | Takogami `--json` `CommandEnvelope` contract |
 | `schemas/runtime-command-record.schema.json` | schema | operational Takogami command-execution record contract (distinct from build-session records) |
 | `schemas/panoply.tools.schema.json` | schema | contract for the generated tools registry |
@@ -38,6 +38,7 @@ Packages      define package-translator-managed deliverable interfaces (planned)
 | `policies/no-agent-git-push.policy.toml` | policy | agents never push or publish (human-only) |
 | `graphs/edges.schema.json` | schema | contract for the project graph (nodes + directed edges) |
 | `descriptors/takogami.descriptor.toml` | descriptor | runtime-controller unit (`kind = "runtime-controller"`) |
+| `patterns/agents/` | pattern | agents navigation seed — materialize with `ontarch agents-init` into `$AGENTS_HOME` |
 | `registry/{units,skills,profiles,policies,tools}.json` | registry | generated indexes (gitignored — host-specific) |
 | `registry/graph.{json,dot}` | registry | generated project graph (gitignored — host-specific) |
 | `registry/QUERIES.md`, `registry/queries/*.jq` | query | jq cookbook over the registry |
@@ -50,17 +51,23 @@ registry.
 ## Generation and queries
 
 `ontarch sync` walks descriptors (colocated beside units first; `descriptors/` is a central
-override), policies, and **agent operating profiles** (`Workstreams/.agents/profiles/*.toml`),
+override), policies, and **agent operating profiles** (`$AGENTS_HOME/profiles/*.toml`),
 and emits the registry as compact JSON. It also derives the project graph (`graph.json` +
 `graph.dot`) from unit `capabilities`, policy `applies_to` edges, profile `selects` edges, and
 profile `can-invoke` skill edges.
 `ontarch validate` is the gate: it checks every descriptor, policy, **agent operating profile**
-(`Workstreams/.agents/profiles/*.toml` vs `schemas/profile.schema.json`, including the
+(`$AGENTS_HOME/profiles/*.toml` vs `schemas/profile.schema.json`, including the
 SkillSpector gate and `allowed_skill_ids` cross-ref), **curated skill records**
-(`Workstreams/.agents/skills/*.toml` vs `schemas/skill.schema.json`, including the loadable-skill
+(`$AGENTS_HOME/skills/*.toml` vs `schemas/skill.schema.json`, including the loadable-skill
 scan gate), and the graph against its schema, reading the required keys and enums from
 the schema itself so the schema stays the single source of truth. Both run on bash + `awk` + `jq`
 (no new dependencies) and are agent-safe.
+
+`ontarch agents-init` seeds `$AGENTS_HOME` from `packages/ontarch/patterns/agents/` (contracts
+and example records) and writes `.pattern-lock`. Seed-owned templates
+(`AGENTS.template.md`, `skills/templates/*`) stay in the pattern; resolve/validate fall back
+there. Override discovery with `AGENTS_HOME` or `WS_ROOT`; without a Workstreams-layout
+sentinel, a standalone checkout uses `$WFOS_ROOT/.agents`.
 
 Generated `units.json` and `scan.json` include a `registry_generation` object
 (`generated_at` + `source_fingerprints[]` over authored inputs). The runtime controller

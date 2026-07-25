@@ -1,0 +1,24 @@
+id = "improve"
+title = "Improve writing"
+source = "community"
+kind = "skill"
+body_ref = "improve"
+version = "1599aa29"
+supported_agent_apps = ["factory", "claude", "cursor"]
+allowed_contexts = ["build", "docs"]
+touches = ["fs-read"]
+risks = ["reads repo contents"]
+validator = "skillspector_scan"
+
+[inputs]
+text = "string"
+style = "string?"
+
+[outputs]
+revised = "markdown"
+
+[scan]
+status = "passed"
+scanner = "skillspector"
+hash = "1599aa29"
+scanned_at = "2026-06-26T12:00:00Z"

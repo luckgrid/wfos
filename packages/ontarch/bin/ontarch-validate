@@ -443,11 +443,14 @@ _validate_skills() {
     if [ "$kind" = "template" ]; then
       jq -e '.validator // empty | length > 0' <<<"$full" >/dev/null \
         || { ontarch_err "skill $id: kind=template requires a non-empty validator"; sk_fail=1; }
-      body_path="$AGENTS_HOME/skills/$body_ref"
-      [ -f "$body_path" ] \
-        || { ontarch_err "skill $id: template body missing at $body_path"; sk_fail=1; }
-      _skill_frontmatter_ok "$body_path" \
-        || { ontarch_err "skill $id: template body missing valid frontmatter"; sk_fail=1; }
+      body_path="$(ontarch_template_body_path "$body_ref" || true)"
+      if [ -z "$body_path" ] || [ ! -f "$body_path" ]; then
+        ontarch_err "skill $id: template body missing (checked \$AGENTS_HOME/skills/$body_ref and pattern seed)"
+        sk_fail=1
+      else
+        _skill_frontmatter_ok "$body_path" \
+          || { ontarch_err "skill $id: template body missing valid frontmatter ($body_path)"; sk_fail=1; }
+      fi
     fi
 
     if [ "$kind" = "pattern" ]; then

@@ -92,8 +92,10 @@ carry `skillspector_scan` in `required_validators`. Optional AI enhancements are
 - Session records are `packages/ontarch/registry/sessions/YYYY-MM-DD-eNN-sN.json`; filename dates
   follow the local implementation/completion date established by nested-repo history, not a
   planned session date, document creation date, or the next UTC calendar day.
-- `Workstreams/.agents/` is the operator navigation layer; metadata-plane sync writes gitignored
-  `tools/local-toolkit.yml`; the metadata-plane remains the routing authority.
+- `Workstreams/.agents/` is the working operator navigation layer (materialized from
+  `packages/ontarch/patterns/agents/` via `ontarch agents-init`; pin in `.pattern-lock`);
+  metadata-plane sync writes gitignored `tools/local-toolkit.yml`; the metadata-plane remains
+  the routing authority.
 - `no-agent-git-push` is metadata-plane policy metadata (publish intent); `agent-git` is the
   cross-cutting git allow/gate/block policy (`applies_to = "agent"`). Profiles keep `panoply.agent`
   / `no-agent-git-push` as `rails` and must not contradict `agent-git` in `[commands]`. Runtime

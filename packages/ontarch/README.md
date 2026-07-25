@@ -13,9 +13,10 @@ Deep dive: [`../../docs/metadata-plane.md`](../../docs/metadata-plane.md).
 |------|---------|
 | `moon run ontarch:validate` | gate — validate descriptors, policies, and the generated graph against their JSON schemas |
 | `moon run ontarch:sync` | generate the registry (`units/skills/profiles/policies.json` + graph) |
+| `moon run ontarch:agents-init` | seed a working `$AGENTS_HOME` (`.agents/`) from `patterns/agents/` |
 
-Both are dependency-free (bash + `awk` + `jq`), read-only over sources, and write only
-generated output under `registry/` — agent-safe.
+All are dependency-free (bash + `awk` + `jq`), read-only over sources (except agents-init, which
+writes only the navigation layer), and agent-safe.
 
 ## What lives here now
 
@@ -28,7 +29,8 @@ generated output under `registry/` — agent-safe.
 | `policies/panoply.agent.policy.toml` | policy | native-toolchain agent rails (allow/block, gates) |
 | `policies/no-agent-git-push.policy.toml` | policy | agents never push or publish (human-only) |
 | `graphs/edges.schema.json` | schema | contract for the project graph (metadata-plane graphs) |
-| `lib/`, `bin/ontarch{,-sync,-validate}` | code | the registry generator + validator (bash/awk/jq) |
+| `lib/`, `bin/ontarch{,-sync,-validate,-agents-init}` | code | the registry generator + validator + agents pattern seeder (bash/awk/jq) |
+| `patterns/agents/` | pattern | agents navigation seed (contracts, templates, generic examples) — materialize with `agents-init` |
 | `registry/QUERIES.md`, `registry/queries/*.jq` | query | the jq cookbook over the registry |
 | `registry/{units,skills,profiles,policies,tools}.json` | registry | generated indexes (gitignored — host-specific) |
 | `registry/graph.{json,dot}` | registry | generated project graph (gitignored — host-specific) |

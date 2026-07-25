@@ -1,0 +1,24 @@
+id = "review"
+title = "Code review"
+source = "community"
+kind = "skill"
+body_ref = "pre-review-guide"
+version = "34e2e5f5"
+supported_agent_apps = ["factory", "claude", "cursor"]
+allowed_contexts = ["build", "review"]
+touches = ["fs-read"]
+risks = ["reads repo contents"]
+validator = "skillspector_scan"
+
+[inputs]
+diff = "string"
+scope = "string?"
+
+[outputs]
+findings = "markdown"
+
+[scan]
+status = "passed"
+scanner = "skillspector"
+hash = "34e2e5f5"
+scanned_at = "2026-06-26T12:00:00Z"

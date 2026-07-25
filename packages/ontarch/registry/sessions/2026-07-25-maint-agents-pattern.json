@@ -1,0 +1,43 @@
+{
+  "session_id": "2026-07-25-maint-agents-pattern",
+  "epic": "MAINT",
+  "story": "agents-pattern-migration",
+  "title": "Migrate Workstreams/.agents into Ontarch as a pattern",
+  "status": "done",
+  "started_at": "2026-07-25T20:50:00Z",
+  "completed_at": "2026-07-25T20:56:00Z",
+  "note": "Build/bin/wfos/2026-07-25-wfos-maint-agents-pattern-migration.md",
+  "locked_decisions": [
+    "Agents navigation is an Ontarch-owned pattern seed (packages/ontarch/patterns/agents/), not a new Level 0 package and not live Luckgrid-only profiles inside the package tree.",
+    "Working .agents/ stays at the consuming workspace root; ontarch agents-init materializes it and writes .pattern-lock (agents-navigation@0.1.0).",
+    "AGENTS_HOME discovery uses env overrides + sentinel walk + standalone WFOS_ROOT/.agents fallback; never filesystem root."
+  ],
+  "changed_paths": [
+    "packages/ontarch/patterns/agents/",
+    "packages/ontarch/bin/ontarch-agents-init",
+    "packages/ontarch/bin/ontarch",
+    "packages/ontarch/lib/common.sh",
+    "packages/ontarch/moon.yml",
+    "packages/ontarch/README.md",
+    "packages/ontarch/AGENTS.md",
+    "docs/agent-configs.md",
+    "docs/metadata-plane.md",
+    "AGENTS.md",
+    "packages/ontarch/registry/sessions/2026-07-25-maint-agents-pattern.json"
+  ],
+  "root_repo_paths": [
+    ".agents/README.md",
+    ".agents/.pattern-lock",
+    "AGENTS.md",
+    "Build/bin/wfos/2026-07-25-wfos-maint-agents-pattern-migration.md",
+    "Build/bin/wfos/SESSIONS.md"
+  ],
+  "gates": [
+    "ontarch agents-init --self-check PASS",
+    "empty-target agents-init PASS",
+    "existing Workstreams agents-init skip-existing PASS",
+    "moon run ontarch:validate PASS",
+    "moon run ontarch:sync PASS"
+  ],
+  "next": "E09.S7 (unchanged active epic; this was a MAINT interlude)"
+}

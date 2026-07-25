@@ -6,9 +6,10 @@ project:
   description: "Metadata plane — descriptors, schemas, policies, and the generated registry."
 
 # Build-time metadata tasks. Ontarch still exposes no end-user runtime CLI; `validate` is
-# the registry gate and `sync` regenerates the registry from descriptors + policies + the
-# Panoply tools registry. Both are read-only over sources (agent-safe) and uncached (they read
-# host-specific inputs and emit generated output).
+# the registry gate, `sync` regenerates the registry from descriptors + policies + the
+# Panoply tools registry, and `agents-init` seeds a working `$AGENTS_HOME` from
+# `patterns/agents/`. Validate/sync are read-only over sources (agent-safe) and uncached
+# (they read host-specific inputs and emit generated output).
 tasks:
   validate:
     command: "bin/ontarch"
@@ -49,5 +50,11 @@ tasks:
   secrets-scan:
     command: "bin/ontarch"
     args: ["secrets-scan", "detect"]
+    options:
+      cache: false
+
+  agents-init:
+    command: "bin/ontarch"
+    args: ["agents-init"]
     options:
       cache: false

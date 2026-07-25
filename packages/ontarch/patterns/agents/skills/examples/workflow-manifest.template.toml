@@ -1,0 +1,24 @@
+id = "workflow-manifest"
+title = "Workflow manifest"
+source = "wfos"
+kind = "template"
+body_ref = "templates/workflow-manifest.md"
+version = "wfm00001"
+supported_agent_apps = ["factory", "claude", "cursor"]
+allowed_contexts = ["build"]
+touches = ["none"]
+risks = ["generates markdown with link references"]
+validator = "frontmatter"
+
+[inputs]
+workflow_id = "string"
+steps = "string[]"
+
+[outputs]
+manifest = "markdown"
+
+[scan]
+status = "unscanned"
+scanner = "skillspector"
+hash = ""
+scanned_at = ""

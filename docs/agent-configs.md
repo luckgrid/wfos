@@ -7,12 +7,18 @@ and keeps each `AGENTS.md` lean.
 
 ## Shared profiles
 
-A profile is one declaration consumed by every app. Profiles live at
-[`Workstreams/.agents/profiles/`](../../../../../.agents/profiles/README.md) as tracked TOML; each
-declares scope (allowed/blocked paths), command allow/gate/block lists, secret access, a
-remote-write policy, an `[isolation]` field (worktree/branch scope + jj opt-in), required
-validators, an output compressor, and a session-log target. Apps consume the shared intent through
-their own (chezmoi-rendered) config syntax — they never become a second policy source of truth.
+A profile is one declaration consumed by every app. Profiles live in the **working** agent
+navigation layer at [`Workstreams/.agents/profiles/`](../../../../../.agents/profiles/README.md)
+(tracked TOML; `$AGENTS_HOME` when overridden). Each declares scope (allowed/blocked paths),
+command allow/gate/block lists, secret access, a remote-write policy, an `[isolation]` field
+(worktree/branch scope + jj opt-in), required validators, an output compressor, and a session-log
+target. Apps consume the shared intent through their own (chezmoi-rendered) config syntax — they
+never become a second policy source of truth.
+
+The reusable **seed** (generic examples + README contracts + `AGENTS.template.md`) lives in
+[`packages/ontarch/patterns/agents/`](../packages/ontarch/patterns/agents/README.md). Materialize
+or refresh a working `.agents/` with `moon run ontarch:agents-init` (skips existing files;
+`--force` overwrites). Working copies pin the seed via `.pattern-lock`.
 
 [metadata-plane (Ontarch)](metadata-plane.md) policies remain the enforcement authority. A profile *selects* a
 policy through its `rails` field and *scopes* it. The cross-cutting
@@ -101,9 +107,9 @@ templates consume machine profile data without becoming a policy source of truth
 Detailed commands and architecture live in `README.md` and `docs/`, loaded on demand — so opening
 `AGENTS.md` stays cheap. No app-specific prose duplicates profile intent: scope, command
 allow/block lists, and secret rules are declared once in the profile, not retold per app or per
-`AGENTS.md`. The copy-ready template is
-[`.agents/profiles/AGENTS.template.md`](../../../../../.agents/profiles/AGENTS.template.md); the
-reference instance is this workspace's [`AGENTS.md`](../AGENTS.md).
+`AGENTS.md`. The copy-ready template is seed-owned at
+[`patterns/agents/profiles/AGENTS.template.md`](../packages/ontarch/patterns/agents/profiles/AGENTS.template.md);
+the reference instance is this workspace's [`AGENTS.md`](../AGENTS.md).
 
 ## Why it matters for token cost
 

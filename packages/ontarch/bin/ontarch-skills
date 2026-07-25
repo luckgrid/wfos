@@ -30,12 +30,17 @@ EOF
 
 # Args: <skill-json>
 _skill_body_path() {
-  local full="$1" kind body_ref
+  local full="$1" kind body_ref path
   kind="$(jq -r '.kind // "skill"' <<<"$full")"
   body_ref="$(jq -r '.body_ref // .id' <<<"$full")"
   case "$kind" in
     template)
-      printf '%s/skills/%s\n' "$AGENTS_HOME" "$body_ref"
+      if path="$(ontarch_template_body_path "$body_ref")"; then
+        printf '%s\n' "$path"
+      else
+        # Prefer reporting the working-copy path when missing (clearer error).
+        printf '%s/skills/%s\n' "$AGENTS_HOME" "$body_ref"
+      fi
       ;;
     skill|pattern|command)
       printf '%s/%s/SKILL.md\n' "$SKILLS_HOME" "$body_ref"
@@ -165,7 +170,8 @@ _cmd_map() {
     body_ref="$(jq -r '.body_ref // .id' <<<"$(ontarch_descriptor_json "$f")")"
     kind="$(jq -r '.kind // "skill"' <<<"$(ontarch_descriptor_json "$f")")"
     if [ "$kind" = "template" ]; then
-      [ -f "$AGENTS_HOME/skills/$body_ref" ] || dangling="$(jq -c --arg id "$id" '. + [$id]' <<<"$dangling")"
+      ontarch_template_body_path "$body_ref" >/dev/null \
+        || dangling="$(jq -c --arg id "$id" '. + [$id]' <<<"$dangling")"
     elif [ "$kind" = "pattern" ]; then
       [ -f "$SKILLS_HOME/$body_ref/SKILL.md" ] || dangling="$(jq -c --arg id "$id" '. + [$id]' <<<"$dangling")"
     else

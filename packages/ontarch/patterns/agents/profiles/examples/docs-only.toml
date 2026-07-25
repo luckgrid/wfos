@@ -1,0 +1,35 @@
+# Agent profile — docs-only (generic seed example).
+# Customize allowed_paths / blocked_paths / session_log_target for your workspace.
+# Authoring rules: flat [tables], inline double-quoted arrays, no nested tables,
+# no inline comments (the Ontarch TOML reader subset). See profiles/README.md.
+id = "docs-only"
+title = "Documentation-only agent"
+purpose = "Maintain Markdown docs and specs only; never touch code, config, or secrets"
+rails = "no-agent-git-push"
+rails_bin = "agent-bin"
+
+[scope]
+allowed_paths = ["docs/**", "bin/**"]
+blocked_paths = [".env*", "secrets/**", "packages/*/policies/**"]
+
+[commands]
+allowed_commands = ["git status", "git diff", "git log", "git branch --show-current", "git worktree list", "rg", "moon run ontarch:validate"]
+gated_commands = ["git add", "git commit", "git pull", "git checkout -b"]
+blocked_commands = ["git push", "git push --force", "git push --force-with-lease", "git reset --hard", "git clean", "gh release create", "gh pr merge", "rm -rf", "panoply bootstrap"]
+
+[policy]
+secret_access = false
+remote_write_policy = "blocked"
+
+[isolation]
+mode = "branch"
+jj = "opt-in"
+
+[skills]
+loads_external = false
+
+[validators]
+required_validators = ["markdown_links", "frontmatter"]
+
+[logs]
+session_log_target = "packages/ontarch/registry/sessions"
