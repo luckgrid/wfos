@@ -2,19 +2,29 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::cli::{Command, ListTarget};
-use crate::contracts::ExecutionClass;
+use crate::cli::{Command, ListTarget, SessionCommand};
+use crate::contracts::types::{
+    ExecutionRecord, OutputSummary, RECORD_KIND_COMMAND_EXECUTION, RequestRecord,
+    RuntimeCommandRecord, SCHEMA_VERSION,
+};
+use crate::contracts::{
+    ExecutionClass, PolicyDecision, StateHomeInputs, ensure_state_home, resolve_session_state_home,
+};
 use crate::doctor::{self, DoctorInputs};
 use crate::error::{ControllerError, ExecutionDeferredDetails, PolicyOutcomeDetails};
+use crate::execution::{ExecutionMode, ExecutionOptions, Executor, TokioExecutor};
 use crate::output::OutputSink;
-use crate::policy::Executor;
 use crate::registry::{
     ExternalAdapters, Freshness, ProcessAdapters, RefreshKind, RegistryAccess, discover_from_scan,
     filter_tools, filter_units, find_unit, parse_filters, resolve_registry_paths,
 };
 use crate::resolution::{CorrelationIdGenerator, DefaultIdGenerator, ResolutionRequest, resolve};
+use crate::sessions::{
+    CommandRecordStore, RuntimeContextEnv, collect_runtime_context, list_sessions, show_latest,
+    show_session, utc_now_rfc3339,
+};
 
-pub fn dispatch_implemented(
+pub async fn dispatch_implemented(
     command: &Command,
     sink: &OutputSink,
     cli_state_home: Option<&Path>,
@@ -27,6 +37,7 @@ pub fn dispatch_implemented(
         Command::Info { unit } => run_info(sink, unit),
         Command::Tools => run_tools(sink),
         Command::Interfaces { validate } => run_interfaces(sink, *validate),
+        Command::Session { sub } => run_session(sink, sub, cli_state_home, cli_profile),
         Command::Dev { .. } | Command::Build { .. } | Command::Check { .. } => {
             let (verb, unit, explain, execute) =
                 command.lifecycle_parts().expect("lifecycle command");
@@ -38,8 +49,9 @@ pub fn dispatch_implemented(
                 execute,
                 cli_profile,
                 cli_state_home,
-                &crate::policy::UnavailableExecutor,
+                &TokioExecutor,
             )
+            .await
         }
         _ => Err(ControllerError::internal(
             "dispatch_implemented called for unimplemented command",
@@ -47,9 +59,9 @@ pub fn dispatch_implemented(
     }
 }
 
-/// Internal coordinator accepting an injected executor (spy in tests; unavailable in production).
+/// Internal coordinator accepting an injected executor (spy in tests; Tokio in production).
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn run_lifecycle_with_executor(
+pub(crate) async fn run_lifecycle_with_executor(
     sink: &OutputSink,
     verb: crate::resolution::LifecycleVerb,
     unit_id: &str,
@@ -59,9 +71,6 @@ pub(crate) fn run_lifecycle_with_executor(
     cli_state_home: Option<&Path>,
     executor: &dyn Executor,
 ) -> Result<u8, ControllerError> {
-    // S5/S5.1 must not create operational state.
-    let _ = cli_state_home;
-
     let access = access()?;
     let mut id_gen = DefaultIdGenerator::default();
     let session_id = id_gen.next_id();
@@ -95,8 +104,18 @@ pub(crate) fn run_lifecycle_with_executor(
         }
     };
 
-    // Policy evaluation precedes class/executor checks.
     let policy_input = success.policy_evaluation_input();
+    let profile = policy_input.profile().clone();
+    let env_state = std::env::var("TAKOGAMI_STATE_HOME").ok();
+    let env_xdg = std::env::var("XDG_STATE_HOME").ok();
+    let state_home = resolve_session_state_home(StateHomeInputs {
+        cli_state_home,
+        env_takogami_state_home: env_state.as_deref(),
+        profile_session_state_home: profile.session_state_home.as_deref(),
+        env_xdg_state_home: env_xdg.as_deref(),
+        home_dir: dirs_home(),
+    });
+
     let policy_result = crate::policy::evaluate_policy(&policy_input);
     let authorized = match policy_result {
         crate::policy::PolicyEvaluationResult::Contract(err) => {
@@ -111,39 +130,55 @@ pub(crate) fn run_lifecycle_with_executor(
                 )
                 .map_err(|e| ControllerError::internal(e.to_string()));
         }
-        crate::policy::PolicyEvaluationResult::Rejected(rejected) => match rejected.decision() {
-            crate::contracts::PolicyDecision::Deny { reason, .. } => {
-                let err = ControllerError::PolicyDeny {
-                    reason: reason.clone(),
-                    details: Box::new(PolicyOutcomeDetails::from_rejected(&rejected)),
-                };
-                return sink
-                    .emit_policy_outcome(verb.as_str(), &err, &rejected, success.freshness)
-                    .map_err(|e| ControllerError::internal(e.to_string()));
+        crate::policy::PolicyEvaluationResult::Rejected(rejected) => {
+            let outcome = match rejected.decision() {
+                PolicyDecision::Deny { .. } => "denied",
+                PolicyDecision::Gate { .. } => "gated",
+                PolicyDecision::Allow { .. } => {
+                    return Err(ControllerError::internal(
+                        "policy evaluator returned Allow without authorization",
+                    ));
+                }
+            };
+            let record = base_record_from_rejected(&rejected, verb.as_str(), execute, outcome);
+            let _ = persist_terminal(&state_home, &record);
+            match rejected.decision() {
+                PolicyDecision::Deny { reason, .. } => {
+                    let err = ControllerError::PolicyDeny {
+                        reason: reason.clone(),
+                        details: Box::new(PolicyOutcomeDetails::from_rejected(&rejected)),
+                    };
+                    return sink
+                        .emit_policy_outcome(verb.as_str(), &err, &rejected, success.freshness)
+                        .map_err(|e| ControllerError::internal(e.to_string()));
+                }
+                PolicyDecision::Gate { reason, .. } => {
+                    let err = ControllerError::PolicyGate {
+                        reason: reason.clone(),
+                        details: Box::new(PolicyOutcomeDetails::from_rejected(&rejected)),
+                    };
+                    return sink
+                        .emit_policy_outcome(verb.as_str(), &err, &rejected, success.freshness)
+                        .map_err(|e| ControllerError::internal(e.to_string()));
+                }
+                PolicyDecision::Allow { .. } => unreachable!(),
             }
-            crate::contracts::PolicyDecision::Gate { reason, .. } => {
-                let err = ControllerError::PolicyGate {
-                    reason: reason.clone(),
-                    details: Box::new(PolicyOutcomeDetails::from_rejected(&rejected)),
-                };
-                return sink
-                    .emit_policy_outcome(verb.as_str(), &err, &rejected, success.freshness)
-                    .map_err(|e| ControllerError::internal(e.to_string()));
-            }
-            crate::contracts::PolicyDecision::Allow { .. } => {
-                return Err(ControllerError::internal(
-                    "policy evaluator returned Allow without authorization",
-                ));
-            }
-        },
+        }
         crate::policy::PolicyEvaluationResult::Authorized(authorized) => authorized,
     };
 
-    // Class unavailable after Allow — executor must not run.
     if success.plan.resolved().execution_class != ExecutionClass::Direct {
+        let record = base_record_from_authorized(
+            &authorized,
+            verb.as_str(),
+            execute,
+            "execution_unavailable",
+            true,
+        );
+        let _ = persist_terminal(&state_home, &record);
         let err = ControllerError::ExecutionClassUnavailable {
             message: format!(
-                "execution_class={} with provider {:?} is not executable in S5",
+                "execution_class={} with provider {:?} is not executable in S6",
                 success.plan.resolved().execution_class.as_str(),
                 success.plan.resolved().runtime_provider
             ),
@@ -160,22 +195,114 @@ pub(crate) fn run_lifecycle_with_executor(
     }
 
     if execute {
-        let _ = executor.execute(&authorized);
-        let err = ControllerError::ExecutionUnavailable {
-            session_id: session_id.clone(),
-            details: Box::new(ExecutionDeferredDetails::from_authorized(&authorized)),
+        let store =
+            CommandRecordStore::open(&state_home).map_err(|e| ControllerError::StateIo {
+                message: e.to_string(),
+                code: e.code().into(),
+            })?;
+        let lock = store
+            .acquire_lock(&session_id)
+            .map_err(|e| ControllerError::StateIo {
+                message: e.to_string(),
+                code: e.code().into(),
+            })?;
+
+        let mut pending =
+            base_record_from_authorized(&authorized, verb.as_str(), true, "pending", true);
+        pending.ended_at = None;
+        store
+            .write_pending(&pending, &lock)
+            .map_err(|e| ControllerError::StateIo {
+                message: e.to_string(),
+                code: e.code().into(),
+            })?;
+
+        let compressor = profile_compressor(&profile);
+        let options = ExecutionOptions {
+            mode: if sink.json {
+                ExecutionMode::Json
+            } else {
+                ExecutionMode::Human {
+                    rtk_eligible: compressor == "rtk",
+                    profile_id: profile.id.clone(),
+                }
+            },
+            limits: Default::default(),
         };
+        let report = executor.execute(&authorized, &options).await;
+
+        if report.spawned
+            && let Some(pid) = report.pid
+        {
+            pending.execution.started = true;
+            pending.execution.pid = Some(pid);
+            let _ = store.write_final(&pending, &lock);
+        }
+
+        // Spy / unavailable stand-ins remain non-spawning for S5.2 reachability tests.
+        if !report.spawned
+            && matches!(
+                report.outcome.as_str(),
+                "spy_reached" | "execution_unavailable"
+            )
+        {
+            let mut final_rec = pending;
+            final_rec.execution.outcome = "execution_unavailable".into();
+            final_rec.ended_at = Some(utc_now_rfc3339());
+            let _ = store.write_final(&final_rec, &lock);
+            let err = ControllerError::ExecutionUnavailable {
+                session_id: session_id.clone(),
+                details: Box::new(ExecutionDeferredDetails::from_authorized(&authorized)),
+            };
+            return sink
+                .emit_error_with_explanation(
+                    verb.as_str(),
+                    &err,
+                    Some(&success.explanation),
+                    Some(success.freshness),
+                )
+                .map_err(|e| ControllerError::internal(e.to_string()));
+        }
+
+        let mut final_rec = pending;
+        final_rec.execution.outcome = report.outcome.clone();
+        final_rec.execution.started = report.spawned;
+        final_rec.execution.pid = report.pid;
+        final_rec.execution.exit_code = report.exit_code;
+        final_rec.execution.signal = report.signal.clone();
+        final_rec.ended_at = Some(utc_now_rfc3339());
+        final_rec.output_summary = OutputSummary {
+            stdout_bytes: report.stdout.total_bytes,
+            stderr_bytes: report.stderr.total_bytes,
+            truncated: report.stdout.truncated || report.stderr.truncated,
+            encoding: merge_encoding(&report.stdout.encoding, &report.stderr.encoding),
+            compressor: report.compressor.clone(),
+        };
+        if let Some(diag) = report.diagnostics.first() {
+            final_rec.error = Some(diag.clone());
+        }
+        store
+            .write_final(&final_rec, &lock)
+            .map_err(|e| ControllerError::StateIo {
+                message: e.to_string(),
+                code: e.code().into(),
+            })?;
+
         return sink
-            .emit_error_with_explanation(
+            .emit_executed(
                 verb.as_str(),
-                &err,
-                Some(&success.explanation),
-                Some(success.freshness),
+                &authorized,
+                &success.explanation,
+                success.freshness,
+                &report,
+                &final_rec,
             )
             .map_err(|e| ControllerError::internal(e.to_string()));
     }
 
-    // Plan-only Allow: never reach executor.
+    let record = base_record_from_authorized(&authorized, verb.as_str(), false, "planned", true);
+    let _ = persist_terminal(&state_home, &record);
+
     if explain {
         sink.emit_explanation_with_policy(
             verb.as_str(),
@@ -193,6 +320,300 @@ pub(crate) fn run_lifecycle_with_executor(
         )
         .map_err(|e| ControllerError::internal(e.to_string()))
     }
+}
+
+fn dirs_home() -> Option<&'static Path> {
+    // ponytail: resolve once via HOME; tests inject state roots via CLI/env.
+    static HOME: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
+    let home = HOME.get_or_init(|| std::env::var_os("HOME").map(PathBuf::from));
+    home.as_deref()
+}
+
+fn profile_compressor(profile: &crate::registry::ProfileRecord) -> String {
+    profile
+        .rest
+        .get("output_compressor")
+        .and_then(|v| v.as_str())
+        .unwrap_or("none")
+        .to_string()
+}
+
+fn persist_terminal(
+    state_home: &Path,
+    record: &RuntimeCommandRecord,
+) -> Result<(), ControllerError> {
+    ensure_state_home(state_home).map_err(|e| ControllerError::StateIo {
+        message: e.to_string(),
+        code: "state_io".into(),
+    })?;
+    let store = CommandRecordStore::open(state_home).map_err(|e| ControllerError::StateIo {
+        message: e.to_string(),
+        code: e.code().into(),
+    })?;
+    store
+        .write_terminal_unlocked(record)
+        .map_err(|e| ControllerError::StateIo {
+            message: e.to_string(),
+            code: e.code().into(),
+        })
+}
+
+fn request_flags(explain: bool, execute: bool) -> Vec<String> {
+    let mut flags = Vec::new();
+    if explain {
+        flags.push("--explain".into());
+    }
+    if execute {
+        flags.push("--execute".into());
+    }
+    flags
+}
+
+fn empty_output() -> OutputSummary {
+    OutputSummary {
+        stdout_bytes: 0,
+        stderr_bytes: 0,
+        truncated: false,
+        encoding: "utf-8".into(),
+        compressor: "none".into(),
+    }
+}
+
+fn runtime_context_now() -> (
+    Option<crate::contracts::RuntimeContext>,
+    Option<crate::contracts::DiagnosticRecord>,
+) {
+    let herdr_workspace_id = std::env::var("HERDR_WORKSPACE_ID").ok();
+    let herdr_tab_id = std::env::var("HERDR_TAB_ID").ok();
+    let herdr_pane_id = std::env::var("HERDR_PANE_ID").ok();
+    let tmux = std::env::var("TMUX").ok();
+    let tmux_pane = std::env::var("TMUX_PANE").ok();
+    collect_runtime_context(RuntimeContextEnv {
+        herdr_workspace_id: herdr_workspace_id.as_deref(),
+        herdr_tab_id: herdr_tab_id.as_deref(),
+        herdr_pane_id: herdr_pane_id.as_deref(),
+        tmux: tmux.as_deref(),
+        tmux_pane: tmux_pane.as_deref(),
+    })
+}
+
+fn base_record_from_authorized(
+    authorized: &crate::policy::AuthorizedExecutionPlan,
+    command: &str,
+    execute: bool,
+    outcome: &str,
+    include_resolution: bool,
+) -> RuntimeCommandRecord {
+    let plan = authorized.plan();
+    let resolved = plan.resolved();
+    let (runtime_context, _) = runtime_context_now();
+    let ended = outcome != "pending";
+    RuntimeCommandRecord {
+        schema_version: SCHEMA_VERSION.into(),
+        record_kind: RECORD_KIND_COMMAND_EXECUTION.into(),
+        session_id: resolved.session_id.clone(),
+        plan_digest: plan.plan_digest().to_string(),
+        parent_session_id: None,
+        work_session_id: None,
+        runtime_context,
+        started_at: utc_now_rfc3339(),
+        ended_at: ended.then(utc_now_rfc3339),
+        actor: "agent".into(),
+        profile_id: resolved.profile_id.clone(),
+        request: RequestRecord {
+            command: command.into(),
+            unit_id: Some(resolved.unit_id.clone()),
+            verb: Some(resolved.verb.clone()),
+            flags: request_flags(authorized.request().explain_requested, execute),
+        },
+        resolution: include_resolution.then(|| resolved.clone()),
+        policy_decision: authorized.policy_decision().clone(),
+        execution: ExecutionRecord {
+            started: false,
+            pid: None,
+            exit_code: None,
+            signal: None,
+            outcome: outcome.into(),
+        },
+        source_fingerprints: resolved.registry_generation.source_fingerprints.clone(),
+        output_summary: empty_output(),
+        error: None,
+    }
+}
+
+fn base_record_from_rejected(
+    rejected: &crate::policy::RejectedPolicyOutcome,
+    command: &str,
+    execute: bool,
+    outcome: &str,
+) -> RuntimeCommandRecord {
+    let plan = rejected.plan();
+    let resolved = plan.resolved();
+    let (runtime_context, _) = runtime_context_now();
+    RuntimeCommandRecord {
+        schema_version: SCHEMA_VERSION.into(),
+        record_kind: RECORD_KIND_COMMAND_EXECUTION.into(),
+        session_id: resolved.session_id.clone(),
+        plan_digest: plan.plan_digest().to_string(),
+        parent_session_id: None,
+        work_session_id: None,
+        runtime_context,
+        started_at: utc_now_rfc3339(),
+        ended_at: Some(utc_now_rfc3339()),
+        actor: "agent".into(),
+        profile_id: resolved.profile_id.clone(),
+        request: RequestRecord {
+            command: command.into(),
+            unit_id: Some(resolved.unit_id.clone()),
+            verb: Some(resolved.verb.clone()),
+            flags: request_flags(false, execute || rejected.execution_requested()),
+        },
+        resolution: None,
+        policy_decision: rejected.decision().clone(),
+        execution: ExecutionRecord {
+            started: false,
+            pid: None,
+            exit_code: None,
+            signal: None,
+            outcome: outcome.into(),
+        },
+        source_fingerprints: resolved.registry_generation.source_fingerprints.clone(),
+        output_summary: empty_output(),
+        error: Some(crate::contracts::DiagnosticRecord {
+            code: if outcome == "denied" {
+                "policy_deny".into()
+            } else {
+                "policy_gate".into()
+            },
+            message: match rejected.decision() {
+                PolicyDecision::Deny { reason, .. } | PolicyDecision::Gate { reason, .. } => {
+                    reason.clone()
+                }
+                PolicyDecision::Allow { .. } => "unexpected".into(),
+            },
+        }),
+    }
+}
+
+fn merge_encoding(a: &str, b: &str) -> String {
+    for candidate in ["binary", "lossy-utf-8", "utf-8"] {
+        if a == candidate || b == candidate {
+            return candidate.into();
+        }
+    }
+    "utf-8".into()
+}
+
+fn run_session(
+    sink: &OutputSink,
+    sub: &SessionCommand,
+    cli_state_home: Option<&Path>,
+    cli_profile: Option<&str>,
+) -> Result<u8, ControllerError> {
+    let access = access()?;
+    let profiles = access.load_profiles().ok();
+    let profile_home = profiles.as_ref().and_then(|doc| {
+        let id = cli_profile
+            .map(str::to_string)
+            .or_else(|| std::env::var("TAKOGAMI_PROFILE").ok())
+            .or_else(|| {
+                doc.profiles
+                    .iter()
+                    .find(|p| p.id == "workspace-dev")
+                    .map(|p| p.id.clone())
+            });
+        id.and_then(|want| {
+            doc.profiles
+                .iter()
+                .find(|p| p.id == want)
+                .and_then(|p| p.session_state_home.clone())
+        })
+    });
+    let env_state = std::env::var("TAKOGAMI_STATE_HOME").ok();
+    let env_xdg = std::env::var("XDG_STATE_HOME").ok();
+    let state_home = resolve_session_state_home(StateHomeInputs {
+        cli_state_home,
+        env_takogami_state_home: env_state.as_deref(),
+        profile_session_state_home: profile_home.as_deref(),
+        env_xdg_state_home: env_xdg.as_deref(),
+        home_dir: dirs_home(),
+    });
+    let store = CommandRecordStore::open(&state_home).map_err(|e| ControllerError::StateIo {
+        message: e.to_string(),
+        code: e.code().into(),
+    })?;
+
+    match sub {
+        SessionCommand::List { limit } => {
+            let (rows, diagnostics) = list_sessions(&store, *limit).map_err(|e| match e {
+                crate::sessions::SessionStoreError::Contract(msg) => ControllerError::usage(msg),
+                other => ControllerError::StateIo {
+                    message: other.to_string(),
+                    code: other.code().into(),
+                },
+            })?;
+            let data = serde_json::json!({
+                "count": rows.len(),
+                "records": rows,
+                "diagnostics": diagnostics.skipped,
+            });
+            let mut human = vec![format!(
+                "Record kind: command_execution (count: {})",
+                rows.len()
+            )];
+            for row in &rows {
+                human.push(format!(
+                    "Session ID: {}  Execution outcome: {}",
+                    row.session_id, row.outcome
+                ));
+            }
+            sink.emit_success("session", data, None, &human)
+                .map_err(|e| ControllerError::internal(e.to_string()))
+        }
+        SessionCommand::Show { session_id } => {
+            let record = show_session(&store, session_id).map_err(|e| match e {
+                crate::sessions::SessionStoreError::InvalidSessionId => {
+                    ControllerError::usage("invalid session id")
+                }
+                crate::sessions::SessionStoreError::NotFound(id) => {
+                    ControllerError::not_found(format!("session {id}"))
+                }
+                crate::sessions::SessionStoreError::Contract(msg) => ControllerError::contract(msg),
+                other => ControllerError::StateIo {
+                    message: other.to_string(),
+                    code: other.code().into(),
+                },
+            })?;
+            emit_session_record(sink, &record)
+        }
+        SessionCommand::Latest => {
+            let record = show_latest(&store).map_err(|e| match e {
+                crate::sessions::SessionStoreError::NotFound(_) => {
+                    ControllerError::not_found("no command execution records")
+                }
+                other => ControllerError::StateIo {
+                    message: other.to_string(),
+                    code: other.code().into(),
+                },
+            })?;
+            emit_session_record(sink, &record)
+        }
+    }
+}
+
+fn emit_session_record(
+    sink: &OutputSink,
+    record: &RuntimeCommandRecord,
+) -> Result<u8, ControllerError> {
+    let data =
+        serde_json::to_value(record).map_err(|e| ControllerError::internal(e.to_string()))?;
+    let human = vec![
+        format!("Record kind: {}", record.record_kind),
+        format!("Session ID: {}", record.session_id),
+        format!("Execution outcome: {}", record.execution.outcome),
+    ];
+    sink.emit_success("session", data, None, &human)
+        .map_err(|e| ControllerError::internal(e.to_string()))
 }
 
 fn access() -> Result<RegistryAccess, ControllerError> {
@@ -480,18 +901,19 @@ fn writeln_human(line: &str) -> Result<(), ControllerError> {
 mod tests {
     use super::*;
     use crate::contracts::{RegistryGeneration, fingerprint_file};
+    use crate::execution::{SpyExecutor, UnavailableExecutor};
     use crate::exit_codes::{
         CONTRACT, NOT_IMPLEMENTED, POLICY_DENY, POLICY_GATE, RESOLUTION, SUCCESS,
     };
-    use crate::output::OutputSink;
-    use crate::policy::{Executor, ExecutorResult, SpyExecutor};
     use crate::resolution::LifecycleVerb;
-    use std::cell::Cell;
     use std::fs;
     use std::path::{Path, PathBuf};
-    use std::sync::Mutex;
+    use std::sync::{Mutex, OnceLock};
 
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
+    fn env_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
 
     struct Fixture {
         _temp: tempfile::TempDir,
@@ -499,101 +921,91 @@ mod tests {
         registry: PathBuf,
         path_dir: PathBuf,
         marker: PathBuf,
-        _env_guard: std::sync::MutexGuard<'static, ()>,
+        state_home: PathBuf,
+        _guard: std::sync::MutexGuard<'static, ()>,
     }
 
     impl Fixture {
         fn new() -> Self {
-            let env_guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            let guard = env_lock().lock().unwrap();
+            let fixture =
+                PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/resolution");
             let temp = tempfile::tempdir().unwrap();
             let workspace = temp.path().join("ws");
-            let registry = workspace.join("registry");
+            let state_home = temp.path().join("state");
             fs::create_dir_all(&workspace).unwrap();
-            copy_tree(
-                &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/resolution"),
-                &workspace,
-            );
-
+            fs::create_dir_all(&state_home).unwrap();
+            copy_tree(&fixture, &workspace);
             let path_dir = workspace.join("bin");
             fs::create_dir_all(&path_dir).unwrap();
-            let marker = workspace.join("MARKER_RAN");
-            for name in ["moon", "demo-bin", "rg", "git", "pass", "ontarch"] {
+            let marker = temp.path().join("marker");
+            for name in ["moon", "demo-bin", "rg", "ontarch", "rm"] {
                 write_marker_exe(&path_dir.join(name), &marker);
             }
-
-            let mut fx = Self {
+            let registry = workspace.join("registry");
+            let fx = Self {
                 _temp: temp,
                 workspace: workspace.clone(),
                 registry,
                 path_dir: path_dir.clone(),
                 marker,
-                _env_guard: env_guard,
+                state_home: state_home.clone(),
+                _guard: guard,
             };
             fx.write_hit_units();
-            // Serialized by ENV_LOCK — no concurrent env mutation in these tests.
             unsafe {
-                std::env::set_var("TAKOGAMI_ONTARCH_REGISTRY", &fx.registry);
-                std::env::set_var("TAKOGAMI_WORKSPACE_ROOT", &fx.workspace);
-                std::env::set_var("PATH", &fx.path_dir);
+                std::env::set_var(
+                    "TAKOGAMI_ONTARCH_REGISTRY",
+                    fx.registry.display().to_string(),
+                );
+                std::env::set_var(
+                    "TAKOGAMI_WORKSPACE_ROOT",
+                    fx.workspace.display().to_string(),
+                );
+                std::env::set_var("PATH", fx.path_dir.display().to_string());
+                std::env::set_var("TAKOGAMI_STATE_HOME", fx.state_home.display().to_string());
                 std::env::remove_var("TAKOGAMI_PROFILE");
             }
             fx
         }
 
-        fn write_hit_units(&mut self) {
-            let descs = self
-                .registry
-                .join("sources/descriptors")
-                .read_dir()
-                .unwrap()
-                .filter_map(|e| e.ok())
-                .map(|e| e.path())
-                .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("toml"))
-                .collect::<Vec<_>>();
-
+        fn write_hit_units(&self) {
+            let desc_dir = self.registry.join("sources/descriptors");
             let mut fps = Vec::new();
             let mut units = Vec::new();
-            for path in &descs {
+            for entry in fs::read_dir(&desc_dir).unwrap() {
+                let path = entry.unwrap().path();
+                if path.extension().and_then(|e| e.to_str()) != Some("toml") {
+                    continue;
+                }
+                let authored: toml::Value =
+                    toml::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+                let id = authored["id"].as_str().unwrap().to_string();
                 let rel = format!(
                     "registry/sources/descriptors/{}",
                     path.file_name().unwrap().to_string_lossy()
                 );
-                let abs = self.workspace.join(&rel);
-                fps.push(fingerprint_file(&abs, &rel).unwrap());
-                let text = fs::read_to_string(path).unwrap();
-                let authored: toml::Value = toml::from_str(&text).unwrap();
-                let id = authored["id"].as_str().unwrap().to_string();
-                let entrypoints = authored
-                    .get("entrypoints")
-                    .cloned()
-                    .unwrap_or(toml::Value::Table(Default::default()));
-                let entrypoints_json: serde_json::Value =
-                    serde_json::to_value(&entrypoints).unwrap();
-                let native = authored
-                    .get("native")
-                    .and_then(|n| n.get("manifests"))
-                    .cloned()
-                    .unwrap_or(toml::Value::Array(vec![]));
-                let native_json: serde_json::Value = serde_json::to_value(&native).unwrap();
-                let root = authored
-                    .get("paths")
-                    .and_then(|p| p.get("root"))
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("demo");
+                fps.push(fingerprint_file(&self.workspace.join(&rel), &rel).unwrap());
+                let entrypoints: serde_json::Value =
+                    serde_json::to_value(authored.get("entrypoints").unwrap()).unwrap();
+                let native: serde_json::Value = serde_json::to_value(
+                    authored
+                        .get("native")
+                        .and_then(|n| n.get("manifests"))
+                        .unwrap_or(&toml::Value::Array(vec![])),
+                )
+                .unwrap();
                 units.push(serde_json::json!({
                     "id": id,
                     "kind": "package",
-                    "title": id,
-                    "status": "active",
-                    "path": root,
-                    "native_manifests": native_json,
-                    "entrypoints": entrypoints_json,
+                    "path": id,
+                    "native_manifests": native,
+                    "entrypoints": entrypoints,
                     "source": "central",
                     "provides": [],
                     "requires": [],
                 }));
             }
-
             let meta = RegistryGeneration {
                 generated_at: "2026-07-21T00:00:00Z".into(),
                 source_fingerprints: fps,
@@ -695,7 +1107,7 @@ adapter = "direct""#,
         }
     }
 
-    fn run_with_executor(
+    async fn run_with_executor(
         unit: &str,
         execute: bool,
         profile: Option<&str>,
@@ -715,77 +1127,82 @@ adapter = "direct""#,
             None,
             executor,
         )
+        .await
     }
 
-    fn run(
+    async fn run(
         unit: &str,
         execute: bool,
         profile: Option<&str>,
         spy: &SpyExecutor,
     ) -> Result<u8, ControllerError> {
-        run_with_executor(unit, execute, profile, spy)
+        run_with_executor(unit, execute, profile, spy).await
     }
 
     #[derive(Default)]
     struct RecordingUnavailableExecutor {
-        calls: Cell<u32>,
+        calls: std::sync::atomic::AtomicU32,
     }
 
+    #[async_trait::async_trait]
     impl Executor for RecordingUnavailableExecutor {
-        fn execute(&self, _plan: &crate::policy::AuthorizedExecutionPlan) -> ExecutorResult {
-            self.calls.set(self.calls.get() + 1);
-            ExecutorResult::Unavailable
+        async fn execute(
+            &self,
+            plan: &crate::policy::AuthorizedExecutionPlan,
+            options: &crate::execution::ExecutionOptions,
+        ) -> crate::execution::ExecutionReport {
+            self.calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            UnavailableExecutor.execute(plan, options).await
         }
     }
 
-    #[test]
-    fn allow_execute_invokes_spy_once() {
+    #[tokio::test]
+    async fn allow_execute_invokes_spy_once() {
         let fx = Fixture::new();
         let spy = SpyExecutor::default();
-        let code = run("demo", true, None, &spy).expect("lifecycle");
+        let code = run("demo", true, None, &spy).await.expect("lifecycle");
         assert_eq!(code, NOT_IMPLEMENTED);
         assert_eq!(spy.calls.get(), 1);
         fx.assert_marker_untouched();
     }
 
-    #[test]
-    fn plan_only_never_invokes_spy() {
+    #[tokio::test]
+    async fn plan_only_never_invokes_spy() {
         let fx = Fixture::new();
         let spy = SpyExecutor::default();
-        let code = run("demo", false, None, &spy).expect("lifecycle");
+        let code = run("demo", false, None, &spy).await.expect("lifecycle");
         assert_eq!(code, SUCCESS);
         assert_eq!(spy.calls.get(), 0);
         fx.assert_marker_untouched();
     }
 
-    #[test]
-    fn gate_with_execute_never_invokes_spy() {
+    #[tokio::test]
+    async fn gate_with_execute_never_invokes_spy() {
         let mut fx = Fixture::new();
         fx.patch_demo_gated();
         let spy = SpyExecutor::default();
-        let code = run("demo", true, None, &spy).expect("lifecycle");
+        let code = run("demo", true, None, &spy).await.expect("lifecycle");
         assert_eq!(code, POLICY_GATE);
         assert_eq!(spy.calls.get(), 0);
         fx.assert_marker_untouched();
     }
 
-    #[test]
-    fn request_gate_and_deny_never_invoke_spy() {
+    #[tokio::test]
+    async fn request_gate_and_deny_never_invoke_spy() {
         for (effect, expected) in [("gate", POLICY_GATE), ("block", POLICY_DENY)] {
             let fx = Fixture::new();
             fx.patch_request_policy(effect);
             let spy = SpyExecutor::default();
-            let code = run("demo", true, None, &spy).expect("lifecycle");
+            let code = run("demo", true, None, &spy).await.expect("lifecycle");
             assert_eq!(code, expected, "effect={effect}");
             assert_eq!(spy.calls.get(), 0, "effect={effect}");
             fx.assert_marker_untouched();
         }
     }
 
-    #[test]
-    fn deny_with_execute_never_invokes_spy() {
-        let mut fx = Fixture::new();
-        // Force a hard deny via blocked `rm` child (alt-profile path allow no longer denies demo-bin).
+    #[tokio::test]
+    async fn deny_with_execute_never_invokes_spy() {
+        let fx = Fixture::new();
         let path = fx.registry.join("sources/descriptors/demo.descriptor.toml");
         let text = fs::read_to_string(&path).unwrap().replace(
             r#"program = "moon"
@@ -806,46 +1223,53 @@ adapter = "direct""#,
         write_marker_exe(&fx.path_dir.join("rm"), &fx.marker);
 
         let spy = SpyExecutor::default();
-        let code = run("demo", true, None, &spy).expect("lifecycle");
+        let code = run("demo", true, None, &spy).await.expect("lifecycle");
         assert_eq!(code, POLICY_DENY);
         assert_eq!(spy.calls.get(), 0);
         fx.assert_marker_untouched();
     }
 
-    #[test]
-    fn resolution_and_policy_contract_failures_never_invoke_spy() {
+    #[tokio::test]
+    async fn resolution_and_policy_contract_failures_never_invoke_spy() {
         let fx = Fixture::new();
         let spy = SpyExecutor::default();
-        let code = run("missing-unit", true, None, &spy).expect("resolution envelope");
+        let code = run("missing-unit", true, None, &spy)
+            .await
+            .expect("resolution envelope");
         assert_eq!(code, RESOLUTION);
         assert_eq!(spy.calls.get(), 0);
         fx.assert_marker_untouched();
 
         fx.patch_policy_contract_invalid();
-        let code = run("demo", true, None, &spy).expect("contract envelope");
+        let code = run("demo", true, None, &spy)
+            .await
+            .expect("contract envelope");
         assert_eq!(code, CONTRACT);
         assert_eq!(spy.calls.get(), 0);
         fx.assert_marker_untouched();
     }
 
-    #[test]
-    fn execution_class_unavailable_never_invokes_spy() {
+    #[tokio::test]
+    async fn execution_class_unavailable_never_invokes_spy() {
         let fx = Fixture::new();
         let spy = SpyExecutor::default();
-        let code = run("interactive-demo", true, None, &spy).expect("class envelope");
+        let code = run("interactive-demo", true, None, &spy)
+            .await
+            .expect("class envelope");
         assert_eq!(code, NOT_IMPLEMENTED);
         assert_eq!(spy.calls.get(), 0);
         fx.assert_marker_untouched();
     }
 
-    #[test]
-    fn unavailable_executor_is_invoked_once_after_dual_allow() {
+    #[tokio::test]
+    async fn unavailable_executor_is_invoked_once_after_dual_allow() {
         let fx = Fixture::new();
         let executor = RecordingUnavailableExecutor::default();
         let code = run_with_executor("demo", true, None, &executor)
+            .await
             .expect("execution-unavailable envelope");
         assert_eq!(code, NOT_IMPLEMENTED);
-        assert_eq!(executor.calls.get(), 1);
+        assert_eq!(executor.calls.load(std::sync::atomic::Ordering::SeqCst), 1);
         fx.assert_marker_untouched();
     }
 }

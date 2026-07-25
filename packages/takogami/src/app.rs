@@ -76,7 +76,9 @@ async fn dispatch(session: TakogamiSession) -> AppResult<ControllerError> {
             &sink,
             session.cli.state_home.as_deref(),
             session.cli.profile.as_deref(),
-        ) {
+        )
+        .await
+        {
             Ok(code) => Ok(Some(code)),
             Err(error) => {
                 let code = sink

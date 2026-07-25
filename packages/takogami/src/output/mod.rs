@@ -1,10 +1,14 @@
 mod envelope;
+mod rtk;
 
 pub use crate::contracts::{CommandEnvelope, DiagnosticRecord, EnvelopeMetrics};
 pub use envelope::emit_json;
+pub use rtk::{RtkResult, apply_rtk_if_eligible};
 
+use crate::contracts::types::RuntimeCommandRecord;
 use crate::doctor::DoctorReport;
 use crate::error::ControllerError;
+use crate::execution::ExecutionReport;
 use crate::policy::{
     AuthorizedExecutionPlan, PolicyEvaluationExplanation, RejectedPolicyOutcome,
     render_human_policy_section, render_human_policy_summary,
@@ -435,6 +439,102 @@ impl OutputSink {
             }
         }
         Ok(code)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn emit_executed(
+        &self,
+        command: &str,
+        authorized: &AuthorizedExecutionPlan,
+        explanation: &ResolutionExplanation,
+        freshness: Freshness,
+        report: &ExecutionReport,
+        record: &RuntimeCommandRecord,
+    ) -> io::Result<u8> {
+        let plan = authorized.plan();
+        let policy_decision = authorized.policy_decision();
+        let policy_explanation = authorized.policy_explanation();
+        let exit = match report.outcome.as_str() {
+            "completed" => report.exit_code.unwrap_or(1),
+            "interrupted" => report
+                .signal
+                .as_deref()
+                .map(crate::exit_codes::exit_from_signal_name)
+                .unwrap_or(128),
+            "failed_to_spawn" => crate::exit_codes::EXECUTION_IO,
+            _ if report.spawned => report.exit_code.unwrap_or(crate::exit_codes::EXECUTION_IO),
+            _ => crate::exit_codes::EXECUTION_IO,
+        };
+        let status = if exit == 0 { "ok" } else { "error" };
+
+        if self.json {
+            let encoding =
+                if report.stdout.encoding == "binary" || report.stderr.encoding == "binary" {
+                    "binary"
+                } else if report.stdout.encoding == "lossy-utf-8"
+                    || report.stderr.encoding == "lossy-utf-8"
+                {
+                    "lossy-utf-8"
+                } else {
+                    "utf-8"
+                };
+            let data = serde_json::json!({
+                "mode": "executed",
+                "plan_digest": plan.plan_digest(),
+                "resolved_command": plan.resolved(),
+                "policy_decision": policy_decision,
+                "policy": {
+                    "request": policy_explanation.request,
+                    "child": policy_explanation.child,
+                    "execution_authorized": true,
+                    "approval_transport": policy_explanation.approval_transport,
+                },
+                "execution_authorized": true,
+                "execution_requested": true,
+                "execution": {
+                    "started": report.spawned,
+                    "pid": report.pid,
+                    "outcome": report.outcome,
+                    "exit_code": report.exit_code,
+                    "signal": report.signal,
+                },
+                "record": {
+                    "record_kind": record.record_kind,
+                    "session_id": record.session_id,
+                },
+            });
+            let mut envelope = CommandEnvelope {
+                schema_version: crate::contracts::SCHEMA_VERSION.into(),
+                command: command.into(),
+                session_id: Some(plan.resolved().session_id.clone()),
+                status: status.into(),
+                exit_code: exit,
+                data: Some(data),
+                explanation: None,
+                diagnostics: report.diagnostics.clone(),
+                child: Some(crate::contracts::ChildOutput {
+                    stdout: report.stdout.text.clone(),
+                    stderr: report.stderr.text.clone(),
+                    truncated: report.stdout.truncated || report.stderr.truncated,
+                    encoding: encoding.into(),
+                }),
+                metrics: Some(EnvelopeMetrics {
+                    registry_cache: freshness.as_str().into(),
+                    output_bytes: report.emitted_output_bytes,
+                    compressor: report.compressor.clone(),
+                    gain: report.gain,
+                }),
+            };
+            let _ = explanation;
+            emit_json(&envelope)?;
+            let _ = &mut envelope;
+        } else {
+            // Human mode already streamed child bytes (or RTK-processed).
+            for diag in &report.diagnostics {
+                writeln!(io::stderr(), "takogami: {}: {}", diag.code, diag.message)?;
+            }
+        }
+        Ok(exit)
     }
 
     pub fn emit_doctor(&self, report: &DoctorReport) -> io::Result<u8> {

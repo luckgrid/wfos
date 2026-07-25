@@ -1,6 +1,7 @@
 use crate::contracts::PolicyDecision;
 use crate::exit_codes::{
-    CONTRACT, INTERNAL, NOT_IMPLEMENTED, POLICY_DENY, POLICY_GATE, RESOLUTION, USAGE,
+    CONTRACT, EXECUTION_IO, INTERNAL, NOT_IMPLEMENTED, POLICY_DENY, POLICY_GATE, RESOLUTION,
+    STATE_IO, USAGE,
 };
 use crate::policy::{
     AuthorizedExecutionPlan, PolicyContractError, PolicyEvaluationExplanation,
@@ -164,6 +165,14 @@ pub enum ControllerError {
         details: Box<ExecutionDeferredDetails>,
     },
 
+    #[error("state I/O error: {message}")]
+    #[diagnostic(code(takogami::state_io))]
+    StateIo { message: String, code: String },
+
+    #[error("execution I/O error: {message}")]
+    #[diagnostic(code(takogami::execution_io))]
+    ExecutionIo { message: String, code: String },
+
     #[error("internal error: {message}")]
     #[diagnostic(code(takogami::internal))]
     Internal { message: String },
@@ -286,6 +295,8 @@ impl ControllerError {
             Self::Resolution { .. } => RESOLUTION,
             Self::PolicyDeny { .. } => POLICY_DENY,
             Self::PolicyGate { .. } => POLICY_GATE,
+            Self::StateIo { .. } => STATE_IO,
+            Self::ExecutionIo { .. } => EXECUTION_IO,
             Self::UnavailableSource { .. } | Self::Internal { .. } => INTERNAL,
         }
     }
@@ -306,6 +317,8 @@ impl ControllerError {
             Self::PolicyGate { .. } => "policy_gate",
             Self::ExecutionUnavailable { .. } => "execution_unavailable",
             Self::ExecutionClassUnavailable { .. } => "execution_class_unavailable",
+            Self::StateIo { code, .. } => code.as_str(),
+            Self::ExecutionIo { code, .. } => code.as_str(),
             Self::Internal { .. } => "internal",
         }
     }

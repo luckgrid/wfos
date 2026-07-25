@@ -1,47 +1,9 @@
-//! Executor seam for evaluator-authorized plans (no production spawn in S5).
+//! Policy-facing re-exports of the execution seam (spawn-free in this module).
 
-use super::evaluate::AuthorizedExecutionPlan;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ExecutorResult {
-    Unavailable,
-    /// Test-only sentinel.
-    SpyReached,
-}
-
-pub trait Executor {
-    fn execute(&self, plan: &AuthorizedExecutionPlan) -> ExecutorResult;
-}
-
-/// Production S5 executor — never starts a child.
-#[derive(Debug, Default, Clone, Copy)]
-pub struct UnavailableExecutor;
-
-impl Executor for UnavailableExecutor {
-    fn execute(&self, _plan: &AuthorizedExecutionPlan) -> ExecutorResult {
-        ExecutorResult::Unavailable
-    }
-}
-
-/// Test spy that counts how many times it was reached.
-#[derive(Debug, Default)]
-pub struct SpyExecutor {
-    pub calls: std::cell::Cell<u32>,
-}
-
-impl Executor for SpyExecutor {
-    fn execute(&self, _plan: &AuthorizedExecutionPlan) -> ExecutorResult {
-        self.calls.set(self.calls.get() + 1);
-        ExecutorResult::SpyReached
-    }
-}
-
-impl SpyExecutor {
-    /// Convenience: whether the spy has been invoked at least once.
-    pub fn reached(&self) -> bool {
-        self.calls.get() > 0
-    }
-}
+pub use crate::execution::{
+    ExecutionMode, ExecutionOptions, ExecutionReport, Executor, SpyExecutor, TokioExecutor,
+    UnavailableExecutor,
+};
 
 #[cfg(test)]
 mod tests {
@@ -61,15 +23,13 @@ mod tests {
 
     #[test]
     fn spy_records_reachability() {
-        // AuthorizedExecutionPlan construction and its proof are private to evaluate.rs.
-        // Gate/Deny cannot be wrapped into an AuthorizedExecutionPlan from the public API.
         let spy = SpyExecutor::default();
         assert_eq!(spy.calls.get(), 0);
         assert!(!spy.reached());
     }
 
-    #[test]
-    fn spy_execute_increments_call_count() {
+    #[tokio::test]
+    async fn spy_execute_increments_call_count() {
         let handoff = resolve_demo_handoff();
         let result = evaluate_policy(&handoff.input);
         let PolicyEvaluationResult::Authorized(plan) = result else {
@@ -84,10 +44,16 @@ mod tests {
         );
         let spy = SpyExecutor::default();
         assert_eq!(spy.calls.get(), 0);
-        assert_eq!(spy.execute(&plan), ExecutorResult::SpyReached);
+        let options = ExecutionOptions {
+            mode: ExecutionMode::Json,
+            limits: Default::default(),
+        };
+        let report = spy.execute(&plan, &options).await;
+        assert_eq!(report.outcome, "spy_reached");
+        assert!(!report.spawned);
         assert_eq!(spy.calls.get(), 1);
         assert!(spy.reached());
-        let _ = spy.execute(&plan);
+        let _ = spy.execute(&plan, &options).await;
         assert_eq!(spy.calls.get(), 2);
     }
 

@@ -5,7 +5,7 @@ use std::process::{Command, Output};
 use takogami::contracts::{
     RegistryGeneration, SourceFingerprint, fingerprint_bytes, fingerprint_file,
 };
-use takogami::exit_codes::{INTERNAL, NOT_IMPLEMENTED, SUCCESS, USAGE};
+use takogami::exit_codes::{INTERNAL, SUCCESS, USAGE};
 
 fn bin() -> Command {
     Command::new(env!("CARGO_BIN_EXE_takogami"))
@@ -135,12 +135,21 @@ fn unknown_command_fails_without_panic() {
 }
 
 #[test]
-fn session_list_still_not_implemented() {
-    let output = run(&["session", "list", "--json"]);
-    assert_eq!(output.status.code(), Some(i32::from(NOT_IMPLEMENTED)));
+fn session_list_is_implemented() {
+    let temp = tempfile::tempdir().unwrap();
+    let state = temp.path().join("sessions");
+    let output = run(&[
+        "--json",
+        "--state-home",
+        state.to_str().unwrap(),
+        "session",
+        "list",
+    ]);
+    assert_eq!(output.status.code(), Some(i32::from(SUCCESS)));
     let value: Value = serde_json::from_str(stdout(&output).trim()).expect("json");
     assert_eq!(value["command"], "session");
-    assert_eq!(value["diagnostics"][0]["code"], "not_implemented");
+    assert_eq!(value["status"], "ok");
+    assert_eq!(value["data"]["count"], 0);
 }
 
 #[test]

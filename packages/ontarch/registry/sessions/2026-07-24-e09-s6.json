@@ -1,0 +1,71 @@
+{
+  "session_id": "2026-07-24-e09-s6",
+  "epic": "E09",
+  "story": "S6",
+  "title": "Command records, native execution, structured output, and RTK",
+  "status": "done",
+  "started_at": "2026-07-25T00:15:00Z",
+  "ended_at": "2026-07-25T01:30:00Z",
+  "baseline": {
+    "wfos": "3298d0ec146cc5229159d91d6368e8582057a9f2",
+    "note": "Pinned S5.2 handoff; rustfmt-only evaluate.rs touch cleared format gate before S6 spawn code"
+  },
+  "changed_paths": [
+    "Cargo.lock",
+    "docs/runtime-controller.md",
+    "packages/ontarch/schemas/runtime-command-record.schema.json",
+    "packages/ontarch/registry/sessions/2026-07-24-e09-s6.json",
+    "packages/takogami/Cargo.toml",
+    "packages/takogami/README.md",
+    "packages/takogami/src/app.rs",
+    "packages/takogami/src/cli/mod.rs",
+    "packages/takogami/src/commands.rs",
+    "packages/takogami/src/contracts/",
+    "packages/takogami/src/error.rs",
+    "packages/takogami/src/execution/",
+    "packages/takogami/src/exit_codes.rs",
+    "packages/takogami/src/lib.rs",
+    "packages/takogami/src/output/",
+    "packages/takogami/src/policy/authorize.rs",
+    "packages/takogami/src/policy/evaluate.rs",
+    "packages/takogami/src/policy/mod.rs",
+    "packages/takogami/src/policy/paths.rs",
+    "packages/takogami/src/sessions/",
+    "packages/takogami/tests/",
+    "Build/bin/wfos/SESSIONS.md",
+    "Build/bin/wfos/STATE.md"
+  ],
+  "outcome": "E09.S6 lands the first production direct-process path. Only evaluator-created AuthorizedExecutionPlan reaches TokioExecutor. Durable pending command_execution records precede spawn; Gate/Deny/planned/unavailable write finals without PID and omit rejected resolution. Child env uses env_clear plus sealed non-sensitive keys; argv is literal; stdout/stderr stay independent; Unix process-group signal forward/escalate; native exits pass through; JSON capture is bounded one-document; session list/show/latest query operational records only. RTK is optional human postprocessing via capability-checked rtk pipe with byte-exact raw fallback; JSON never invokes RTK.",
+  "validation": "PASS with pinned toolchain (rustc/cargo 1.96.0, moon 2.3.2): moon run takogami:build|test|lint|format-check; ontarch:sync|validate; panoply:gen-check|validate-substrate; git diff --check clean; no sh -c/bash -c spawn paths. Takogami tests: lib 116 + cli_smoke 17 + contracts_roundtrip 17 + execution_cli 7 + policy_cli 17 + resolution_cli 27 + session_cli 6 + session_store 12 = 219. Schema version 0.1.0 remains first persisted MVP baseline with required plan_digest and closed request/policy/resolution shapes.",
+  "decisions": [
+    "Pending record durability is the commit point for process execution; pending write failure means no spawn.",
+    "Record coverage starts only after resolution + public Allow/Gate/Deny; resolution/contract failures stay envelope-only.",
+    "Gate/Deny records omit resolution so rejected argv never persists.",
+    "Tokio features process/signal/io-util/io-std/sync/time enabled; fs2 for advisory locks; libc for process-group kill.",
+    "RTK never replaces or re-runs the authorized child; separate stdout/stderr pipe invocations; raw fallback when larger/failed/unavailable/unsupported.",
+    "Historical S2–S5.2 session records left unchanged; secrets-scan historical finding preserved and excluded from S6 gates."
+  ],
+  "evidence": {
+    "tool_versions": {
+      "rustc": "1.96.0 (ac68faa20 2026-05-25)",
+      "cargo": "1.96.0 (30a34c682 2026-05-25)",
+      "moon": "2.3.2"
+    },
+    "platforms": ["macos-aarch64"],
+    "rtk": {
+      "role": "optional postprocessor",
+      "json": "disabled / never invoked",
+      "fallback": "byte-exact raw on unavailable/unsupported/failed/larger output",
+      "unit_proof": "output::rtk::tests::json_never_invokes_mapping_side_effects"
+    },
+    "no_spawn": [
+      "Gate/Deny/request Gate/Deny/policy contract/resolution failure/interactive class/pending-write failure → executor call count 0"
+    ]
+  },
+  "next": "E09.S7",
+  "handoff": "E09.S7 receives stable direct executor, atomic command-record store, session queries, executed envelopes, and optional RTK semantics. Do not reopen AuthorizedExecutionPlan-only authorization, audit-before-execute, or silent schema changes. Graph/bin projections and full MVP fixture remain S7.",
+  "blockers": [
+    "ontarch:secrets-scan detect reports a pre-existing age-secret-key in git history (commit a3a4978, 2026-06-24; redacted in HEAD, persists in blob) — not introduced by S6; human decision pending."
+  ],
+  "token_note": "STATE + S6 plan + S5.2 handoff + last 2 session records; 219 Takogami tests; RTK JSON-disabled raw fallback proved"
+}

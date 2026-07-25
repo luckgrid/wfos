@@ -21,11 +21,13 @@
   },
   "policy_decision": {
     "outcome": "allow",
-    "matched_rules": ["panoply.agent:allow-moon"]
+    "matched_rules": [
+      "panoply.agent:allow-moon"
+    ]
   },
   "execution": {
     "started": false,
-    "outcome": "pending"
+    "outcome": "planned"
   },
   "source_fingerprints": [],
   "output_summary": {
@@ -34,5 +36,6 @@
     "truncated": false,
     "encoding": "utf-8",
     "compressor": "none"
-  }
+  },
+  "plan_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 }

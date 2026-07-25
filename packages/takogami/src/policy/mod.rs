@@ -38,7 +38,10 @@ mod normalize;
 mod paths;
 mod raw;
 
-pub use authorize::{Executor, ExecutorResult, SpyExecutor, UnavailableExecutor};
+pub use authorize::{
+    ExecutionMode, ExecutionOptions, ExecutionReport, Executor, SpyExecutor, TokioExecutor,
+    UnavailableExecutor,
+};
 pub use evaluate::{
     AuthorizedExecutionPlan, PolicyContractError, PolicyEvaluationExplanation,
     PolicyEvaluationResult, PolicyLayer, PolicyLayerResult, RejectedPolicyOutcome, evaluate_policy,

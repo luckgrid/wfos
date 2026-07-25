@@ -15,7 +15,9 @@
     "command": "dev",
     "unit_id": "takogami",
     "verb": "dev",
-    "flags": ["--explain"]
+    "flags": [
+      "--explain"
+    ]
   },
   "policy_decision": {
     "outcome": "allow",
@@ -32,5 +34,6 @@
     "truncated": false,
     "encoding": "utf-8",
     "compressor": "none"
-  }
+  },
+  "plan_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 }

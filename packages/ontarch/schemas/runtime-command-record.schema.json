@@ -2,12 +2,13 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "wfos/ontarch/schemas/runtime-command-record.schema.json",
   "title": "Takogami command execution record",
-  "description": "Operational command execution records written under the resolved Takogami state home (default XDG state). Distinct from tracked Ontarch build-session provenance under logs.session_log_target / registry/sessions/, and from composed work-session manifests. Secret values, full inherited environment dumps, provider socket paths, and pane scrollback are forbidden.",
+  "description": "Operational command execution records written under the resolved Takogami state home (default XDG state). Distinct from tracked Ontarch build-session provenance under logs.session_log_target / registry/sessions/, and from composed work-session manifests. Secret values, full inherited environment dumps, provider socket paths, and pane scrollback are forbidden. schema_version 0.1.0 is the first persisted MVP baseline.",
   "type": "object",
   "required": [
     "schema_version",
     "record_kind",
     "session_id",
+    "plan_digest",
     "started_at",
     "actor",
     "profile_id",
@@ -30,6 +31,11 @@
       "description": "Labels this record as a command execution audit record, not a composed work session."
     },
     "session_id": { "type": "string", "minLength": 1 },
+    "plan_digest": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Sealed plan digest correlating this record with the authorized/rejected plan."
+    },
     "parent_session_id": { "type": "string" },
     "work_session_id": {
       "type": "string",
@@ -59,7 +65,7 @@
     "request": {
       "type": "object",
       "required": ["command"],
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "command": { "type": "string" },
         "unit_id": { "type": "string" },
@@ -67,8 +73,8 @@
         "flags": { "type": "array", "items": { "type": "string" } }
       }
     },
-    "resolution": {},
-    "policy_decision": {},
+    "resolution": { "$ref": "#/definitions/resolved_command" },
+    "policy_decision": { "$ref": "#/definitions/policy_decision" },
     "execution": {
       "type": "object",
       "required": ["started", "outcome"],
@@ -81,14 +87,16 @@
         "outcome": {
           "type": "string",
           "enum": [
-            "completed",
+            "pending",
+            "planned",
             "denied",
             "gated",
+            "execution_unavailable",
             "failed_to_spawn",
+            "completed",
             "interrupted",
             "controller_error",
-            "abandoned",
-            "pending"
+            "abandoned"
           ]
         }
       }
@@ -121,15 +129,125 @@
         }
       }
     },
-    "validation": {},
     "error": {
       "type": "object",
       "required": ["code", "message"],
       "additionalProperties": false,
       "properties": {
         "code": { "type": "string" },
-        "message": { "type": "string" }
+        "message": { "type": "string", "maxLength": 4096 }
       }
+    }
+  },
+  "definitions": {
+    "resolved_command": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "session_id",
+        "unit_id",
+        "verb",
+        "descriptor_path",
+        "descriptor_fingerprint",
+        "native_manifests",
+        "backend",
+        "adapter",
+        "program",
+        "argv",
+        "cwd",
+        "env_keys",
+        "profile_id",
+        "policy_ids",
+        "registry_generation",
+        "execution_class"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": { "type": "string", "const": "0.1.0" },
+        "session_id": { "type": "string" },
+        "unit_id": { "type": "string" },
+        "verb": { "type": "string" },
+        "descriptor_path": { "type": "string" },
+        "descriptor_fingerprint": { "type": "string" },
+        "native_manifests": { "type": "array", "items": { "type": "string" } },
+        "backend": { "type": "string" },
+        "adapter": { "type": "string" },
+        "program": { "type": "string" },
+        "argv": { "type": "array", "items": { "type": "string" } },
+        "cwd": { "type": "string" },
+        "env_keys": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Environment key names only — never values."
+        },
+        "profile_id": { "type": "string" },
+        "policy_ids": { "type": "array", "items": { "type": "string" } },
+        "registry_generation": {
+          "type": "object",
+          "required": ["generated_at", "source_fingerprints"],
+          "additionalProperties": false,
+          "properties": {
+            "generated_at": { "type": "string" },
+            "source_fingerprints": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["path", "algorithm", "digest"],
+                "additionalProperties": false,
+                "properties": {
+                  "path": { "type": "string" },
+                  "algorithm": { "type": "string", "const": "sha256" },
+                  "digest": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+                }
+              }
+            }
+          }
+        },
+        "execution_class": {
+          "type": "string",
+          "enum": ["direct", "interactive_session"]
+        },
+        "runtime_provider": {
+          "type": ["string", "null"],
+          "description": "Optional provider id; null/absent for direct execution."
+        }
+      }
+    },
+    "policy_decision": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["outcome", "matched_rules"],
+          "additionalProperties": false,
+          "properties": {
+            "outcome": { "const": "allow" },
+            "matched_rules": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["outcome", "policy_id", "rule_id", "reason", "required_approval"],
+          "additionalProperties": false,
+          "properties": {
+            "outcome": { "const": "gate" },
+            "policy_id": { "type": "string" },
+            "rule_id": { "type": "string" },
+            "reason": { "type": "string" },
+            "required_approval": { "type": "string" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["outcome", "policy_id", "rule_id", "reason"],
+          "additionalProperties": false,
+          "properties": {
+            "outcome": { "const": "deny" },
+            "policy_id": { "type": "string" },
+            "rule_id": { "type": "string" },
+            "reason": { "type": "string" }
+          }
+        }
+      ]
     }
   }
 }

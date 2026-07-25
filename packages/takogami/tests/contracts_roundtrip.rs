@@ -53,15 +53,24 @@ fn assert_invalid(validator: &Validator, value: &Value) {
 }
 
 fn minimal_record(outcome: &str) -> RuntimeCommandRecord {
+    let ended = outcome != "pending";
+    let (started, pid, exit_code, signal) = match outcome {
+        "completed" => (true, Some(1), Some(0u8), None),
+        "interrupted" => (true, Some(1), None, Some("SIGINT".into())),
+        "pending" => (false, None, None, None),
+        _ => (false, None, None, None),
+    };
     RuntimeCommandRecord {
         schema_version: SCHEMA_VERSION.into(),
         record_kind: RECORD_KIND_COMMAND_EXECUTION.into(),
         session_id: "s".into(),
+        plan_digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            .into(),
         parent_session_id: None,
         work_session_id: None,
         runtime_context: None,
         started_at: "2026-07-19T00:00:00Z".into(),
-        ended_at: Some("2026-07-19T00:00:01Z".into()),
+        ended_at: ended.then(|| "2026-07-19T00:00:01Z".into()),
         actor: "agent".into(),
         profile_id: "workspace-dev".into(),
         request: RequestRecord {
@@ -75,10 +84,10 @@ fn minimal_record(outcome: &str) -> RuntimeCommandRecord {
             matched_rules: vec![],
         },
         execution: ExecutionRecord {
-            started: false,
-            pid: None,
-            exit_code: None,
-            signal: None,
+            started,
+            pid,
+            exit_code,
+            signal,
             outcome: outcome.into(),
         },
         source_fingerprints: vec![],
@@ -89,7 +98,6 @@ fn minimal_record(outcome: &str) -> RuntimeCommandRecord {
             encoding: "utf-8".into(),
             compressor: "none".into(),
         },
-        validation: None,
         error: None,
     }
 }
@@ -402,6 +410,8 @@ fn bounded_child_output_and_terminal_outcomes() {
         "completed",
         "denied",
         "gated",
+        "planned",
+        "execution_unavailable",
         "failed_to_spawn",
         "interrupted",
         "controller_error",
@@ -409,6 +419,9 @@ fn bounded_child_output_and_terminal_outcomes() {
         "pending",
     ] {
         let record = minimal_record(outcome);
+        record
+            .validate()
+            .unwrap_or_else(|e| panic!("{outcome}: {e}"));
         assert_valid(&record_validator, &serde_json::to_value(&record).unwrap());
     }
 

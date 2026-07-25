@@ -7,12 +7,13 @@ policy, command execution records, and explain output. It coordinates the
 
 It does not own persistent terminal PTYs (tmux / optional Herdr) or desktop window restore.
 
-**Status: policy enforcement complete (still plan-only for child processes).** Lifecycle
+**Status: direct native execution + command records implemented.** Lifecycle
 `dev` / `build` / `check` resolve a sealed plan, evaluate dual-layer profile/policy rules
-(request + child), and emit Allow / Gate / Deny with safe provenance. Allowed `--execute`
-reaches only an unavailable executor seam and returns `execution_unavailable` (exit 10). The
-commands do **not** spawn processes or persist `RuntimeCommandRecord`. Next: native execution
-and command records.
+(request + child), and emit Allow / Gate / Deny with safe provenance. Allowed direct
+`--execute` writes a durable pending `RuntimeCommandRecord`, then runs the sealed child with
+literal argv and `env_clear` + sealed non-sensitive keys. `session list|show|latest` queries
+those records. Optional RTK postprocesses eligible human streams only. Graph/bin and
+interactive providers remain ahead.
 
 ## Build
 
@@ -36,8 +37,11 @@ takogami info <unit> [--json]
 takogami tools [--json]
 takogami interfaces [--validate] [--json]
 takogami dev|build|check <unit> [--explain] [--execute] [--json]
-  → resolve + policy; plan-only Allow; --execute → execution_unavailable
+  → resolve + policy; plan-only Allow writes planned record; direct --execute runs sealed child
   → policy deny exit 5; policy gate exit 6 (fail closed; no approval bypass)
+  → child exit codes pass through; state I/O exit 7; execution I/O exit 8
+takogami session list|show|latest [--limit N] [--json]
+  → operational command_execution records only (not build or work sessions)
 takogami graph|bin|session …
   → not_implemented (exit 10) until later runtime-controller phases
 ```

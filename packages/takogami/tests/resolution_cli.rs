@@ -330,15 +330,17 @@ fn explain_json_reports_safe_executable_provenance() {
 }
 
 #[test]
-fn execute_returns_execution_unavailable() {
+fn execute_runs_authorized_direct_child() {
     let h = Harness::new();
     let out = h.run(&["--json", "build", "demo", "--execute"]);
-    assert_eq!(out.status.code(), Some(NOT_IMPLEMENTED as i32));
+    assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
     let v = parse_json(&out);
-    assert_eq!(v["diagnostics"][0]["code"], "execution_unavailable");
+    assert_eq!(v["data"]["mode"], "executed");
+    assert_eq!(v["data"]["execution_authorized"], true);
+    assert_eq!(v["data"]["execution_requested"], true);
     assert!(v["session_id"].as_str().is_some());
     assert!(v["data"]["plan_digest"].as_str().is_some());
-    h.assert_marker_untouched();
+    assert!(h.marker.exists(), "authorized direct child must run");
 }
 
 #[test]
@@ -403,7 +405,7 @@ fn miss_resolves_from_authored() {
 }
 
 #[test]
-fn state_home_absent_stays_absent() {
+fn state_home_created_for_planned_record() {
     let h = Harness::new();
     let state = h.temp.path().join("absent-state-home");
     assert!(!state.exists());
@@ -422,7 +424,13 @@ fn state_home_absent_stays_absent() {
         .output()
         .unwrap();
     assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
-    assert!(!state.exists(), "S4 must not create state-home");
+    assert!(state.is_dir(), "S6 creates state-home for planned records");
+    let records: Vec<_> = fs::read_dir(&state)
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().extension().is_some_and(|ext| ext == "json"))
+        .collect();
+    assert_eq!(records.len(), 1);
     h.assert_marker_untouched();
 }
 

@@ -11,13 +11,14 @@ Those belong to optional providers (tmux / Herdr for terminals; Hammerspoon and 
 desktop layout; an external gateway such as Push for message/schedule ingress). See
 [native-toolchain.md](native-toolchain.md).
 
-Status: **in progress; policy enforcement complete (still plan-only for child processes).**
-Discovery, list/info/tools/interfaces, doctor, the command-record contract, deterministic
-lifecycle resolution/`--explain`, and dual-layer profile/policy evaluation are implemented.
-Allowed `--execute` reaches only an unavailable executor seam (`execution_unavailable`). Process
-execution and persisted **command execution records** remain ahead. See
-[`packages/takogami/README.md`](../packages/takogami/README.md) for the proved surface;
-implementation provenance lives in [`packages/ontarch/registry/sessions/`](../packages/ontarch/registry/sessions/).
+Status: **in progress; direct native execution and command records are implemented.**
+Discovery, list/info/tools/interfaces, doctor, dual-layer policy, sealed-plan resolution, and
+`session list|show|latest` are in place. Allowed direct `--execute` writes a durable pending
+`command_execution` record, then runs the sealed program with literal argv and a cleared
+environment. Gate/Deny never spawn. Optional RTK postprocesses bounded human streams only.
+Graph/bin, interactive providers, and work-session restore remain ahead. See
+[`packages/takogami/README.md`](../packages/takogami/README.md); provenance lives in
+[`packages/ontarch/registry/sessions/`](../packages/ontarch/registry/sessions/).
 
 ## Responsibilities
 
@@ -39,7 +40,7 @@ takogami info <unit>  show resolved metadata for a unit
 takogami doctor       validate local machine readiness
 takogami tools        report tools from Panoply / Ontarch projections
 takogami interfaces   validate descriptors, schemas, policies, registry entries
-takogami dev|build|check <unit> [--explain] [--execute]   resolve + policy (plan-only)
+takogami dev|build|check <unit> [--explain] [--execute]   resolve + policy + optional direct execute
 takogami graph        project metadata-plane graph
 takogami bin report|cleanup   project bin/archive contracts
 takogami session list|show|latest   read command execution records (not work sessions)
@@ -48,9 +49,11 @@ takogami session list|show|latest   read command execution records (not work ses
 Lifecycle verbs resolve a sealed plan, then evaluate dual-layer policy (Takogami request +
 child intent) with Deny > Gate > Allow. `--explain` prints resolution and policy provenance;
 resolution failures print the safely completed portion without a digest. Gate fails closed (no
-CLI/env/file approval bypass). Allowed `--execute` returns `execution_unavailable` until native
-execution is implemented. Profile precedence is CLI `--profile` → `TAKOGAMI_PROFILE` →
-`workspace-dev` → fail closed. Policy does not claim an OS sandbox after spawn.
+CLI/env/file approval bypass). Allowed direct `--execute` persists a pending command record,
+then spawns the sealed executable exactly (no shell, no PATH re-search). Interactive classes
+still return `execution_class_unavailable`. Profile precedence is CLI `--profile` →
+`TAKOGAMI_PROFILE` → `workspace-dev` → fail closed. Policy does not claim an OS sandbox after
+spawn.
 
 Child authorization requires an explicit matching command Allow. An allowed cwd, manifest, or
 operand path only satisfies path scope; it never grants command authority. Unknown command forms
@@ -58,9 +61,9 @@ therefore remain default Deny even when every referenced path is inside the work
 Deny, and policy-contract output uses a safe plan summary and omits raw rejected argv, secret
 identifiers, executable paths, cwd, manifests, and outside-workspace operands.
 
-`takogami session *` is the future operational **command-record** query surface. It does not
-start/stop composed work sessions. Replaying a record does not restore a terminal pane or
-window layout.
+`takogami session list|show|latest` queries operational **command-execution** records under the
+resolved state home. It does not start/stop composed work sessions. Showing a record does not
+restore a terminal pane or window layout.
 
 ### Post-MVP (aspirational — not part of the runtime MVP)
 

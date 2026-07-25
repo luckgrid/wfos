@@ -10,7 +10,9 @@
     "command": "build",
     "unit_id": "takogami",
     "verb": "build",
-    "flags": ["--explain"]
+    "flags": [
+      "--explain"
+    ]
   },
   "policy_decision": {
     "outcome": "deny",
@@ -39,5 +41,6 @@
   "error": {
     "code": "policy_deny",
     "message": "remote writes blocked in agent mode"
-  }
+  },
+  "plan_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 }

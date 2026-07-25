@@ -893,14 +893,8 @@ mod tests {
             let suffix = effect.as_str();
             let first_id = format!("{prefix}-{suffix}-a");
             let second_id = format!("{prefix}-{suffix}-z");
-            let first = rules
-                .iter()
-                .find(|rule| rule.rule_id == first_id)
-                .unwrap();
-            let second = rules
-                .iter()
-                .find(|rule| rule.rule_id == second_id)
-                .unwrap();
+            let first = rules.iter().find(|rule| rule.rule_id == first_id).unwrap();
+            let second = rules.iter().find(|rule| rule.rule_id == second_id).unwrap();
 
             let forward = reduce_layer(which, vec![first, second], &[]);
             let reversed = reduce_layer(which, vec![second, first], &[]);
@@ -914,54 +908,14 @@ mod tests {
 
         let cases = [
             (Effect::Allow, Effect::Allow, "allow", None),
-            (
-                Effect::Allow,
-                Effect::Gate,
-                "gate",
-                Some("child-gate-a"),
-            ),
-            (
-                Effect::Allow,
-                Effect::Deny,
-                "deny",
-                Some("child-deny-a"),
-            ),
-            (
-                Effect::Gate,
-                Effect::Allow,
-                "gate",
-                Some("request-gate-a"),
-            ),
-            (
-                Effect::Gate,
-                Effect::Gate,
-                "gate",
-                Some("child-gate-a"),
-            ),
-            (
-                Effect::Gate,
-                Effect::Deny,
-                "deny",
-                Some("child-deny-a"),
-            ),
-            (
-                Effect::Deny,
-                Effect::Allow,
-                "deny",
-                Some("request-deny-a"),
-            ),
-            (
-                Effect::Deny,
-                Effect::Gate,
-                "deny",
-                Some("request-deny-a"),
-            ),
-            (
-                Effect::Deny,
-                Effect::Deny,
-                "deny",
-                Some("child-deny-a"),
-            ),
+            (Effect::Allow, Effect::Gate, "gate", Some("child-gate-a")),
+            (Effect::Allow, Effect::Deny, "deny", Some("child-deny-a")),
+            (Effect::Gate, Effect::Allow, "gate", Some("request-gate-a")),
+            (Effect::Gate, Effect::Gate, "gate", Some("child-gate-a")),
+            (Effect::Gate, Effect::Deny, "deny", Some("child-deny-a")),
+            (Effect::Deny, Effect::Allow, "deny", Some("request-deny-a")),
+            (Effect::Deny, Effect::Gate, "deny", Some("request-deny-a")),
+            (Effect::Deny, Effect::Deny, "deny", Some("child-deny-a")),
         ];
 
         for (request_effect, child_effect, expected_outcome, expected_primary) in cases {

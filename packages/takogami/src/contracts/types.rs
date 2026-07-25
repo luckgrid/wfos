@@ -164,6 +164,7 @@ pub fn require_schema_version(version: &str) -> Result<(), String> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct RequestRecord {
     pub command: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -175,6 +176,7 @@ pub struct RequestRecord {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct ExecutionRecord {
     pub started: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -187,6 +189,7 @@ pub struct ExecutionRecord {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct OutputSummary {
     pub stdout_bytes: u64,
     pub stderr_bytes: u64,
@@ -197,6 +200,7 @@ pub struct OutputSummary {
 
 /// Provider-neutral link to a terminal runtime (Herdr/tmux/direct). Opaque IDs only.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
 pub struct RuntimeContext {
     pub provider: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -208,11 +212,15 @@ pub struct RuntimeContext {
 }
 
 /// Operational command execution audit record (not a composed work session).
+///
+/// `schema_version` `0.1.0` is the first persisted MVP baseline (E09.S6).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct RuntimeCommandRecord {
     pub schema_version: String,
     pub record_kind: String,
     pub session_id: String,
+    pub plan_digest: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_session_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -232,10 +240,105 @@ pub struct RuntimeCommandRecord {
     pub source_fingerprints: Vec<SourceFingerprint>,
     pub output_summary: OutputSummary,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub validation: Option<serde_json::Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<DiagnosticRecord>,
 }
 
 /// Const value for [`RuntimeCommandRecord::record_kind`].
 pub const RECORD_KIND_COMMAND_EXECUTION: &str = "command_execution";
+
+const MAX_ERROR_MESSAGE_BYTES: usize = 4096;
+
+impl RuntimeCommandRecord {
+    /// Semantic cross-field invariants beyond JSON Schema.
+    pub fn validate(&self) -> Result<(), String> {
+        require_schema_version(&self.schema_version)?;
+        if self.record_kind != RECORD_KIND_COMMAND_EXECUTION {
+            return Err(format!(
+                "record_kind must be {RECORD_KIND_COMMAND_EXECUTION}"
+            ));
+        }
+        if self.actor != "agent" {
+            return Err("actor must be agent".into());
+        }
+        if self.plan_digest.is_empty() {
+            return Err("plan_digest must be non-empty".into());
+        }
+        if self.session_id.is_empty() {
+            return Err("session_id must be non-empty".into());
+        }
+        if let Some(res) = &self.resolution
+            && res.session_id != self.session_id
+        {
+            return Err("resolution.session_id must equal record session_id".into());
+        }
+
+        let outcome = self.execution.outcome.as_str();
+        match outcome {
+            "pending" => {
+                if self.ended_at.is_some() {
+                    return Err("pending must omit ended_at".into());
+                }
+            }
+            "planned"
+            | "denied"
+            | "gated"
+            | "execution_unavailable"
+            | "failed_to_spawn"
+            | "completed"
+            | "interrupted"
+            | "controller_error"
+            | "abandoned" => {
+                if self.ended_at.is_none() {
+                    return Err(format!("{outcome} requires ended_at"));
+                }
+            }
+            other => return Err(format!("unknown execution outcome: {other}")),
+        }
+
+        if matches!(
+            outcome,
+            "denied" | "gated" | "planned" | "execution_unavailable" | "failed_to_spawn"
+        ) {
+            if self.execution.pid.is_some() || self.execution.started {
+                return Err(format!("{outcome} must not contain PID or started=true"));
+            }
+            if self.execution.exit_code.is_some() || self.execution.signal.is_some() {
+                return Err(format!("{outcome} must not contain exit_code or signal"));
+            }
+        }
+
+        if matches!(outcome, "denied" | "gated") && self.resolution.is_some() {
+            return Err("Gate/Deny records must omit resolution".into());
+        }
+
+        if outcome == "completed" {
+            if !self.execution.started || self.execution.pid.is_none() {
+                return Err("completed requires started=true and pid".into());
+            }
+            if self.execution.exit_code.is_none() || self.execution.signal.is_some() {
+                return Err("completed requires exit_code and no signal".into());
+            }
+        }
+
+        if outcome == "interrupted" {
+            if !self.execution.started || self.execution.pid.is_none() {
+                return Err("interrupted requires started=true and pid".into());
+            }
+            if self.execution.signal.is_none() {
+                return Err("interrupted requires signal".into());
+            }
+        }
+
+        if self.execution.pid.is_some() && !self.execution.started && outcome != "pending" {
+            return Err("PID requires started=true except pending".into());
+        }
+
+        if let Some(err) = &self.error
+            && err.message.len() > MAX_ERROR_MESSAGE_BYTES
+        {
+            return Err("error.message exceeds 4 KiB bound".into());
+        }
+
+        Ok(())
+    }
+}

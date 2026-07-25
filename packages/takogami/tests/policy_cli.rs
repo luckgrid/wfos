@@ -1,11 +1,11 @@
-//! Policy decision CLI matrix (hermetic; no real process spawn).
+//! Policy decision CLI matrix (hermetic; real native spawn on Allow --execute).
 
 use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use takogami::contracts::{RegistryGeneration, fingerprint_file};
-use takogami::exit_codes::{CONTRACT, NOT_IMPLEMENTED, POLICY_DENY, POLICY_GATE, SUCCESS};
+use takogami::exit_codes::{CONTRACT, POLICY_DENY, POLICY_GATE, SUCCESS};
 
 fn bin() -> Command {
     Command::new(env!("CARGO_BIN_EXE_takogami"))
@@ -30,6 +30,7 @@ struct Harness {
     registry: PathBuf,
     path_dir: PathBuf,
     marker: PathBuf,
+    state_home: PathBuf,
 }
 
 impl Harness {
@@ -37,6 +38,7 @@ impl Harness {
         let temp = tempfile::tempdir().unwrap();
         let workspace = temp.path().join("ws");
         let registry = workspace.join("registry");
+        let state_home = temp.path().join("state-home");
         fs::create_dir_all(&workspace).unwrap();
         copy_dir(&fixture_root(), &workspace);
 
@@ -56,6 +58,7 @@ impl Harness {
             registry,
             path_dir,
             marker,
+            state_home,
         };
         h.write_hit_units();
         h
@@ -132,13 +135,18 @@ impl Harness {
         .unwrap();
     }
 
+    /// Always injects a temp `--state-home` so the developer's real state is never used.
     fn run(&self, args: &[&str]) -> Output {
         let mut cmd = bin();
-        cmd.args(args)
+        cmd.arg("--state-home")
+            .arg(&self.state_home)
+            .args(args)
             .env("TAKOGAMI_ONTARCH_REGISTRY", &self.registry)
             .env("TAKOGAMI_WORKSPACE_ROOT", &self.workspace)
+            .env("TAKOGAMI_STATE_HOME", &self.state_home)
             .env("PATH", &self.path_dir)
             .env_remove("TAKOGAMI_PROFILE")
+            .env_remove("XDG_STATE_HOME")
             .env("SECRET_SENTINEL", "do-not-leak")
             .env("HERDR_SOCKET_PATH", "/tmp/herdr-should-not-appear.sock");
         cmd.output().expect("spawn")
@@ -148,8 +156,40 @@ impl Harness {
         assert!(!self.marker.exists(), "marker executable must never run");
     }
 
-    fn assert_no_state_home(&self, state: &Path) {
-        assert!(!state.exists(), "state home must not be created in S5");
+    fn assert_marker_touched_once(&self) {
+        let text = fs::read_to_string(&self.marker).expect("marker should exist after execute");
+        let runs = text.lines().filter(|l| *l == "ran").count();
+        assert_eq!(runs, 1, "marker should be touched exactly once: {text:?}");
+    }
+
+    fn load_records(&self) -> Vec<Value> {
+        if !self.state_home.exists() {
+            return Vec::new();
+        }
+        let mut out = Vec::new();
+        for entry in fs::read_dir(&self.state_home).unwrap() {
+            let path = entry.unwrap().path();
+            let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            if name.starts_with('.') || !name.ends_with(".json") {
+                continue;
+            }
+            let text = fs::read_to_string(&path).unwrap();
+            out.push(serde_json::from_str(&text).unwrap());
+        }
+        out
+    }
+
+    fn assert_state_records_exist(&self) {
+        assert!(
+            self.state_home.exists(),
+            "state home should exist for policy-decision-bearing attempts"
+        );
+        let records = self.load_records();
+        assert!(
+            !records.is_empty(),
+            "expected at least one RuntimeCommandRecord under {}",
+            self.state_home.display()
+        );
     }
 }
 
@@ -187,21 +227,18 @@ fn parse_json(out: &Output) -> Value {
 #[test]
 fn allow_plan_only_includes_policy_decision() {
     let h = Harness::new();
-    let state = h.workspace.join("state-home-should-not-exist");
-    let out = h.run(&[
-        "--json",
-        "--state-home",
-        state.to_str().unwrap(),
-        "build",
-        "demo",
-    ]);
+    let out = h.run(&["--json", "build", "demo"]);
     assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
     let v = parse_json(&out);
     assert_eq!(v["data"]["policy_decision"]["outcome"], "allow");
     assert_eq!(v["data"]["execution_authorized"], true);
     assert_eq!(v["data"]["mode"], "plan_only");
     h.assert_marker_untouched();
-    h.assert_no_state_home(&state);
+    h.assert_state_records_exist();
+    let rec = &h.load_records()[0];
+    assert_eq!(rec["execution"]["outcome"], "planned");
+    assert!(rec["execution"]["pid"].is_null());
+    assert_eq!(rec["execution"]["started"], false);
 }
 
 #[test]
@@ -221,14 +258,25 @@ fn allow_explain_includes_policy_section() {
 }
 
 #[test]
-fn allow_execute_reaches_unavailable_seam() {
+fn allow_execute_runs_sealed_child() {
     let h = Harness::new();
     let out = h.run(&["--json", "build", "demo", "--execute"]);
-    assert_eq!(out.status.code(), Some(NOT_IMPLEMENTED as i32));
+    assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
     let v = parse_json(&out);
-    assert_eq!(v["diagnostics"][0]["code"], "execution_unavailable");
     assert_eq!(v["data"]["policy_decision"]["outcome"], "allow");
-    h.assert_marker_untouched();
+    assert_eq!(v["data"]["execution_requested"], true);
+    assert_eq!(v["data"]["execution_authorized"], true);
+    let mode = v["data"]["mode"].as_str().unwrap_or("");
+    assert!(
+        mode == "executed" || mode == "plan_only",
+        "unexpected mode {mode}: {v}"
+    );
+    if mode == "executed" {
+        assert_eq!(v["data"]["execution"]["outcome"], "completed");
+        assert_eq!(v["data"]["execution"]["exit_code"], 0);
+    }
+    h.assert_marker_touched_once();
+    h.assert_state_records_exist();
 }
 
 #[test]
@@ -370,14 +418,7 @@ fn human_allow_summary_mentions_policy() {
 #[test]
 fn allow_plan_only_includes_policy_layers_and_execution_flags() {
     let h = Harness::new();
-    let state = h.workspace.join("state-home-should-not-exist");
-    let out = h.run(&[
-        "--json",
-        "--state-home",
-        state.to_str().unwrap(),
-        "build",
-        "demo",
-    ]);
+    let out = h.run(&["--json", "build", "demo"]);
     assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
     let v = parse_json(&out);
     assert_eq!(v["data"]["policy"]["request"]["decision"], "allow");
@@ -387,20 +428,26 @@ fn allow_plan_only_includes_policy_layers_and_execution_flags() {
     assert_eq!(v["data"]["execution_requested"], false);
     assert_eq!(v["data"]["mode"], "plan_only");
     h.assert_marker_untouched();
-    h.assert_no_state_home(&state);
+    h.assert_state_records_exist();
+    let rec = &h.load_records()[0];
+    assert_eq!(rec["execution"]["outcome"], "planned");
 }
 
 #[test]
-fn allow_execute_reports_execution_requested_and_leaves_marker() {
+fn allow_execute_reports_execution_requested_and_runs_marker() {
     let h = Harness::new();
     let out = h.run(&["--json", "build", "demo", "--execute"]);
-    assert_eq!(out.status.code(), Some(NOT_IMPLEMENTED as i32));
+    assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
     let v = parse_json(&out);
-    assert_eq!(v["diagnostics"][0]["code"], "execution_unavailable");
     assert_eq!(v["data"]["policy_decision"]["outcome"], "allow");
     assert_eq!(v["data"]["execution_requested"], true);
     assert_eq!(v["data"]["execution_authorized"], true);
-    h.assert_marker_untouched();
+    let mode = v["data"]["mode"].as_str().unwrap_or("");
+    assert!(
+        mode == "executed" || v["data"]["execution"].is_object(),
+        "expected executed envelope fields: {v}"
+    );
+    h.assert_marker_touched_once();
 }
 
 #[test]
@@ -439,6 +486,12 @@ adapter = "direct""#,
     assert!(v["data"]["policy"]["request"].is_object());
     assert!(v["data"]["policy"]["child"].is_object());
     h.assert_marker_untouched();
+    h.assert_state_records_exist();
+    let rec = &h.load_records()[0];
+    assert_eq!(rec["execution"]["outcome"], "gated");
+    assert!(rec.get("resolution").is_none() || rec["resolution"].is_null());
+    assert!(rec["execution"]["pid"].is_null());
+    assert_eq!(rec["execution"]["started"], false);
 }
 
 #[test]
@@ -475,6 +528,12 @@ adapter = "direct""#,
     assert_eq!(v["data"]["execution_requested"], true);
     assert_eq!(v["data"]["execution_authorized"], false);
     h.assert_marker_untouched();
+    h.assert_state_records_exist();
+    let rec = &h.load_records()[0];
+    assert_eq!(rec["execution"]["outcome"], "denied");
+    assert!(rec.get("resolution").is_none() || rec["resolution"].is_null());
+    assert!(rec["execution"]["pid"].is_null());
+    assert_eq!(rec["execution"]["started"], false);
 }
 
 #[test]

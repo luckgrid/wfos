@@ -155,7 +155,11 @@ pub enum BinCleanupMode {
 #[derive(Debug, Clone, Subcommand)]
 pub enum SessionCommand {
     /// List operational runtime session records.
-    List,
+    List {
+        /// Max records to return (1..=500, default 50).
+        #[arg(long, value_name = "N")]
+        limit: Option<usize>,
+    },
     /// Show one operational runtime session record.
     Show { session_id: String },
     /// Show the latest operational runtime session record.
@@ -226,7 +230,7 @@ impl Command {
                 }
             },
             Self::Session { sub } => match sub {
-                SessionCommand::List => "session list".into(),
+                SessionCommand::List { .. } => "session list".into(),
                 SessionCommand::Show { session_id } => format!("session show {session_id}"),
                 SessionCommand::Latest => "session latest".into(),
             },
@@ -245,6 +249,7 @@ impl Command {
                 | Self::Dev { .. }
                 | Self::Build { .. }
                 | Self::Check { .. }
+                | Self::Session { .. }
         )
     }
 

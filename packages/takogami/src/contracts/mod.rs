@@ -10,7 +10,9 @@ pub mod types;
 
 pub use entrypoint::{LegacyEntrypoint, LegacyParseError, parse_legacy_entrypoint};
 pub use fingerprint::{SourceFingerprint, fingerprint_bytes, fingerprint_file};
-pub use state::{StateHomeInputs, resolve_session_state_home};
+pub use state::{
+    StateHomeInputs, ensure_state_home, resolve_session_state_home, validate_state_home,
+};
 pub use types::{
     ChildOutput, CommandEnvelope, DiagnosticRecord, EnvelopeMetrics, ExecutionClass,
     ExecutionRecord, OutputSummary, PolicyDecision, RECORD_KIND_COMMAND_EXECUTION,

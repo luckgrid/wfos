@@ -665,7 +665,7 @@ mod tests {
         let allow = compile_path_pattern("Build/**", "p", "allow-1").unwrap();
         let block = compile_path_pattern("Build/secret/**", "p", "deny-1").unwrap();
         assert_eq!(
-            evaluate_path_against_scopes("Build/secret/x", &[allow.clone()], &[block]),
+            evaluate_path_against_scopes("Build/secret/x", std::slice::from_ref(&allow), &[block]),
             PathFactResult::Blocked {
                 matched_deny_rules: vec!["deny-1".into()],
             }
