@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 
 use crate::contracts::types::DiagnosticRecord;
 use crate::execution::{StreamCapture, StreamEncoding};
+use crate::registry::ToolRecord;
 
 /// Short bound on one adapter invocation (S6.1-06). RTK only postprocesses already-captured,
 /// bounded child output, so a healthy adapter finishes well under this.
@@ -55,10 +56,48 @@ fn canonical_rtk_identity(candidate: &Path) -> Option<PathBuf> {
     candidate.canonicalize().ok()
 }
 
-/// Resolve the RTK adapter's canonical identity from the documented fallback resolver (first
-/// `rtk` found on the supplied search path). Canonicalized once so later revalidation can
-/// detect replacement/drift by path-identity comparison.
-pub fn resolve_rtk_binary(path_dirs: &[PathBuf]) -> Option<PathBuf> {
+/// Prefer an absolute `detect` path from an installed Panoply/Ontarch `rtk` tool projection
+/// (addendum §5.5 step 1). Falls back to `None` when no usable projection exists.
+pub fn projected_rtk_detect_path(tools: &[ToolRecord]) -> Option<PathBuf> {
+    let mut claims: Vec<&ToolRecord> = tools
+        .iter()
+        .filter(|tool| {
+            tool.installed == Some(true)
+                && (tool.id == "rtk"
+                    || tool
+                        .detect
+                        .as_deref()
+                        .and_then(|detect| Path::new(detect).file_name())
+                        .and_then(|name| name.to_str())
+                        == Some("rtk"))
+        })
+        .collect();
+    claims.sort_by(|a, b| a.id.cmp(&b.id).then(a.detect.cmp(&b.detect)));
+    for tool in claims {
+        let Some(detect) = tool.detect.as_deref() else {
+            continue;
+        };
+        let path = Path::new(detect);
+        if !path.is_absolute() {
+            continue;
+        }
+        if let Some(canonical) = canonical_rtk_identity(path) {
+            return Some(canonical);
+        }
+    }
+    None
+}
+
+/// Resolve the RTK adapter's canonical identity: projected detect path when provided and
+/// valid, otherwise the documented PATH fallback (first `rtk` on the search path).
+/// Canonicalized once so later revalidation can detect replacement/drift by path-identity
+/// comparison.
+pub fn resolve_rtk_binary(projected: Option<&Path>, path_dirs: &[PathBuf]) -> Option<PathBuf> {
+    if let Some(candidate) = projected
+        && let Some(canonical) = canonical_rtk_identity(candidate)
+    {
+        return Some(canonical);
+    }
     for dir in path_dirs {
         let candidate = dir.join("rtk");
         if let Some(canonical) = canonical_rtk_identity(&candidate) {
@@ -231,6 +270,7 @@ pub fn pipe_stream(rtk: &Path, filter: &str, input: &[u8]) -> Result<Vec<u8>, St
     Ok(stdout_result.bytes)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn apply_rtk_if_eligible(
     enabled: bool,
     json_mode: bool,
@@ -239,6 +279,7 @@ pub fn apply_rtk_if_eligible(
     argv: &[String],
     capture: &StreamCapture,
     path_dirs: &[PathBuf],
+    projected: Option<&Path>,
 ) -> RtkResult {
     if json_mode || !enabled {
         return RtkResult {
@@ -257,7 +298,7 @@ pub fn apply_rtk_if_eligible(
     if capture.truncated || capture.encoding != StreamEncoding::Utf8 {
         return raw("unsupported", capture, None);
     }
-    let Some(rtk) = resolve_rtk_binary(path_dirs) else {
+    let Some(rtk) = resolve_rtk_binary(projected, path_dirs) else {
         return raw(
             "unavailable",
             capture,
@@ -275,7 +316,7 @@ pub fn apply_rtk_if_eligible(
     // window between the probe and the pipe invocation in which the binary could have been
     // replaced (S6.1-06). Any drift is treated as unavailable, never as a reason to spawn an
     // unverified binary.
-    match resolve_rtk_binary(path_dirs) {
+    match resolve_rtk_binary(projected, path_dirs) {
         Some(revalidated) if revalidated == rtk => {}
         _ => {
             return raw(
@@ -357,8 +398,16 @@ mod tests {
             broken_pipe: false,
             read_error: None,
         };
-        let result =
-            apply_rtk_if_eligible(true, true, false, "git", &["status".into()], &capture, &[]);
+        let result = apply_rtk_if_eligible(
+            true,
+            true,
+            false,
+            "git",
+            &["status".into()],
+            &capture,
+            &[],
+            None,
+        );
         assert_eq!(result.compressor, "disabled");
         assert_eq!(result.emitted, b"hello");
     }
@@ -466,6 +515,7 @@ esac"#;
             &["status".into()],
             &capture,
             &[dir.path().to_path_buf()],
+            None,
         );
         assert_eq!(result.compressor, "rtk");
         assert_eq!(result.emitted, b"hello");
@@ -505,10 +555,48 @@ esac"#;
             &["status".into()],
             &capture,
             &[dir_path.to_path_buf()],
+            None,
         );
         assert_eq!(result.compressor, "unavailable");
         assert_eq!(result.emitted, b"hello world");
         assert_eq!(result.diagnostics.len(), 1);
         assert_eq!(result.diagnostics[0].code, "rtk_identity_drift");
+    }
+
+    #[test]
+    fn projected_detect_path_wins_over_path_search() {
+        use crate::registry::ToolRecord;
+
+        let projected_dir = tempfile::tempdir().unwrap();
+        let path_dir = tempfile::tempdir().unwrap();
+        let projected = projected_dir.path().join("rtk");
+        let path_rtk = path_dir.path().join("rtk");
+        // Projected adapter compresses; PATH adapter would fail the probe.
+        write_script(&projected, &format!("{PROBE_OK}\ncat | head -c 4\n"));
+        write_script(&path_rtk, "exit 1\n");
+
+        let tools = vec![ToolRecord {
+            id: "rtk".into(),
+            module: Some("agent".into()),
+            installed: Some(true),
+            default: Some(true),
+            agent_safe: Some(true),
+            detect: Some(projected.to_string_lossy().into_owned()),
+            version: None,
+        }];
+        let projected_canon = projected_rtk_detect_path(&tools).expect("projected rtk");
+        let capture = capture_of(b"abcdef");
+        let result = apply_rtk_if_eligible(
+            true,
+            false,
+            false,
+            "git",
+            &["status".into()],
+            &capture,
+            &[path_dir.path().to_path_buf()],
+            Some(&projected_canon),
+        );
+        assert_eq!(result.compressor, "rtk");
+        assert_eq!(result.emitted, b"abcd");
     }
 }

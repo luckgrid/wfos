@@ -52,6 +52,10 @@ impl Harness {
     }
 
     fn run(&self, args: &[&str]) -> Output {
+        self.run_env(args, &[])
+    }
+
+    fn run_env(&self, args: &[&str], extra: &[(&str, &str)]) -> Output {
         let mut cmd = bin();
         cmd.arg("--state-home")
             .arg(&self.state_home)
@@ -61,6 +65,9 @@ impl Harness {
             .env("TAKOGAMI_STATE_HOME", &self.state_home)
             .env_remove("TAKOGAMI_PROFILE")
             .env_remove("XDG_STATE_HOME");
+        for (k, v) in extra {
+            cmd.env(k, v);
+        }
         cmd.output().expect("spawn")
     }
 
@@ -279,7 +286,7 @@ fn human_session_output_labels_record_kind() {
 
 // S6.1-08: `show_latest` discards the skipped-record diagnostics that `list` surfaces.
 #[test]
-fn session_latest_drops_skipped_record_diagnostics() {
+fn session_latest_surfaces_skipped_record_diagnostics() {
     let h = Harness::new();
     h.write_record(&sample(
         "tkg_ok",
@@ -320,8 +327,7 @@ fn session_latest_drops_skipped_record_diagnostics() {
     );
 }
 
-// S6.1-09: an explicit unknown query profile silently falls through to XDG/HOME instead of
-// failing closed.
+// S6.1-09: unknown explicit CLI profile must fail closed (no XDG/HOME fallthrough).
 #[test]
 fn session_list_with_unknown_profile_must_fail_closed() {
     let h = Harness::new();
@@ -331,6 +337,22 @@ fn session_list_with_unknown_profile_must_fail_closed() {
         Some(USAGE as i32),
         "an explicit unknown query profile must fail closed with a typed error instead of \
          silently falling back to XDG/HOME, got exit={:?} stdout={}",
+        out.status.code(),
+        stdout(&out)
+    );
+}
+
+#[test]
+fn session_list_with_unknown_env_profile_must_fail_closed() {
+    let h = Harness::new();
+    let out = h.run_env(
+        &["--json", "session", "list"],
+        &[("TAKOGAMI_PROFILE", "does-not-exist-env")],
+    );
+    assert_eq!(
+        out.status.code(),
+        Some(USAGE as i32),
+        "an unknown TAKOGAMI_PROFILE must fail closed instead of falling back to XDG/HOME, got exit={:?} stdout={}",
         out.status.code(),
         stdout(&out)
     );

@@ -13,6 +13,7 @@ pub use streams::{
     stream_or_buffer,
 };
 
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use async_trait::async_trait;
@@ -49,6 +50,19 @@ pub enum ExecutionMode {
 pub struct ExecutionOptions {
     pub mode: ExecutionMode,
     pub limits: ExecutionLimits,
+    /// Optional absolute detect path for the RTK adapter from the Panoply/Ontarch tool
+    /// projection. When present and canonicalizable, it wins over live PATH search (S6.1-06).
+    pub rtk_projected: Option<PathBuf>,
+}
+
+impl Default for ExecutionOptions {
+    fn default() -> Self {
+        Self {
+            mode: ExecutionMode::Json,
+            limits: ExecutionLimits::default(),
+            rtk_projected: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

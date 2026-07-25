@@ -3,7 +3,7 @@ mod rtk;
 
 pub use crate::contracts::{CommandEnvelope, DiagnosticRecord, EnvelopeMetrics};
 pub use envelope::emit_json;
-pub use rtk::{RtkResult, apply_rtk_if_eligible};
+pub use rtk::{RtkResult, apply_rtk_if_eligible, projected_rtk_detect_path};
 
 use crate::contracts::types::RuntimeCommandRecord;
 use crate::doctor::DoctorReport;

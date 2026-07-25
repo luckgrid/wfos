@@ -47,6 +47,7 @@ mod tests {
         let options = ExecutionOptions {
             mode: ExecutionMode::Json,
             limits: Default::default(),
+            rtk_projected: None,
         };
         let report = spy.execute(&plan, &options).await;
         assert_eq!(report.outcome, "spy_reached");

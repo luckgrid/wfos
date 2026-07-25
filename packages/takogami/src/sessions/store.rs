@@ -332,6 +332,9 @@ fn check_lock_matches_record(
 /// `pending` is the only outcome a [`CommandRecordStore::write_final`] replacement may
 /// originate from; once terminal, a record is immutable (S6.1-04). A byte-identical retry of
 /// the already-installed terminal record is tolerated as a no-op for idempotent callers.
+///
+/// Addendum §5.2: a terminal (or PID) update must retain the same `plan_digest`, request
+/// identity, `profile_id`, and `policy_decision` as the installed pending record.
 fn check_legal_transition(
     current: &RuntimeCommandRecord,
     next: &RuntimeCommandRecord,
@@ -339,6 +342,21 @@ fn check_legal_transition(
     if current.plan_digest != next.plan_digest {
         return Err(SessionStoreError::Contract(
             "final replace must retain the installed pending record's plan_digest".into(),
+        ));
+    }
+    if current.profile_id != next.profile_id {
+        return Err(SessionStoreError::Contract(
+            "final replace must retain the installed pending record's profile_id".into(),
+        ));
+    }
+    if current.policy_decision != next.policy_decision {
+        return Err(SessionStoreError::Contract(
+            "final replace must retain the installed pending record's policy_decision".into(),
+        ));
+    }
+    if current.request != next.request {
+        return Err(SessionStoreError::Contract(
+            "final replace must retain the installed pending record's request identity".into(),
         ));
     }
     if current.execution.outcome != "pending" {

@@ -96,3 +96,16 @@ pub fn signal_name(sig: i32) -> &'static str {
         _ => "SIGTERM",
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::signal_name;
+
+    #[test]
+    fn signal_name_covers_supported_set() {
+        assert_eq!(signal_name(libc::SIGINT), "SIGINT");
+        assert_eq!(signal_name(libc::SIGTERM), "SIGTERM");
+        assert_eq!(signal_name(libc::SIGHUP), "SIGHUP");
+        assert_eq!(signal_name(libc::SIGKILL), "SIGKILL");
+    }
+}

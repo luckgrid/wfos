@@ -453,7 +453,7 @@ fn bounded_child_output_and_terminal_outcomes() {
     assert_valid(&record_validator, &serde_json::to_value(&linked).unwrap());
 }
 
-// S6.1-10: `validate()` does not yet bind policy_decision to execution.outcome.
+// S6.1-10: `validate()` rejects policy_decision to execution.outcome.
 #[test]
 fn decision_outcome_semantic_mismatches_are_rejected() {
     let mut deny_completed = minimal_record("completed");

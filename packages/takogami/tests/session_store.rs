@@ -244,7 +244,7 @@ fn recovery_hook_reproduces_finalize_between_read_and_lock_race() {
     assert_eq!(on_disk.execution.pid, Some(77));
 }
 
-// --- S6.1-04: locks and final transitions are not yet bound to the target record. ---
+// --- S6.1-04: locks and final transitions bound to the target record. ---
 
 #[test]
 fn lock_acquired_for_one_session_must_not_authorize_writing_another_sessions_record() {
@@ -277,6 +277,53 @@ fn final_replace_must_retain_the_installed_pending_plan_digest() {
         "finalization must retain the same plan_digest as the installed pending record",
     );
     assert!(matches!(err, SessionStoreError::Contract(_)));
+}
+
+#[test]
+fn final_replace_must_retain_profile_policy_and_request_identity() {
+    let temp = tempfile::tempdir().unwrap();
+    let store = CommandRecordStore::open(temp.path()).unwrap();
+    let lock = store.acquire_lock("tkg_ident").unwrap();
+    let pending = sample("tkg_ident", "2026-07-24T00:00:00Z", "pending", None);
+    store.write_pending(&pending, &lock).unwrap();
+
+    let mut bad_profile = pending.clone();
+    bad_profile.profile_id = "other-profile".into();
+    bad_profile.execution.outcome = "completed".into();
+    bad_profile.execution.exit_code = Some(0);
+    bad_profile.ended_at = Some("2026-07-24T00:00:02Z".into());
+    let err = store
+        .write_final(&bad_profile, &lock)
+        .expect_err("finalization must retain profile_id");
+    assert!(matches!(err, SessionStoreError::Contract(_)));
+
+    // Keep Allow+completed so validate() accepts the record; only the matched_rules differ.
+    let mut bad_policy = pending.clone();
+    bad_policy.policy_decision = PolicyDecision::Allow {
+        matched_rules: vec!["mutated-rule".into()],
+    };
+    bad_policy.execution.outcome = "completed".into();
+    bad_policy.execution.exit_code = Some(0);
+    bad_policy.ended_at = Some("2026-07-24T00:00:02Z".into());
+    let err = store
+        .write_final(&bad_policy, &lock)
+        .expect_err("finalization must retain policy_decision");
+    assert!(matches!(err, SessionStoreError::Contract(_)));
+
+    let mut bad_request = pending.clone();
+    bad_request.request.command = "other".into();
+    bad_request.request.verb = Some("other".into());
+    bad_request.execution.outcome = "completed".into();
+    bad_request.execution.exit_code = Some(0);
+    bad_request.ended_at = Some("2026-07-24T00:00:02Z".into());
+    let err = store
+        .write_final(&bad_request, &lock)
+        .expect_err("finalization must retain request identity");
+    assert!(matches!(err, SessionStoreError::Contract(_)));
+
+    let on_disk = store.read_raw("tkg_ident").unwrap();
+    assert_eq!(on_disk.execution.outcome, "pending");
+    assert_eq!(on_disk.profile_id, pending.profile_id);
 }
 
 #[test]
@@ -330,7 +377,7 @@ fn terminal_record_must_not_transition_to_a_different_terminal_outcome() {
     assert_eq!(on_disk.execution.outcome, "completed");
 }
 
-// S6.1-08: `load_sorted` compares raw `started_at` strings instead of parsed instants.
+// S6.1-08: `load_sorted` orders by parsed RFC 3339 instants.
 #[test]
 fn list_orders_by_parsed_instant_not_lexical_string_despite_offsets() {
     let temp = tempfile::tempdir().unwrap();

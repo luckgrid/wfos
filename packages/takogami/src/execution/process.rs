@@ -256,6 +256,8 @@ async fn execute_inner(
                 g.signal_group(libc::SIGKILL);
                 g.disarm();
             }
+            // Re-await so the child is reaped even when the first wait failed (S6.1-07 / §5.6).
+            let _ = child.wait().await;
             return Err(ExecFailure::controller_error(
                 "execution_io",
                 format!("failed to wait for child: {e}"),
@@ -443,6 +445,7 @@ fn finalize_output(
             // raw bytes live for any stream that is not RTK-eligible or that overflowed its
             // buffer; only a still-buffered, under-limit, RTK-eligible stream is unflushed and
             // needs emitting here. One stream's overflow/encoding must never suppress its peer.
+            let projected = options.rtk_projected.as_deref();
             let (out_compressor, out_gain, out_emitted) = finalize_human_stream(
                 "stdout",
                 *rtk_eligible,
@@ -451,6 +454,7 @@ fn finalize_output(
                 &resolved.argv,
                 stdout_cap,
                 &path_dirs,
+                projected,
                 diagnostics,
             );
             let (err_compressor, err_gain, err_emitted) = finalize_human_stream(
@@ -461,6 +465,7 @@ fn finalize_output(
                 &resolved.argv,
                 stderr_cap,
                 &path_dirs,
+                projected,
                 diagnostics,
             );
 
@@ -489,6 +494,7 @@ fn finalize_human_stream(
     argv: &[String],
     cap: &StreamCapture,
     path_dirs: &[PathBuf],
+    projected: Option<&Path>,
     diagnostics: &mut Vec<DiagnosticRecord>,
 ) -> (String, Option<f64>, u64) {
     if !rtk_eligible {
@@ -514,7 +520,9 @@ fn finalize_human_stream(
         return ("none".into(), None, cap.bytes.len() as u64);
     }
 
-    let rtk = apply_rtk_if_eligible(true, false, is_dev, program, argv, cap, path_dirs);
+    let rtk = apply_rtk_if_eligible(
+        true, false, is_dev, program, argv, cap, path_dirs, projected,
+    );
     diagnostics.extend(rtk.diagnostics.iter().cloned());
     let mut broken = false;
     write_human_bytes(label, &rtk.emitted, &mut broken);
@@ -717,6 +725,7 @@ mod tests {
         let options = ExecutionOptions {
             mode: ExecutionMode::Json,
             limits: Default::default(),
+            rtk_projected: None,
         };
         let failing_factory: &SignalFactory =
             &|| Err(io::Error::other("injected signal source failure"));
@@ -749,6 +758,7 @@ mod tests {
         let options = ExecutionOptions {
             mode: ExecutionMode::Json,
             limits: Default::default(),
+            rtk_projected: None,
         };
 
         let report = match execute_inner(&plan, &options, &default_signal_factory).await {

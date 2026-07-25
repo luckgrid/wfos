@@ -266,6 +266,10 @@ pub(crate) async fn run_lifecycle_with_executor(
             })?;
 
         let compressor = profile_compressor(&profile);
+        let rtk_projected = access
+            .load_tools()
+            .ok()
+            .and_then(|(doc, _)| crate::output::projected_rtk_detect_path(&doc.tools));
         let options = ExecutionOptions {
             mode: if sink.json {
                 ExecutionMode::Json
@@ -276,6 +280,7 @@ pub(crate) async fn run_lifecycle_with_executor(
                 }
             },
             limits: Default::default(),
+            rtk_projected,
         };
         let report = executor.execute(&authorized, &options).await;
 

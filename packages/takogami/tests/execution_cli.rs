@@ -499,7 +499,7 @@ fn pending_record_appears_before_marker_or_final_has_pid() {
 
 #[test]
 fn native_exit_codes_pass_through() {
-    for code in [0u8, 1, 5, 255] {
+    for code in [0u8, 1, 5, 6, 10, 126, 127, 255] {
         let mut h = Harness::new();
         h.install_python_child("demo-bin", "exit_with.py");
         h.set_demo_build("demo-bin", &[&code.to_string()], &["PATH"]);
@@ -551,10 +551,9 @@ fn json_one_document_with_bounded_child_capture() {
     );
 }
 
-// S6.1-05: `finalize_output` takes one combined branch, so when only one stream overflows the
-// retained under-limit peer is never emitted.
+// S6.1-05 regression: stderr overflow must not drop under-limit stdout (independent finalize).
 #[test]
-fn human_mode_rtk_eligible_asymmetric_overflow_drops_under_limit_stream() {
+fn human_mode_rtk_eligible_asymmetric_overflow_still_emits_under_limit_stream() {
     let mut h = Harness::new();
     h.enable_rtk_compressor();
 
@@ -582,6 +581,39 @@ fn human_mode_rtk_eligible_asymmetric_overflow_drops_under_limit_stream() {
         stdout(&out).contains("SMALL_STDOUT_MARKER"),
         "the under-limit stdout stream must still be emitted once even when stderr overflows: stdout={:?}",
         stdout(&out)
+    );
+}
+
+// S6.1-05 / §7.6: stdout over limit, stderr under limit — peer must still emit.
+#[test]
+fn human_mode_stdout_overflow_still_emits_under_limit_stderr() {
+    let mut h = Harness::new();
+    h.enable_rtk_compressor();
+
+    let py = python_executable();
+    let script = format!(
+        "#!{}\nimport sys\nsys.stdout.write('o' * {n})\nsys.stdout.flush()\nsys.stderr.write('SMALL_STDERR_MARKER')\nsys.stderr.flush()\n",
+        py.display(),
+        n = DEFAULT_LIMIT_BYTES + 1024,
+    );
+    fs::write(h.path_dir.join("demo-bin"), script).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(
+            h.path_dir.join("demo-bin"),
+            fs::Permissions::from_mode(0o755),
+        )
+        .unwrap();
+    }
+    h.set_demo_build("demo-bin", &[], &["PATH"]);
+
+    let out = h.run(&["build", "demo", "--execute"]);
+    assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
+    assert!(
+        stderr(&out).contains("SMALL_STDERR_MARKER"),
+        "the under-limit stderr stream must still be emitted once even when stdout overflows: stderr={:?}",
+        stderr(&out)
     );
 }
 
