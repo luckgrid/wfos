@@ -3,6 +3,7 @@
 use std::fs;
 use std::path::Path;
 
+use crate::contracts::parse_rfc3339_utc_seconds;
 use crate::contracts::types::RuntimeCommandRecord;
 
 use super::recovery::recover_abandoned_pending;
@@ -59,10 +60,10 @@ fn load_sorted(
     store: &CommandRecordStore,
 ) -> Result<(Vec<RuntimeCommandRecord>, QueryDiagnostics), SessionStoreError> {
     let mut diagnostics = QueryDiagnostics::default();
-    let mut records = Vec::new();
+    let mut records: Vec<(i64, RuntimeCommandRecord)> = Vec::new();
     let root = store.root();
     if !root.exists() {
-        return Ok((records, diagnostics));
+        return Ok((Vec::new(), diagnostics));
     }
     for entry in fs::read_dir(root)? {
         let entry = entry?;
@@ -90,7 +91,15 @@ fn load_sorted(
             continue;
         }
         match recover_abandoned_pending(store, session_id) {
-            Ok(Some(record)) => records.push(record),
+            // S6.1-08: order by the parsed instant, never the raw lexical string. A record
+            // whose started_at does not parse as RFC 3339 is skipped with a bounded diagnostic
+            // rather than silently sorted by its raw text.
+            Ok(Some(record)) => match parse_rfc3339_utc_seconds(&record.started_at) {
+                Ok(instant) => records.push((instant, record)),
+                Err(msg) => diagnostics.skipped.push(format!(
+                    "{session_id}: invalid started_at timestamp ({msg})"
+                )),
+            },
             Ok(None) => {}
             Err(SessionStoreError::Contract(msg)) => {
                 diagnostics.skipped.push(format!("{session_id}: {msg}"));
@@ -101,11 +110,14 @@ fn load_sorted(
             Err(err) => return Err(err),
         }
     }
-    records.sort_by(|a, b| {
-        b.started_at
-            .cmp(&a.started_at)
+    // Newest parsed instant first; session ID descending is the deterministic tie-break. Never
+    // depends on directory iteration order or the timestamp's textual timezone representation.
+    records.sort_by(|(a_instant, a), (b_instant, b)| {
+        b_instant
+            .cmp(a_instant)
             .then_with(|| b.session_id.cmp(&a.session_id))
     });
+    let records = records.into_iter().map(|(_, record)| record).collect();
     Ok((records, diagnostics))
 }
 
@@ -135,11 +147,20 @@ pub fn show_session(
 }
 
 pub fn show_latest(store: &CommandRecordStore) -> Result<RuntimeCommandRecord, SessionStoreError> {
-    let (records, _) = load_sorted(store)?;
-    records
+    show_latest_with_diagnostics(store).map(|(record, _)| record)
+}
+
+/// Same parsed ordering as [`list_sessions`], but also returns the skipped-record diagnostics
+/// instead of discarding them (S6.1-08): a malformed-only store must not look silently empty.
+pub fn show_latest_with_diagnostics(
+    store: &CommandRecordStore,
+) -> Result<(RuntimeCommandRecord, QueryDiagnostics), SessionStoreError> {
+    let (records, diagnostics) = load_sorted(store)?;
+    let record = records
         .into_iter()
         .next()
-        .ok_or_else(|| SessionStoreError::NotFound("latest".into()))
+        .ok_or_else(|| SessionStoreError::NotFound("latest".into()))?;
+    Ok((record, diagnostics))
 }
 
 pub fn is_regular_record_file(path: &Path) -> bool {

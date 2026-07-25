@@ -29,11 +29,20 @@ impl Executor for TokioExecutor {
         plan: &AuthorizedExecutionPlan,
         options: &ExecutionOptions,
     ) -> ExecutionReport {
-        match execute_inner(plan, options).await {
+        match execute_inner(plan, options, &default_signal_factory).await {
             Ok(report) => report,
             Err(err) => err.into_report(),
         }
     }
+}
+
+/// Seam for constructing the controller's signal source, injected so tests can force a
+/// post-spawn signal-installation failure deterministically (S6.1-07). Must be `Send + Sync`
+/// to be held across the `execute_inner` future's `.await` points.
+type SignalFactory = dyn Fn() -> io::Result<Box<dyn SignalSource>> + Send + Sync;
+
+fn default_signal_factory() -> io::Result<Box<dyn SignalSource>> {
+    UnixSignalSource::install().map(|s| Box::new(s) as Box<dyn SignalSource>)
 }
 
 struct ExecFailure {
@@ -68,6 +77,21 @@ impl ExecFailure {
         }
     }
 
+    /// A failure discovered after `cmd.spawn()` already returned an OS-assigned child. The
+    /// child existed (and may have run before cleanup), so this must never present as
+    /// `failed_to_spawn` (S6.1-07).
+    fn controller_error(code: &str, message: impl Into<String>, pid: Option<u32>) -> Self {
+        Self {
+            outcome: "controller_error".into(),
+            diagnostics: vec![DiagnosticRecord {
+                code: code.into(),
+                message: message.into(),
+            }],
+            spawned: true,
+            pid,
+        }
+    }
+
     fn into_report(self) -> ExecutionReport {
         let mut report = ExecutionReport::idle(self.outcome);
         report.spawned = self.spawned;
@@ -78,9 +102,23 @@ impl ExecFailure {
     }
 }
 
+/// Terminate the process group and reap the child before reporting a post-spawn controller
+/// failure, so the record never claims a successful finalize while a child lingers (S6.1-07).
+async fn reap_after_controller_failure(
+    guard: &mut Option<ProcessGroupGuard>,
+    child: &mut tokio::process::Child,
+) {
+    if let Some(g) = guard.as_mut() {
+        g.signal_group(libc::SIGKILL);
+        g.disarm();
+    }
+    let _ = child.wait().await;
+}
+
 async fn execute_inner(
     authorized: &AuthorizedExecutionPlan,
     options: &ExecutionOptions,
+    signal_factory: &SignalFactory,
 ) -> Result<ExecutionReport, ExecFailure> {
     let sealed = authorized.plan();
     let exe = sealed.executable_path();
@@ -129,27 +167,47 @@ async fn execute_inner(
 
     let pid = child.id();
     let mut guard = pid.map(ProcessGroupGuard::new);
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| ExecFailure::io("execution_io", "child stdout pipe missing"))?;
-    let stderr = child
-        .stderr
-        .take()
-        .ok_or_else(|| ExecFailure::io("execution_io", "child stderr pipe missing"))?;
 
-    let mut signals = UnixSignalSource::install().map_err(|e| {
-        ExecFailure::io(
-            "execution_signal",
-            format!("failed to install signal handlers: {e}"),
-        )
-    })?;
+    let stdout = match child.stdout.take() {
+        Some(s) => s,
+        None => {
+            reap_after_controller_failure(&mut guard, &mut child).await;
+            return Err(ExecFailure::controller_error(
+                "execution_io",
+                "child stdout pipe missing",
+                pid,
+            ));
+        }
+    };
+    let stderr = match child.stderr.take() {
+        Some(s) => s,
+        None => {
+            reap_after_controller_failure(&mut guard, &mut child).await;
+            return Err(ExecFailure::controller_error(
+                "execution_io",
+                "child stderr pipe missing",
+                pid,
+            ));
+        }
+    };
+
+    let mut signals = match signal_factory() {
+        Ok(s) => s,
+        Err(e) => {
+            reap_after_controller_failure(&mut guard, &mut child).await;
+            return Err(ExecFailure::controller_error(
+                "execution_signal",
+                format!("failed to install signal handlers: {e}"),
+                pid,
+            ));
+        }
+    };
 
     let (stdout_cap, stderr_cap, status) = match &options.mode {
         ExecutionMode::Json => {
             run_capturing(
                 &mut child,
-                &mut signals,
+                signals.as_mut(),
                 guard.as_mut(),
                 capture_pipe(stdout, limit),
                 capture_pipe(stderr, limit),
@@ -164,7 +222,7 @@ async fn execute_inner(
             let flush_at_eof = !buffer_for_rtk;
             run_capturing(
                 &mut child,
-                &mut signals,
+                signals.as_mut(),
                 guard.as_mut(),
                 stream_or_buffer(
                     stdout,
@@ -185,16 +243,26 @@ async fn execute_inner(
         }
     };
 
-    if let Some(g) = guard.as_mut() {
-        g.disarm();
-    }
-
-    let status = status.map_err(|e| {
-        let mut f = ExecFailure::io("execution_io", format!("failed to wait for child: {e}"));
-        f.spawned = true;
-        f.pid = pid;
-        f
-    })?;
+    let status = match status {
+        Ok(s) => {
+            // The child was already reaped by `child.wait()` above.
+            if let Some(g) = guard.as_mut() {
+                g.disarm();
+            }
+            s
+        }
+        Err(e) => {
+            if let Some(g) = guard.as_mut() {
+                g.signal_group(libc::SIGKILL);
+                g.disarm();
+            }
+            return Err(ExecFailure::controller_error(
+                "execution_io",
+                format!("failed to wait for child: {e}"),
+                pid,
+            ));
+        }
+    };
 
     let (exit_code, signal, outcome) = map_status(&status);
 
@@ -371,83 +439,118 @@ fn finalize_output(
                 .map(|p| std::env::split_paths(&p).collect())
                 .unwrap_or_default();
 
-            if *rtk_eligible
-                && !stdout_cap.truncated
-                && !stderr_cap.truncated
-                && stdout_cap.encoding == StreamEncoding::Utf8
-                && stderr_cap.encoding == StreamEncoding::Utf8
-            {
-                let out_rtk = apply_rtk_if_eligible(
-                    true,
-                    false,
-                    is_dev,
-                    &resolved.program,
-                    &resolved.argv,
-                    stdout_cap,
-                    &path_dirs,
-                );
-                let err_rtk = apply_rtk_if_eligible(
-                    true,
-                    false,
-                    is_dev,
-                    &resolved.program,
-                    &resolved.argv,
-                    stderr_cap,
-                    &path_dirs,
-                );
-                diagnostics.extend(out_rtk.diagnostics.iter().cloned());
-                diagnostics.extend(err_rtk.diagnostics.iter().cloned());
+            // S6.1-05: finalize each stream independently. `stream_or_buffer` already streamed
+            // raw bytes live for any stream that is not RTK-eligible or that overflowed its
+            // buffer; only a still-buffered, under-limit, RTK-eligible stream is unflushed and
+            // needs emitting here. One stream's overflow/encoding must never suppress its peer.
+            let (out_compressor, out_gain, out_emitted) = finalize_human_stream(
+                "stdout",
+                *rtk_eligible,
+                is_dev,
+                &resolved.program,
+                &resolved.argv,
+                stdout_cap,
+                &path_dirs,
+                diagnostics,
+            );
+            let (err_compressor, err_gain, err_emitted) = finalize_human_stream(
+                "stderr",
+                *rtk_eligible,
+                is_dev,
+                &resolved.program,
+                &resolved.argv,
+                stderr_cap,
+                &path_dirs,
+                diagnostics,
+            );
 
-                let mut broken = false;
-                {
-                    let mut out = io::stdout().lock();
-                    let _ = write_ignore_pipe(&mut out, &out_rtk.emitted, &mut broken);
-                }
-                {
-                    let mut err = io::stderr().lock();
-                    let _ = write_ignore_pipe(&mut err, &err_rtk.emitted, &mut broken);
-                }
-                if broken {
-                    diagnostics.push(DiagnosticRecord {
-                        code: "broken_pipe".into(),
-                        message: "output consumer closed while emitting human bytes".into(),
-                    });
-                }
-
-                let compressor = if out_rtk.compressor == "rtk" || err_rtk.compressor == "rtk" {
-                    "rtk".into()
-                } else if out_rtk.compressor != "none" {
-                    out_rtk.compressor.clone()
-                } else {
-                    err_rtk.compressor.clone()
-                };
-                let gain = out_rtk.gain.or(err_rtk.gain);
-                let emitted = out_rtk.emitted.len() as u64 + err_rtk.emitted.len() as u64;
-                (
-                    compressor,
-                    gain,
-                    emitted,
-                    StreamSummary::from_capture(stdout_cap),
-                    StreamSummary::from_capture(stderr_cap),
-                )
-            } else {
-                let emitted = stdout_cap
-                    .total_bytes
-                    .saturating_add(stderr_cap.total_bytes);
-                (
-                    if *rtk_eligible && (stdout_cap.truncated || stderr_cap.truncated) {
-                        "unsupported".into()
-                    } else {
-                        "none".into()
-                    },
-                    None,
-                    emitted,
-                    StreamSummary::from_capture(stdout_cap),
-                    StreamSummary::from_capture(stderr_cap),
-                )
-            }
+            let compressor = merge_compressor(&out_compressor, &err_compressor);
+            let gain = out_gain.or(err_gain);
+            let emitted = out_emitted.saturating_add(err_emitted);
+            (
+                compressor,
+                gain,
+                emitted,
+                StreamSummary::from_capture(stdout_cap),
+                StreamSummary::from_capture(stderr_cap),
+            )
         }
     }
+}
+
+/// Finalize one human-mode stream independently of its peer (S6.1-05). Returns
+/// `(compressor, gain, emitted_bytes)` for this stream alone.
+#[allow(clippy::too_many_arguments)]
+fn finalize_human_stream(
+    label: &'static str,
+    rtk_eligible: bool,
+    is_dev: bool,
+    program: &str,
+    argv: &[String],
+    cap: &StreamCapture,
+    path_dirs: &[PathBuf],
+    diagnostics: &mut Vec<DiagnosticRecord>,
+) -> (String, Option<f64>, u64) {
+    if !rtk_eligible {
+        // `stream_or_buffer` streamed every byte live; nothing left to emit here.
+        return ("none".into(), None, cap.total_bytes);
+    }
+    if cap.truncated {
+        // Overflowed mid-drain: `stream_or_buffer` already flushed the retained prefix and
+        // streamed the remainder live. Emitting again here would duplicate output.
+        return ("unsupported".into(), None, cap.total_bytes);
+    }
+
+    // Buffered and never flushed: this is the only place these bytes reach their destination.
+    if cap.encoding != StreamEncoding::Utf8 {
+        let mut broken = false;
+        write_human_bytes(label, &cap.bytes, &mut broken);
+        if broken {
+            diagnostics.push(DiagnosticRecord {
+                code: "broken_pipe".into(),
+                message: format!("{label}: output consumer closed while emitting human bytes"),
+            });
+        }
+        return ("none".into(), None, cap.bytes.len() as u64);
+    }
+
+    let rtk = apply_rtk_if_eligible(true, false, is_dev, program, argv, cap, path_dirs);
+    diagnostics.extend(rtk.diagnostics.iter().cloned());
+    let mut broken = false;
+    write_human_bytes(label, &rtk.emitted, &mut broken);
+    if broken {
+        diagnostics.push(DiagnosticRecord {
+            code: "broken_pipe".into(),
+            message: format!("{label}: output consumer closed while emitting human bytes"),
+        });
+    }
+    (rtk.compressor, rtk.gain, rtk.emitted.len() as u64)
+}
+
+fn write_human_bytes(label: &str, bytes: &[u8], broken: &mut bool) {
+    match label {
+        "stdout" => {
+            let mut out = io::stdout().lock();
+            let _ = write_ignore_pipe(&mut out, bytes, broken);
+        }
+        "stderr" => {
+            let mut err = io::stderr().lock();
+            let _ = write_ignore_pipe(&mut err, bytes, broken);
+        }
+        _ => unreachable!("finalize_human_stream only uses \"stdout\"/\"stderr\" labels"),
+    }
+}
+
+/// Combine two independent per-stream compressor labels into one summary value, preferring
+/// the more specific outcome: an actual `rtk` compression, then an `unsupported` overflow, then
+/// `none`.
+fn merge_compressor(a: &str, b: &str) -> String {
+    for candidate in ["rtk", "unsupported"] {
+        if a == candidate || b == candidate {
+            return candidate.into();
+        }
+    }
+    "none".into()
 }
 
 fn write_ignore_pipe(writer: &mut dyn Write, bytes: &[u8], broken: &mut bool) -> io::Result<()> {
@@ -464,5 +567,197 @@ fn write_ignore_pipe(writer: &mut dyn Write, bytes: &[u8], broken: &mut bool) ->
             Ok(())
         }
         Err(err) => Err(err),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::contracts::fingerprint_file;
+    use crate::policy::PolicyEvaluationResult;
+    use crate::registry::{RegistryAccess, RegistryPaths};
+    use crate::resolution::{FixedIdGenerator, LifecycleVerb, ResolutionRequest, resolve};
+    use tempfile::TempDir;
+
+    /// Builds a real authorized execution plan whose sealed executable is a fast, real
+    /// `exit 0` script, so `execute_inner` can spawn an actual OS child deterministically.
+    struct DemoHandoff {
+        _temp: TempDir,
+        input: crate::resolution::PolicyEvaluationInput,
+    }
+
+    fn resolve_demo_handoff() -> DemoHandoff {
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/resolution");
+        let temp = tempfile::tempdir().unwrap();
+        let workspace = temp.path().join("ws");
+        fs::create_dir_all(&workspace).unwrap();
+        copy_tree(&fixture, &workspace);
+
+        let path_dir = workspace.join("bin");
+        fs::create_dir_all(&path_dir).unwrap();
+        for name in ["moon", "demo-bin", "rg"] {
+            let p = path_dir.join(name);
+            fs::write(&p, "#!/bin/sh\nexit 0\n").unwrap();
+            fs::set_permissions(&p, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+
+        let registry = workspace.join("registry");
+        write_demo_units(&workspace, &registry);
+
+        let access = RegistryAccess::new(RegistryPaths {
+            registry_root: registry,
+            workspace_root: workspace,
+        });
+        let request = ResolutionRequest {
+            session_id: "tkg_process_test".into(),
+            unit_id: "demo".into(),
+            verb: LifecycleVerb::Build,
+            explicit_profile: None,
+            explain: false,
+            execute_requested: false,
+        };
+        let mut id_gen = FixedIdGenerator {
+            id: "tkg_unused".into(),
+        };
+        let success =
+            resolve(&access, request, vec![path_dir], None, &mut id_gen).expect("resolve demo");
+        DemoHandoff {
+            input: success.policy_evaluation_input(),
+            _temp: temp,
+        }
+    }
+
+    fn write_demo_units(workspace: &Path, registry: &Path) {
+        let desc_dir = registry.join("sources/descriptors");
+        let mut fps = Vec::new();
+        let mut units = Vec::new();
+        for entry in fs::read_dir(&desc_dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().and_then(|e| e.to_str()) != Some("toml") {
+                continue;
+            }
+            let authored: toml::Value =
+                toml::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+            let id = authored["id"].as_str().unwrap().to_string();
+            if id != "demo" {
+                continue;
+            }
+            let rel = format!(
+                "registry/sources/descriptors/{}",
+                path.file_name().unwrap().to_string_lossy()
+            );
+            fps.push(fingerprint_file(&workspace.join(&rel), &rel).unwrap());
+            let entrypoints: serde_json::Value =
+                serde_json::to_value(authored.get("entrypoints").unwrap()).unwrap();
+            let native: serde_json::Value = serde_json::to_value(
+                authored
+                    .get("native")
+                    .and_then(|n| n.get("manifests"))
+                    .unwrap(),
+            )
+            .unwrap();
+            units.push(serde_json::json!({
+                "id": id,
+                "kind": "package",
+                "path": "demo",
+                "native_manifests": native,
+                "entrypoints": entrypoints,
+                "source": "central",
+                "provides": [],
+                "requires": [],
+            }));
+        }
+        let doc = serde_json::json!({
+            "generated_at": "2026-07-21T00:00:00Z",
+            "registry_generation": {
+                "generated_at": "2026-07-21T00:00:00Z",
+                "source_fingerprints": fps,
+            },
+            "summary": {"total": units.len()},
+            "units": units,
+        });
+        fs::write(
+            registry.join("units.json"),
+            serde_json::to_string_pretty(&doc).unwrap(),
+        )
+        .unwrap();
+    }
+
+    fn copy_tree(src: &Path, dst: &Path) {
+        for entry in fs::read_dir(src).unwrap() {
+            let entry = entry.unwrap();
+            let to = dst.join(entry.file_name());
+            if entry.file_type().unwrap().is_dir() {
+                fs::create_dir_all(&to).unwrap();
+                copy_tree(&entry.path(), &to);
+            } else {
+                if let Some(parent) = to.parent() {
+                    fs::create_dir_all(parent).unwrap();
+                }
+                fs::copy(entry.path(), &to).unwrap();
+            }
+        }
+    }
+
+    fn authorized_demo_plan() -> (DemoHandoff, AuthorizedExecutionPlan) {
+        let handoff = resolve_demo_handoff();
+        let result = crate::policy::evaluate_policy(&handoff.input);
+        let PolicyEvaluationResult::Authorized(plan) = result else {
+            panic!("expected dual-Allow authorized plan; got {result:?}");
+        };
+        (handoff, *plan)
+    }
+
+    // S6.1-07: a failure discovered strictly after `cmd.spawn()` succeeded (here, the
+    // injected signal-source factory) must never be reported as `failed_to_spawn`. The OS
+    // already created the child; the record must say so and keep the PID.
+    #[tokio::test]
+    async fn post_spawn_signal_source_failure_reports_controller_error_with_pid() {
+        let (_handoff, plan) = authorized_demo_plan();
+        let options = ExecutionOptions {
+            mode: ExecutionMode::Json,
+            limits: Default::default(),
+        };
+        let failing_factory: &SignalFactory =
+            &|| Err(io::Error::other("injected signal source failure"));
+
+        let report = match execute_inner(&plan, &options, failing_factory).await {
+            Ok(report) => report,
+            Err(err) => err.into_report(),
+        };
+
+        assert_eq!(
+            report.outcome, "controller_error",
+            "post-spawn failures must not present as failed_to_spawn"
+        );
+        assert!(
+            report.spawned,
+            "the child was spawned before the injected failure"
+        );
+        assert!(
+            report.pid.is_some(),
+            "the OS-assigned pid must be preserved on a post-spawn failure"
+        );
+    }
+
+    // Baseline: with the real signal factory, the same plan spawns and completes normally,
+    // proving the injected-failure test above is exercising the intended seam and not some
+    // unrelated spawn defect.
+    #[tokio::test]
+    async fn post_spawn_success_path_still_completes() {
+        let (_handoff, plan) = authorized_demo_plan();
+        let options = ExecutionOptions {
+            mode: ExecutionMode::Json,
+            limits: Default::default(),
+        };
+
+        let report = match execute_inner(&plan, &options, &default_signal_factory).await {
+            Ok(report) => report,
+            Err(err) => err.into_report(),
+        };
+
+        assert_eq!(report.outcome, "completed");
+        assert!(report.spawned);
+        assert!(report.pid.is_some());
     }
 }

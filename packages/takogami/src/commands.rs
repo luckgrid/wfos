@@ -15,13 +15,15 @@ use crate::error::{ControllerError, ExecutionDeferredDetails, PolicyOutcomeDetai
 use crate::execution::{ExecutionMode, ExecutionOptions, Executor, TokioExecutor};
 use crate::output::OutputSink;
 use crate::registry::{
-    ExternalAdapters, Freshness, ProcessAdapters, RefreshKind, RegistryAccess, discover_from_scan,
-    filter_tools, filter_units, find_unit, parse_filters, resolve_registry_paths,
+    ExternalAdapters, Freshness, ProcessAdapters, ProfileSelection, RefreshKind, RegistryAccess,
+    discover_from_scan, filter_tools, filter_units, find_unit, parse_filters,
+    resolve_registry_paths,
 };
 use crate::resolution::{CorrelationIdGenerator, DefaultIdGenerator, ResolutionRequest, resolve};
 use crate::sessions::{
-    CommandRecordStore, RuntimeContextEnv, collect_runtime_context, list_sessions, show_latest,
-    show_session, utc_now_rfc3339,
+    CommandRecordStore, RecordWriter, RuntimeContextEnv, SessionStoreError,
+    collect_runtime_context, list_sessions, show_latest_with_diagnostics, show_session,
+    utc_now_rfc3339,
 };
 
 pub async fn dispatch_implemented(
@@ -50,6 +52,7 @@ pub async fn dispatch_implemented(
                 cli_profile,
                 cli_state_home,
                 &TokioExecutor,
+                &default_store_factory,
             )
             .await
         }
@@ -59,7 +62,19 @@ pub async fn dispatch_implemented(
     }
 }
 
-/// Internal coordinator accepting an injected executor (spy in tests; Tokio in production).
+/// Factory abstraction for opening a record store, injected so lifecycle coordination does not
+/// depend on a concrete [`CommandRecordStore`]. Must be `Send + Sync` to cross the `App::run`
+/// future boundary.
+pub(crate) type StoreFactory =
+    dyn Fn(&Path) -> Result<Box<dyn RecordWriter>, SessionStoreError> + Send + Sync;
+
+/// Production record-store factory. Tests inject a fault-injecting factory instead.
+fn default_store_factory(path: &Path) -> Result<Box<dyn RecordWriter>, SessionStoreError> {
+    CommandRecordStore::open(path).map(|s| Box::new(s) as Box<dyn RecordWriter>)
+}
+
+/// Internal coordinator accepting an injected executor (spy in tests; Tokio in production) and
+/// an injected record-store factory (fault injection in tests; real store in production).
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn run_lifecycle_with_executor(
     sink: &OutputSink,
@@ -70,6 +85,7 @@ pub(crate) async fn run_lifecycle_with_executor(
     cli_profile: Option<&str>,
     cli_state_home: Option<&Path>,
     executor: &dyn Executor,
+    open_store: &StoreFactory,
 ) -> Result<u8, ControllerError> {
     let access = access()?;
     let mut id_gen = DefaultIdGenerator::default();
@@ -78,6 +94,11 @@ pub(crate) async fn run_lifecycle_with_executor(
         .map(|p| std::env::split_paths(&p).collect())
         .unwrap_or_default();
     let env_profile = std::env::var("TAKOGAMI_PROFILE").ok();
+    // S6.1-11: collect once and thread through, instead of discarding the bounded diagnostic
+    // `collect_runtime_context` returns for an invalid opaque ID.
+    let (runtime_context, runtime_context_diag) = runtime_context_now();
+    let runtime_context_diagnostics: Vec<crate::contracts::DiagnosticRecord> =
+        runtime_context_diag.clone().into_iter().collect();
 
     let request = ResolutionRequest {
         session_id: session_id.clone(),
@@ -140,8 +161,14 @@ pub(crate) async fn run_lifecycle_with_executor(
                     ));
                 }
             };
-            let record = base_record_from_rejected(&rejected, verb.as_str(), execute, outcome);
-            let _ = persist_terminal(&state_home, &record);
+            let record = base_record_from_rejected(
+                &rejected,
+                verb.as_str(),
+                execute,
+                outcome,
+                runtime_context.clone(),
+            );
+            persist_terminal(open_store, &state_home, &record)?;
             match rejected.decision() {
                 PolicyDecision::Deny { reason, .. } => {
                     let err = ControllerError::PolicyDeny {
@@ -149,7 +176,13 @@ pub(crate) async fn run_lifecycle_with_executor(
                         details: Box::new(PolicyOutcomeDetails::from_rejected(&rejected)),
                     };
                     return sink
-                        .emit_policy_outcome(verb.as_str(), &err, &rejected, success.freshness)
+                        .emit_policy_outcome(
+                            verb.as_str(),
+                            &err,
+                            &rejected,
+                            success.freshness,
+                            &runtime_context_diagnostics,
+                        )
                         .map_err(|e| ControllerError::internal(e.to_string()));
                 }
                 PolicyDecision::Gate { reason, .. } => {
@@ -158,7 +191,13 @@ pub(crate) async fn run_lifecycle_with_executor(
                         details: Box::new(PolicyOutcomeDetails::from_rejected(&rejected)),
                     };
                     return sink
-                        .emit_policy_outcome(verb.as_str(), &err, &rejected, success.freshness)
+                        .emit_policy_outcome(
+                            verb.as_str(),
+                            &err,
+                            &rejected,
+                            success.freshness,
+                            &runtime_context_diagnostics,
+                        )
                         .map_err(|e| ControllerError::internal(e.to_string()));
                 }
                 PolicyDecision::Allow { .. } => unreachable!(),
@@ -174,8 +213,10 @@ pub(crate) async fn run_lifecycle_with_executor(
             execute,
             "execution_unavailable",
             true,
+            runtime_context.clone(),
+            runtime_context_diag.clone(),
         );
-        let _ = persist_terminal(&state_home, &record);
+        persist_terminal(open_store, &state_home, &record)?;
         let err = ControllerError::ExecutionClassUnavailable {
             message: format!(
                 "execution_class={} with provider {:?} is not executable in S6",
@@ -190,16 +231,16 @@ pub(crate) async fn run_lifecycle_with_executor(
                 &err,
                 Some(&success.explanation),
                 Some(success.freshness),
+                &runtime_context_diagnostics,
             )
             .map_err(|e| ControllerError::internal(e.to_string()));
     }
 
     if execute {
-        let store =
-            CommandRecordStore::open(&state_home).map_err(|e| ControllerError::StateIo {
-                message: e.to_string(),
-                code: e.code().into(),
-            })?;
+        let store = open_store(&state_home).map_err(|e| ControllerError::StateIo {
+            message: e.to_string(),
+            code: e.code().into(),
+        })?;
         let lock = store
             .acquire_lock(&session_id)
             .map_err(|e| ControllerError::StateIo {
@@ -207,8 +248,15 @@ pub(crate) async fn run_lifecycle_with_executor(
                 code: e.code().into(),
             })?;
 
-        let mut pending =
-            base_record_from_authorized(&authorized, verb.as_str(), true, "pending", true);
+        let mut pending = base_record_from_authorized(
+            &authorized,
+            verb.as_str(),
+            true,
+            "pending",
+            true,
+            runtime_context.clone(),
+            runtime_context_diag.clone(),
+        );
         pending.ended_at = None;
         store
             .write_pending(&pending, &lock)
@@ -236,7 +284,12 @@ pub(crate) async fn run_lifecycle_with_executor(
         {
             pending.execution.started = true;
             pending.execution.pid = Some(pid);
-            let _ = store.write_final(&pending, &lock);
+            store
+                .write_final(&pending, &lock)
+                .map_err(|e| ControllerError::StateIo {
+                    message: e.to_string(),
+                    code: e.code().into(),
+                })?;
         }
 
         // Spy / unavailable stand-ins remain non-spawning for S5.2 reachability tests.
@@ -249,7 +302,12 @@ pub(crate) async fn run_lifecycle_with_executor(
             let mut final_rec = pending;
             final_rec.execution.outcome = "execution_unavailable".into();
             final_rec.ended_at = Some(utc_now_rfc3339());
-            let _ = store.write_final(&final_rec, &lock);
+            store
+                .write_final(&final_rec, &lock)
+                .map_err(|e| ControllerError::StateIo {
+                    message: e.to_string(),
+                    code: e.code().into(),
+                })?;
             let err = ControllerError::ExecutionUnavailable {
                 session_id: session_id.clone(),
                 details: Box::new(ExecutionDeferredDetails::from_authorized(&authorized)),
@@ -260,6 +318,7 @@ pub(crate) async fn run_lifecycle_with_executor(
                     &err,
                     Some(&success.explanation),
                     Some(success.freshness),
+                    &runtime_context_diagnostics,
                 )
                 .map_err(|e| ControllerError::internal(e.to_string()));
         }
@@ -296,12 +355,21 @@ pub(crate) async fn run_lifecycle_with_executor(
                 success.freshness,
                 &report,
                 &final_rec,
+                &runtime_context_diagnostics,
             )
             .map_err(|e| ControllerError::internal(e.to_string()));
     }
 
-    let record = base_record_from_authorized(&authorized, verb.as_str(), false, "planned", true);
-    let _ = persist_terminal(&state_home, &record);
+    let record = base_record_from_authorized(
+        &authorized,
+        verb.as_str(),
+        false,
+        "planned",
+        true,
+        runtime_context.clone(),
+        runtime_context_diag.clone(),
+    );
+    persist_terminal(open_store, &state_home, &record)?;
 
     if explain {
         sink.emit_explanation_with_policy(
@@ -309,6 +377,7 @@ pub(crate) async fn run_lifecycle_with_executor(
             &authorized,
             &success.explanation,
             success.freshness,
+            &runtime_context_diagnostics,
         )
         .map_err(|e| ControllerError::internal(e.to_string()))
     } else {
@@ -317,6 +386,7 @@ pub(crate) async fn run_lifecycle_with_executor(
             &authorized,
             &success.explanation,
             success.freshness,
+            &runtime_context_diagnostics,
         )
         .map_err(|e| ControllerError::internal(e.to_string()))
     }
@@ -339,6 +409,7 @@ fn profile_compressor(profile: &crate::registry::ProfileRecord) -> String {
 }
 
 fn persist_terminal(
+    open_store: &StoreFactory,
     state_home: &Path,
     record: &RuntimeCommandRecord,
 ) -> Result<(), ControllerError> {
@@ -346,7 +417,7 @@ fn persist_terminal(
         message: e.to_string(),
         code: "state_io".into(),
     })?;
-    let store = CommandRecordStore::open(state_home).map_err(|e| ControllerError::StateIo {
+    let store = open_store(state_home).map_err(|e| ControllerError::StateIo {
         message: e.to_string(),
         code: e.code().into(),
     })?;
@@ -403,10 +474,11 @@ fn base_record_from_authorized(
     execute: bool,
     outcome: &str,
     include_resolution: bool,
+    runtime_context: Option<crate::contracts::RuntimeContext>,
+    runtime_context_diag: Option<crate::contracts::DiagnosticRecord>,
 ) -> RuntimeCommandRecord {
     let plan = authorized.plan();
     let resolved = plan.resolved();
-    let (runtime_context, _) = runtime_context_now();
     let ended = outcome != "pending";
     RuntimeCommandRecord {
         schema_version: SCHEMA_VERSION.into(),
@@ -437,7 +509,9 @@ fn base_record_from_authorized(
         },
         source_fingerprints: resolved.registry_generation.source_fingerprints.clone(),
         output_summary: empty_output(),
-        error: None,
+        // S6.1-11: safe home for the bounded runtime-context diagnostic; nothing more severe
+        // has happened yet at plan/pending-record construction time.
+        error: runtime_context_diag,
     }
 }
 
@@ -446,10 +520,10 @@ fn base_record_from_rejected(
     command: &str,
     execute: bool,
     outcome: &str,
+    runtime_context: Option<crate::contracts::RuntimeContext>,
 ) -> RuntimeCommandRecord {
     let plan = rejected.plan();
     let resolved = plan.resolved();
-    let (runtime_context, _) = runtime_context_now();
     RuntimeCommandRecord {
         schema_version: SCHEMA_VERSION.into(),
         record_kind: RECORD_KIND_COMMAND_EXECUTION.into(),
@@ -511,24 +585,27 @@ fn run_session(
     cli_profile: Option<&str>,
 ) -> Result<u8, ControllerError> {
     let access = access()?;
-    let profiles = access.load_profiles().ok();
-    let profile_home = profiles.as_ref().and_then(|doc| {
-        let id = cli_profile
-            .map(str::to_string)
-            .or_else(|| std::env::var("TAKOGAMI_PROFILE").ok())
-            .or_else(|| {
-                doc.profiles
-                    .iter()
-                    .find(|p| p.id == "workspace-dev")
-                    .map(|p| p.id.clone())
-            });
-        id.and_then(|want| {
-            doc.profiles
+    // S6.1-09: no state directory is opened before profile/root resolution succeeds, and no
+    // profile error path silently falls through to XDG/HOME.
+    let profiles = access.load_profiles()?;
+    let env_profile = std::env::var("TAKOGAMI_PROFILE").ok();
+    let profile_home = match profiles.resolve_profile_selection(cli_profile, env_profile.as_deref())
+    {
+        ProfileSelection::Explicit(id) => {
+            let profile = profiles
+                .profiles
                 .iter()
-                .find(|p| p.id == want)
-                .and_then(|p| p.session_state_home.clone())
-        })
-    });
+                .find(|p| p.id == id)
+                .ok_or_else(|| ControllerError::usage(format!("unknown profile: {id}")))?;
+            profile.session_state_home.clone()
+        }
+        ProfileSelection::Default(id) => profiles
+            .profiles
+            .iter()
+            .find(|p| p.id == id)
+            .and_then(|p| p.session_state_home.clone()),
+        ProfileSelection::None => None,
+    };
     let env_state = std::env::var("TAKOGAMI_STATE_HOME").ok();
     let env_xdg = std::env::var("XDG_STATE_HOME").ok();
     let state_home = resolve_session_state_home(StateHomeInputs {
@@ -584,19 +661,22 @@ fn run_session(
                     code: other.code().into(),
                 },
             })?;
-            emit_session_record(sink, &record)
+            emit_session_record(sink, &record, &[])
         }
         SessionCommand::Latest => {
-            let record = show_latest(&store).map_err(|e| match e {
-                crate::sessions::SessionStoreError::NotFound(_) => {
-                    ControllerError::not_found("no command execution records")
-                }
-                other => ControllerError::StateIo {
-                    message: other.to_string(),
-                    code: other.code().into(),
-                },
-            })?;
-            emit_session_record(sink, &record)
+            // S6.1-08: surface the same skipped-record diagnostics `list` reports, instead of
+            // discarding them.
+            let (record, diagnostics) =
+                show_latest_with_diagnostics(&store).map_err(|e| match e {
+                    crate::sessions::SessionStoreError::NotFound(_) => {
+                        ControllerError::not_found("no command execution records")
+                    }
+                    other => ControllerError::StateIo {
+                        message: other.to_string(),
+                        code: other.code().into(),
+                    },
+                })?;
+            emit_session_record(sink, &record, &diagnostics.skipped)
         }
     }
 }
@@ -604,9 +684,15 @@ fn run_session(
 fn emit_session_record(
     sink: &OutputSink,
     record: &RuntimeCommandRecord,
+    diagnostics: &[String],
 ) -> Result<u8, ControllerError> {
-    let data =
+    let mut data =
         serde_json::to_value(record).map_err(|e| ControllerError::internal(e.to_string()))?;
+    if !diagnostics.is_empty()
+        && let Some(obj) = data.as_object_mut()
+    {
+        obj.insert("diagnostics".into(), serde_json::json!(diagnostics));
+    }
     let human = vec![
         format!("Record kind: {}", record.record_kind),
         format!("Session ID: {}", record.session_id),
@@ -901,13 +987,15 @@ fn writeln_human(line: &str) -> Result<(), ControllerError> {
 mod tests {
     use super::*;
     use crate::contracts::{RegistryGeneration, fingerprint_file};
-    use crate::execution::{SpyExecutor, UnavailableExecutor};
+    use crate::execution::{ExecutionReport, SpyExecutor, UnavailableExecutor};
     use crate::exit_codes::{
         CONTRACT, NOT_IMPLEMENTED, POLICY_DENY, POLICY_GATE, RESOLUTION, SUCCESS,
     };
     use crate::resolution::LifecycleVerb;
+    use crate::sessions::SessionLock;
     use std::fs;
     use std::path::{Path, PathBuf};
+    use std::sync::atomic::{AtomicU32, Ordering};
     use std::sync::{Mutex, OnceLock};
 
     fn env_lock() -> &'static Mutex<()> {
@@ -927,7 +1015,11 @@ mod tests {
 
     impl Fixture {
         fn new() -> Self {
-            let guard = env_lock().lock().unwrap();
+            // Recover from poisoning: a panic in one test while holding this lock must not
+            // cascade into spurious failures for every other test sharing this process.
+            let guard = env_lock()
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
             let fixture =
                 PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/resolution");
             let temp = tempfile::tempdir().unwrap();
@@ -1079,6 +1171,22 @@ adapter = "direct""#,
         fn assert_marker_untouched(&self) {
             assert!(!self.marker.exists(), "marker must never run");
         }
+
+        fn load_state_home_records(&self) -> Vec<serde_json::Value> {
+            if !self.state_home.exists() {
+                return Vec::new();
+            }
+            let mut out = Vec::new();
+            for entry in fs::read_dir(&self.state_home).unwrap() {
+                let path = entry.unwrap().path();
+                let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                if name.starts_with('.') || !name.ends_with(".json") {
+                    continue;
+                }
+                out.push(serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap());
+            }
+            out
+        }
     }
 
     fn write_marker_exe(path: &Path, marker: &Path) {
@@ -1113,6 +1221,16 @@ adapter = "direct""#,
         profile: Option<&str>,
         executor: &dyn Executor,
     ) -> Result<u8, ControllerError> {
+        run_with_executor_and_store(unit, execute, profile, executor, &default_store_factory).await
+    }
+
+    async fn run_with_executor_and_store(
+        unit: &str,
+        execute: bool,
+        profile: Option<&str>,
+        executor: &dyn Executor,
+        open_store: &StoreFactory,
+    ) -> Result<u8, ControllerError> {
         let sink = OutputSink {
             json: true,
             no_color: true,
@@ -1126,6 +1244,7 @@ adapter = "direct""#,
             profile,
             None,
             executor,
+            open_store,
         )
         .await
     }
@@ -1156,13 +1275,305 @@ adapter = "direct""#,
         }
     }
 
+    // --- S6.1-01 / S6.1-02 regressions: every lifecycle record write must be observable. ---
+
+    /// Test double returning a fixed [`ExecutionReport`] without spawning anything.
+    struct ScriptedExecutor {
+        calls: AtomicU32,
+        report: ExecutionReport,
+    }
+
+    impl ScriptedExecutor {
+        fn new(report: ExecutionReport) -> Self {
+            Self {
+                calls: AtomicU32::new(0),
+                report,
+            }
+        }
+
+        fn calls(&self) -> u32 {
+            self.calls.load(Ordering::SeqCst)
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl Executor for ScriptedExecutor {
+        async fn execute(
+            &self,
+            _plan: &crate::policy::AuthorizedExecutionPlan,
+            _options: &crate::execution::ExecutionOptions,
+        ) -> ExecutionReport {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            self.report.clone()
+        }
+    }
+
+    fn scripted_spawned_report(outcome: &str, pid: u32) -> ExecutionReport {
+        let mut report = ExecutionReport::idle(outcome);
+        report.spawned = true;
+        report.pid = Some(pid);
+        report.exit_code = Some(0);
+        report
+    }
+
+    /// Which [`RecordWriter`] call a [`FaultyStore`] should fail, by lifecycle position.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum FaultPoint {
+        InitialPending,
+        FirstFinal,
+        SecondFinal,
+        TerminalUnlocked,
+    }
+
+    /// Wraps a real [`CommandRecordStore`] but injects a deterministic write failure at one
+    /// lifecycle position, per S6.1 Â§7.1 ("Use injectable store faults ... do not depend solely
+    /// on permission bits").
+    struct FaultyStore {
+        inner: CommandRecordStore,
+        fault: FaultPoint,
+        final_calls: AtomicU32,
+    }
+
+    impl FaultyStore {
+        fn new(inner: CommandRecordStore, fault: FaultPoint) -> Self {
+            Self {
+                inner,
+                fault,
+                final_calls: AtomicU32::new(0),
+            }
+        }
+
+        fn injected(what: &str) -> SessionStoreError {
+            SessionStoreError::Contract(format!("injected fault: {what}"))
+        }
+    }
+
+    impl RecordWriter for FaultyStore {
+        fn acquire_lock(&self, session_id: &str) -> Result<SessionLock, SessionStoreError> {
+            self.inner.acquire_lock(session_id)
+        }
+
+        fn write_pending(
+            &self,
+            record: &RuntimeCommandRecord,
+            lock: &SessionLock,
+        ) -> Result<(), SessionStoreError> {
+            if self.fault == FaultPoint::InitialPending {
+                return Err(Self::injected("initial pending install"));
+            }
+            self.inner.write_pending(record, lock)
+        }
+
+        fn write_final(
+            &self,
+            record: &RuntimeCommandRecord,
+            lock: &SessionLock,
+        ) -> Result<(), SessionStoreError> {
+            let call_index = self.final_calls.fetch_add(1, Ordering::SeqCst);
+            let should_fail = match self.fault {
+                FaultPoint::FirstFinal => call_index == 0,
+                FaultPoint::SecondFinal => call_index == 1,
+                _ => false,
+            };
+            if should_fail {
+                return Err(Self::injected("final replace"));
+            }
+            self.inner.write_final(record, lock)
+        }
+
+        fn write_terminal_unlocked(
+            &self,
+            record: &RuntimeCommandRecord,
+        ) -> Result<(), SessionStoreError> {
+            if self.fault == FaultPoint::TerminalUnlocked {
+                return Err(Self::injected("terminal unlocked install"));
+            }
+            self.inner.write_terminal_unlocked(record)
+        }
+    }
+
+    fn faulty_factory(
+        fault: FaultPoint,
+    ) -> impl Fn(&Path) -> Result<Box<dyn RecordWriter>, SessionStoreError> {
+        move |path: &Path| {
+            let inner = CommandRecordStore::open(path)?;
+            Ok(Box::new(FaultyStore::new(inner, fault)) as Box<dyn RecordWriter>)
+        }
+    }
+
+    fn assert_state_io_error(result: &Result<u8, ControllerError>) {
+        match result {
+            Err(ControllerError::StateIo { .. }) => {}
+            other => panic!("expected ControllerError::StateIo, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn deny_terminal_install_failure_surfaces_state_error_with_zero_executor_calls() {
+        let fx = Fixture::new();
+        let path = fx.registry.join("sources/descriptors/demo.descriptor.toml");
+        let text = fs::read_to_string(&path).unwrap().replace(
+            r#"program = "moon"
+args = ["run", "demo:build"]
+cwd = "demo"
+env_keys = ["PATH"]
+backend = "moon"
+adapter = "moon-task""#,
+            r#"program = "rm"
+args = ["bin/foo"]
+cwd = "demo"
+env_keys = ["PATH"]
+backend = "native"
+adapter = "direct""#,
+        );
+        fs::write(&path, text).unwrap();
+        fx.write_hit_units();
+
+        let spy = SpyExecutor::default();
+        let factory = faulty_factory(FaultPoint::TerminalUnlocked);
+        let result = run_with_executor_and_store("demo", true, None, &spy, &factory).await;
+        assert_state_io_error(&result);
+        assert_eq!(spy.calls(), 0);
+        fx.assert_marker_untouched();
+        assert!(
+            fx.load_state_home_records().is_empty(),
+            "no false denied audit record may be installed on state-write failure"
+        );
+    }
+
+    #[tokio::test]
+    async fn gate_terminal_install_failure_surfaces_state_error_with_zero_executor_calls() {
+        let mut fx = Fixture::new();
+        fx.patch_demo_gated();
+        let spy = SpyExecutor::default();
+        let factory = faulty_factory(FaultPoint::TerminalUnlocked);
+        let result = run_with_executor_and_store("demo", true, None, &spy, &factory).await;
+        assert_state_io_error(&result);
+        assert_eq!(spy.calls(), 0);
+        fx.assert_marker_untouched();
+        assert!(
+            fx.load_state_home_records().is_empty(),
+            "no false gated audit record may be installed on state-write failure"
+        );
+    }
+
+    #[tokio::test]
+    async fn plan_only_terminal_install_failure_surfaces_state_error_with_zero_executor_calls() {
+        let fx = Fixture::new();
+        let spy = SpyExecutor::default();
+        let factory = faulty_factory(FaultPoint::TerminalUnlocked);
+        let result = run_with_executor_and_store("demo", false, None, &spy, &factory).await;
+        assert_state_io_error(&result);
+        assert_eq!(spy.calls(), 0);
+        fx.assert_marker_untouched();
+        assert!(
+            fx.load_state_home_records().is_empty(),
+            "no false planned audit record may be installed on state-write failure"
+        );
+    }
+
+    #[tokio::test]
+    async fn unavailable_class_terminal_install_failure_surfaces_state_error_with_zero_executor_calls()
+     {
+        let fx = Fixture::new();
+        let spy = SpyExecutor::default();
+        let factory = faulty_factory(FaultPoint::TerminalUnlocked);
+        let result =
+            run_with_executor_and_store("interactive-demo", true, None, &spy, &factory).await;
+        assert_state_io_error(&result);
+        assert_eq!(spy.calls(), 0);
+        fx.assert_marker_untouched();
+        assert!(
+            fx.load_state_home_records().is_empty(),
+            "no false execution_unavailable audit record may be installed on state-write failure"
+        );
+    }
+
+    #[tokio::test]
+    async fn allow_execute_initial_pending_failure_surfaces_state_error_before_executor_call() {
+        let fx = Fixture::new();
+        let spy = SpyExecutor::default();
+        let factory = faulty_factory(FaultPoint::InitialPending);
+        let result = run_with_executor_and_store("demo", true, None, &spy, &factory).await;
+        assert_state_io_error(&result);
+        assert_eq!(
+            spy.calls(),
+            0,
+            "executor must not run before the initial pending record is durable"
+        );
+        assert!(
+            fx.load_state_home_records().is_empty(),
+            "marker record absent"
+        );
+        fx.assert_marker_untouched();
+    }
+
+    #[tokio::test]
+    async fn allow_execute_pid_bearing_pending_replace_failure_surfaces_state_error() {
+        let fx = Fixture::new();
+        let executor = ScriptedExecutor::new(scripted_spawned_report("completed", 4242));
+        let factory = faulty_factory(FaultPoint::FirstFinal);
+        let result = run_with_executor_and_store("demo", true, None, &executor, &factory).await;
+        assert_state_io_error(&result);
+        assert_eq!(executor.calls(), 1);
+        let records = fx.load_state_home_records();
+        assert_eq!(
+            records.len(),
+            1,
+            "the initial pending record must remain recoverable"
+        );
+        let rec = &records[0];
+        assert_eq!(rec["execution"]["outcome"], "pending");
+        assert!(
+            rec["execution"]["pid"].is_null(),
+            "PID must not appear unless the PID-bearing write actually succeeded"
+        );
+    }
+
+    #[tokio::test]
+    async fn allow_execute_terminal_replace_failure_surfaces_state_error() {
+        let fx = Fixture::new();
+        let executor = ScriptedExecutor::new(scripted_spawned_report("completed", 4242));
+        let factory = faulty_factory(FaultPoint::SecondFinal);
+        let result = run_with_executor_and_store("demo", true, None, &executor, &factory).await;
+        assert_state_io_error(&result);
+        assert_eq!(executor.calls(), 1);
+        let records = fx.load_state_home_records();
+        assert_eq!(
+            records.len(),
+            1,
+            "the PID-bearing pending record must remain"
+        );
+        let rec = &records[0];
+        assert_eq!(rec["execution"]["outcome"], "pending");
+        assert_eq!(rec["execution"]["pid"], 4242);
+        assert_eq!(rec["execution"]["started"], true);
+    }
+
+    #[tokio::test]
+    async fn unavailable_executor_terminal_replace_failure_surfaces_state_error_not_discarded() {
+        let fx = Fixture::new();
+        let executor = RecordingUnavailableExecutor::default();
+        let factory = faulty_factory(FaultPoint::FirstFinal);
+        let result = run_with_executor_and_store("demo", true, None, &executor, &factory).await;
+        assert_state_io_error(&result);
+        assert_eq!(executor.calls.load(Ordering::SeqCst), 1);
+        let records = fx.load_state_home_records();
+        assert_eq!(
+            records.len(),
+            1,
+            "the initial pending record must remain recoverable"
+        );
+        assert_eq!(records[0]["execution"]["outcome"], "pending");
+    }
+
     #[tokio::test]
     async fn allow_execute_invokes_spy_once() {
         let fx = Fixture::new();
         let spy = SpyExecutor::default();
         let code = run("demo", true, None, &spy).await.expect("lifecycle");
         assert_eq!(code, NOT_IMPLEMENTED);
-        assert_eq!(spy.calls.get(), 1);
+        assert_eq!(spy.calls(), 1);
         fx.assert_marker_untouched();
     }
 
@@ -1172,7 +1583,7 @@ adapter = "direct""#,
         let spy = SpyExecutor::default();
         let code = run("demo", false, None, &spy).await.expect("lifecycle");
         assert_eq!(code, SUCCESS);
-        assert_eq!(spy.calls.get(), 0);
+        assert_eq!(spy.calls(), 0);
         fx.assert_marker_untouched();
     }
 
@@ -1183,7 +1594,7 @@ adapter = "direct""#,
         let spy = SpyExecutor::default();
         let code = run("demo", true, None, &spy).await.expect("lifecycle");
         assert_eq!(code, POLICY_GATE);
-        assert_eq!(spy.calls.get(), 0);
+        assert_eq!(spy.calls(), 0);
         fx.assert_marker_untouched();
     }
 
@@ -1195,7 +1606,7 @@ adapter = "direct""#,
             let spy = SpyExecutor::default();
             let code = run("demo", true, None, &spy).await.expect("lifecycle");
             assert_eq!(code, expected, "effect={effect}");
-            assert_eq!(spy.calls.get(), 0, "effect={effect}");
+            assert_eq!(spy.calls(), 0, "effect={effect}");
             fx.assert_marker_untouched();
         }
     }
@@ -1225,7 +1636,7 @@ adapter = "direct""#,
         let spy = SpyExecutor::default();
         let code = run("demo", true, None, &spy).await.expect("lifecycle");
         assert_eq!(code, POLICY_DENY);
-        assert_eq!(spy.calls.get(), 0);
+        assert_eq!(spy.calls(), 0);
         fx.assert_marker_untouched();
     }
 
@@ -1237,7 +1648,7 @@ adapter = "direct""#,
             .await
             .expect("resolution envelope");
         assert_eq!(code, RESOLUTION);
-        assert_eq!(spy.calls.get(), 0);
+        assert_eq!(spy.calls(), 0);
         fx.assert_marker_untouched();
 
         fx.patch_policy_contract_invalid();
@@ -1245,7 +1656,7 @@ adapter = "direct""#,
             .await
             .expect("contract envelope");
         assert_eq!(code, CONTRACT);
-        assert_eq!(spy.calls.get(), 0);
+        assert_eq!(spy.calls(), 0);
         fx.assert_marker_untouched();
     }
 
@@ -1257,7 +1668,7 @@ adapter = "direct""#,
             .await
             .expect("class envelope");
         assert_eq!(code, NOT_IMPLEMENTED);
-        assert_eq!(spy.calls.get(), 0);
+        assert_eq!(spy.calls(), 0);
         fx.assert_marker_untouched();
     }
 

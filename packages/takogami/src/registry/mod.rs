@@ -12,7 +12,7 @@ pub use query::{UnitFilters, filter_tools, filter_units, find_unit, parse_filter
 pub use scan::{ScanDiscovery, discover_from_scan};
 pub use types::{
     AuthoredNative, AuthoredPaths, AuthoredUnitDescriptor, EntrypointDefinition, Freshness,
-    PoliciesDocument, PolicyRecord, ProfileRecord, ProfilesDocument, ProvisionalUnit,
-    RegistryFileKind, ScanDocument, StructuredEntrypoint, ToolRecord, ToolsDocument,
-    UnitDefinition, UnitRecord, UnitsDocument, WorkspaceScanEntry,
+    PoliciesDocument, PolicyRecord, ProfileRecord, ProfileSelection, ProfilesDocument,
+    ProvisionalUnit, RegistryFileKind, ScanDocument, StructuredEntrypoint, ToolRecord,
+    ToolsDocument, UnitDefinition, UnitRecord, UnitsDocument, WorkspaceScanEntry,
 };

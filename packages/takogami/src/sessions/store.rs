@@ -130,9 +130,10 @@ impl CommandRecordStore {
     pub fn write_pending(
         &self,
         record: &RuntimeCommandRecord,
-        _lock: &SessionLock,
+        lock: &SessionLock,
     ) -> Result<(), SessionStoreError> {
         self.validate_for_write(record)?;
+        check_lock_matches_record(lock, record)?;
         let path = self.record_path(&record.session_id)?;
         if path_present(&path)? {
             return Err(SessionStoreError::Collision(record.session_id.clone()));
@@ -141,13 +142,27 @@ impl CommandRecordStore {
     }
 
     /// Atomically replace the current document for a held lock (pending PID update or final).
+    ///
+    /// The lock must have been acquired for this exact session, and the currently installed
+    /// record must be a legal predecessor of `record`: a live `pending` record retaining the
+    /// same `plan_digest`. Once a record is terminal, it is immutable through this path (S6.1-04).
     pub fn write_final(
         &self,
         record: &RuntimeCommandRecord,
-        _lock: &SessionLock,
+        lock: &SessionLock,
     ) -> Result<(), SessionStoreError> {
         self.validate_for_write(record)?;
+        check_lock_matches_record(lock, record)?;
         let path = self.record_path(&record.session_id)?;
+        let current = self
+            .read_path(&path, &record.session_id)
+            .map_err(|err| match err {
+                SessionStoreError::NotFound(id) => SessionStoreError::Contract(format!(
+                    "no installed pending record to finalize for session {id}"
+                )),
+                other => other,
+            })?;
+        check_legal_transition(&current, record)?;
         self.atomic_replace(&path, record)
     }
 
@@ -246,6 +261,96 @@ impl CommandRecordStore {
         }
         write_result
     }
+}
+
+/// Seam allowing lifecycle coordination to depend on record persistence abstractly.
+///
+/// Production wiring always resolves to [`CommandRecordStore`]. Tests use this to inject
+/// deterministic write failures without relying solely on filesystem permission bits.
+pub(crate) trait RecordWriter: Send + Sync {
+    fn acquire_lock(&self, session_id: &str) -> Result<SessionLock, SessionStoreError>;
+    fn write_pending(
+        &self,
+        record: &RuntimeCommandRecord,
+        lock: &SessionLock,
+    ) -> Result<(), SessionStoreError>;
+    fn write_final(
+        &self,
+        record: &RuntimeCommandRecord,
+        lock: &SessionLock,
+    ) -> Result<(), SessionStoreError>;
+    fn write_terminal_unlocked(
+        &self,
+        record: &RuntimeCommandRecord,
+    ) -> Result<(), SessionStoreError>;
+}
+
+impl RecordWriter for CommandRecordStore {
+    fn acquire_lock(&self, session_id: &str) -> Result<SessionLock, SessionStoreError> {
+        CommandRecordStore::acquire_lock(self, session_id)
+    }
+
+    fn write_pending(
+        &self,
+        record: &RuntimeCommandRecord,
+        lock: &SessionLock,
+    ) -> Result<(), SessionStoreError> {
+        CommandRecordStore::write_pending(self, record, lock)
+    }
+
+    fn write_final(
+        &self,
+        record: &RuntimeCommandRecord,
+        lock: &SessionLock,
+    ) -> Result<(), SessionStoreError> {
+        CommandRecordStore::write_final(self, record, lock)
+    }
+
+    fn write_terminal_unlocked(
+        &self,
+        record: &RuntimeCommandRecord,
+    ) -> Result<(), SessionStoreError> {
+        CommandRecordStore::write_terminal_unlocked(self, record)
+    }
+}
+
+/// A lock only authorizes writing the record for the session it was acquired for (S6.1-04).
+fn check_lock_matches_record(
+    lock: &SessionLock,
+    record: &RuntimeCommandRecord,
+) -> Result<(), SessionStoreError> {
+    if lock.session_id() != record.session_id {
+        return Err(SessionStoreError::Contract(format!(
+            "lock held for session `{}` cannot authorize writing session `{}`",
+            lock.session_id(),
+            record.session_id
+        )));
+    }
+    Ok(())
+}
+
+/// `pending` is the only outcome a [`CommandRecordStore::write_final`] replacement may
+/// originate from; once terminal, a record is immutable (S6.1-04). A byte-identical retry of
+/// the already-installed terminal record is tolerated as a no-op for idempotent callers.
+fn check_legal_transition(
+    current: &RuntimeCommandRecord,
+    next: &RuntimeCommandRecord,
+) -> Result<(), SessionStoreError> {
+    if current.plan_digest != next.plan_digest {
+        return Err(SessionStoreError::Contract(
+            "final replace must retain the installed pending record's plan_digest".into(),
+        ));
+    }
+    if current.execution.outcome != "pending" {
+        if current == next {
+            return Ok(());
+        }
+        return Err(SessionStoreError::Contract(format!(
+            "cannot replace terminal record (outcome={}) via write_final",
+            current.execution.outcome
+        )));
+    }
+    Ok(())
 }
 
 fn path_present(path: &Path) -> Result<bool, SessionStoreError> {

@@ -231,6 +231,21 @@ impl Harness {
         assert!(!self.marker.exists(), "marker executable must never run");
     }
 
+    /// Marks `workspace-dev` as RTK-eligible so human-mode `finalize_output` takes its
+    /// combined-stream branch, without requiring a real RTK adapter binary on `PATH`.
+    fn enable_rtk_compressor(&self) {
+        let path = self.registry.join("profiles.json");
+        let mut document: Value =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        let profiles = document["profiles"].as_array_mut().unwrap();
+        let profile = profiles
+            .iter_mut()
+            .find(|p| p["id"] == "workspace-dev")
+            .unwrap();
+        profile["output_compressor"] = Value::String("rtk".into());
+        fs::write(&path, serde_json::to_string_pretty(&document).unwrap()).unwrap();
+    }
+
     fn load_records(&self) -> Vec<Value> {
         if !self.state_home.exists() {
             return Vec::new();
@@ -536,6 +551,40 @@ fn json_one_document_with_bounded_child_capture() {
     );
 }
 
+// S6.1-05: `finalize_output` takes one combined branch, so when only one stream overflows the
+// retained under-limit peer is never emitted.
+#[test]
+fn human_mode_rtk_eligible_asymmetric_overflow_drops_under_limit_stream() {
+    let mut h = Harness::new();
+    h.enable_rtk_compressor();
+
+    let py = python_executable();
+    let script = format!(
+        "#!{}\nimport sys\nsys.stdout.write('SMALL_STDOUT_MARKER')\nsys.stdout.flush()\nsys.stderr.write('e' * {n})\nsys.stderr.flush()\n",
+        py.display(),
+        n = DEFAULT_LIMIT_BYTES + 1024,
+    );
+    fs::write(h.path_dir.join("demo-bin"), script).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(
+            h.path_dir.join("demo-bin"),
+            fs::Permissions::from_mode(0o755),
+        )
+        .unwrap();
+    }
+    h.set_demo_build("demo-bin", &[], &["PATH"]);
+
+    let out = h.run(&["build", "demo", "--execute"]);
+    assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
+    assert!(
+        stdout(&out).contains("SMALL_STDOUT_MARKER"),
+        "the under-limit stdout stream must still be emitted once even when stderr overflows: stdout={:?}",
+        stdout(&out)
+    );
+}
+
 #[test]
 fn gate_and_deny_execute_never_spawn() {
     for (program, args, expect_exit, outcome) in [
@@ -562,4 +611,27 @@ fn gate_and_deny_execute_never_spawn() {
         assert!(rec.get("resolution").is_none() || rec["resolution"].is_null());
         assert!(rec["execution"]["pid"].is_null());
     }
+}
+
+// S6.1-11: `collect_runtime_context`'s bounded invalid-opaque-id diagnostic must reach both the
+// durable record's `error` field and the command envelope, not be silently discarded.
+#[test]
+fn invalid_tmux_pane_diagnostic_reaches_record_and_envelope() {
+    let h = Harness::new();
+    let out = h.run_env(
+        &["--json", "build", "demo", "--execute"],
+        &[("TMUX", "/tmp/tmux-1000/default"), ("TMUX_PANE", "%3/bad")],
+    );
+    assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
+    let v = parse_json(&out);
+    let diags = v["diagnostics"].as_array().expect("diagnostics array");
+    assert!(
+        diags.iter().any(|d| d["code"] == "runtime_context_invalid"),
+        "envelope diagnostics must surface the runtime-context warning: {diags:?}"
+    );
+    let rec = &h.load_records()[0];
+    assert_eq!(rec["execution"]["outcome"], "completed");
+    assert!(rec["runtime_context"].is_null());
+    assert_eq!(rec["error"]["code"], "runtime_context_invalid");
+    assert!(!rec["error"]["message"].as_str().unwrap().contains('/'));
 }

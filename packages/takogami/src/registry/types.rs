@@ -194,12 +194,45 @@ pub struct ProvisionalUnit {
     pub evidence: Vec<String>,
 }
 
+/// Result of the strict CLI -> env -> `workspace-dev` profile precedence (S6.1-09). Distinguishes
+/// an explicitly requested id (which must exist, or callers must fail closed) from a
+/// `workspace-dev` default (which is only ever produced when that profile is present) from no
+/// candidate at all (no explicit request and no `workspace-dev` profile).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProfileSelection {
+    Explicit(String),
+    Default(String),
+    None,
+}
+
 /// Flattened profile projection (matches `profiles.json` top-level fields).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ProfilesDocument {
     pub generated_at: String,
     #[serde(default)]
     pub profiles: Vec<ProfileRecord>,
+}
+
+impl ProfilesDocument {
+    /// Strict precedence: an explicit CLI id wins, then an explicit env id, then `workspace-dev`
+    /// only if it is present. Never silently falls through past an explicit request; callers
+    /// that receive `ProfileSelection::Explicit` must fail closed if the id has no match.
+    pub fn resolve_profile_selection(
+        &self,
+        explicit: Option<&str>,
+        env_profile: Option<&str>,
+    ) -> ProfileSelection {
+        if let Some(p) = explicit.filter(|s| !s.is_empty()) {
+            return ProfileSelection::Explicit(p.to_string());
+        }
+        if let Some(p) = env_profile.filter(|s| !s.is_empty()) {
+            return ProfileSelection::Explicit(p.to_string());
+        }
+        match self.profiles.iter().find(|p| p.id == "workspace-dev") {
+            Some(p) => ProfileSelection::Default(p.id.clone()),
+            None => ProfileSelection::None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

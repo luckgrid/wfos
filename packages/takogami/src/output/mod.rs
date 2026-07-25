@@ -106,6 +106,7 @@ impl OutputSink {
         authorized: &AuthorizedExecutionPlan,
         explanation: &ResolutionExplanation,
         freshness: Freshness,
+        extra_diagnostics: &[DiagnosticRecord],
     ) -> io::Result<u8> {
         let plan = authorized.plan();
         let policy_decision = authorized.policy_decision();
@@ -130,6 +131,7 @@ impl OutputSink {
             let mut envelope = CommandEnvelope::ok(command, Some(data));
             envelope.session_id = Some(plan.resolved().session_id.clone());
             envelope.diagnostics = plan.diagnostics().to_vec();
+            envelope.diagnostics.extend_from_slice(extra_diagnostics);
             envelope.metrics = Some(EnvelopeMetrics {
                 registry_cache: freshness.as_str().into(),
                 output_bytes: 0,
@@ -146,6 +148,9 @@ impl OutputSink {
                 render_human_policy_summary(policy_explanation)
             )?;
             writeln!(io::stdout(), "Plan only — no process started")?;
+            for diag in extra_diagnostics {
+                writeln!(io::stderr(), "takogami: {}: {}", diag.code, diag.message)?;
+            }
         }
         Ok(crate::exit_codes::SUCCESS)
     }
@@ -157,6 +162,7 @@ impl OutputSink {
         authorized: &AuthorizedExecutionPlan,
         explanation: &ResolutionExplanation,
         freshness: Freshness,
+        extra_diagnostics: &[DiagnosticRecord],
     ) -> io::Result<u8> {
         let plan = authorized.plan();
         let policy_decision = authorized.policy_decision();
@@ -189,6 +195,7 @@ impl OutputSink {
             }
             envelope.explanation = Some(expl);
             envelope.diagnostics = plan.diagnostics().to_vec();
+            envelope.diagnostics.extend_from_slice(extra_diagnostics);
             envelope.metrics = Some(EnvelopeMetrics {
                 registry_cache: freshness.as_str().into(),
                 output_bytes: 0,
@@ -204,6 +211,9 @@ impl OutputSink {
                 render_human_policy_section(policy_explanation)
             )?;
             writeln!(io::stdout(), "Plan only — no process started")?;
+            for diag in extra_diagnostics {
+                writeln!(io::stderr(), "takogami: {}: {}", diag.code, diag.message)?;
+            }
         }
         Ok(crate::exit_codes::SUCCESS)
     }
@@ -215,6 +225,7 @@ impl OutputSink {
         error: &ControllerError,
         rejected: &RejectedPolicyOutcome,
         freshness: Freshness,
+        extra_diagnostics: &[DiagnosticRecord],
     ) -> io::Result<u8> {
         let plan = rejected.plan();
         let policy_explanation = rejected.explanation();
@@ -242,6 +253,7 @@ impl OutputSink {
             envelope.explanation = Some(serde_json::json!({
                 "policy": policy_explanation,
             }));
+            envelope.diagnostics.extend_from_slice(extra_diagnostics);
             envelope.metrics = Some(EnvelopeMetrics {
                 registry_cache: freshness.as_str().into(),
                 output_bytes: 0,
@@ -272,6 +284,9 @@ impl OutputSink {
                 "{}",
                 render_human_policy_section(policy_explanation)
             )?;
+            for diag in extra_diagnostics {
+                writeln!(io::stderr(), "takogami: {}: {}", diag.code, diag.message)?;
+            }
         }
         Ok(code)
     }
@@ -334,15 +349,17 @@ impl OutputSink {
     }
 
     pub fn emit_error(&self, command: &str, error: &ControllerError) -> io::Result<u8> {
-        self.emit_error_with_explanation(command, error, None, None)
+        self.emit_error_with_explanation(command, error, None, None, &[])
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn emit_error_with_explanation(
         &self,
         command: &str,
         error: &ControllerError,
         explanation: Option<&ResolutionExplanation>,
         freshness: Option<Freshness>,
+        extra_diagnostics: &[DiagnosticRecord],
     ) -> io::Result<u8> {
         let code = error.exit_code();
         if self.json {
@@ -412,6 +429,7 @@ impl OutputSink {
                 }
                 _ => {}
             }
+            envelope.diagnostics.extend_from_slice(extra_diagnostics);
             emit_json(&envelope)?;
         } else {
             let prefix = if self.no_color {
@@ -437,6 +455,9 @@ impl OutputSink {
             if let Some(policy_ex) = policy_explanation_from_error(error) {
                 writeln!(io::stderr(), "{}", render_human_policy_section(policy_ex))?;
             }
+            for diag in extra_diagnostics {
+                writeln!(io::stderr(), "takogami: {}: {}", diag.code, diag.message)?;
+            }
         }
         Ok(code)
     }
@@ -450,6 +471,7 @@ impl OutputSink {
         freshness: Freshness,
         report: &ExecutionReport,
         record: &RuntimeCommandRecord,
+        extra_diagnostics: &[DiagnosticRecord],
     ) -> io::Result<u8> {
         let plan = authorized.plan();
         let policy_decision = authorized.policy_decision();
@@ -511,7 +533,11 @@ impl OutputSink {
                 exit_code: exit,
                 data: Some(data),
                 explanation: None,
-                diagnostics: report.diagnostics.clone(),
+                diagnostics: {
+                    let mut diagnostics = report.diagnostics.clone();
+                    diagnostics.extend_from_slice(extra_diagnostics);
+                    diagnostics
+                },
                 child: Some(crate::contracts::ChildOutput {
                     stdout: report.stdout.text.clone(),
                     stderr: report.stderr.text.clone(),
@@ -531,6 +557,9 @@ impl OutputSink {
         } else {
             // Human mode already streamed child bytes (or RTK-processed).
             for diag in &report.diagnostics {
+                writeln!(io::stderr(), "takogami: {}: {}", diag.code, diag.message)?;
+            }
+            for diag in extra_diagnostics {
                 writeln!(io::stderr(), "takogami: {}: {}", diag.code, diag.message)?;
             }
         }

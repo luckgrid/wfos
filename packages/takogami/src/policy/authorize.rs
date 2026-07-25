@@ -24,7 +24,7 @@ mod tests {
     #[test]
     fn spy_records_reachability() {
         let spy = SpyExecutor::default();
-        assert_eq!(spy.calls.get(), 0);
+        assert_eq!(spy.calls(), 0);
         assert!(!spy.reached());
     }
 
@@ -43,7 +43,7 @@ mod tests {
             explanation.child.decision
         );
         let spy = SpyExecutor::default();
-        assert_eq!(spy.calls.get(), 0);
+        assert_eq!(spy.calls(), 0);
         let options = ExecutionOptions {
             mode: ExecutionMode::Json,
             limits: Default::default(),
@@ -51,10 +51,10 @@ mod tests {
         let report = spy.execute(&plan, &options).await;
         assert_eq!(report.outcome, "spy_reached");
         assert!(!report.spawned);
-        assert_eq!(spy.calls.get(), 1);
+        assert_eq!(spy.calls(), 1);
         assert!(spy.reached());
         let _ = spy.execute(&plan, &options).await;
-        assert_eq!(spy.calls.get(), 2);
+        assert_eq!(spy.calls(), 2);
     }
 
     fn resolve_demo_handoff() -> DemoHandoff {

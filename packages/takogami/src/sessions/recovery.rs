@@ -12,12 +12,20 @@ use crate::contracts::types::{DiagnosticRecord, RuntimeCommandRecord};
 use super::store::{CommandRecordStore, SessionStoreError, utc_now_rfc3339, validate_session_id};
 
 /// OS-released advisory lock for one session ID.
+///
+/// The bound `session_id` lets [`super::store::CommandRecordStore`] reject any write whose
+/// record does not belong to the session this lock was acquired for (S6.1-04).
 #[derive(Debug)]
 pub struct SessionLock {
+    session_id: String,
     _file: File,
 }
 
 impl SessionLock {
+    pub fn session_id(&self) -> &str {
+        &self.session_id
+    }
+
     pub fn acquire(root: &Path, session_id: &str) -> Result<Self, SessionStoreError> {
         ensure_state_home(root)?;
         validate_session_id(session_id)?;
@@ -30,7 +38,10 @@ impl SessionLock {
             .open(&path)?;
         set_file_mode(&path)?;
         file.lock_exclusive()?;
-        Ok(Self { _file: file })
+        Ok(Self {
+            session_id: session_id.to_string(),
+            _file: file,
+        })
     }
 
     pub fn try_acquire(root: &Path, session_id: &str) -> Result<Option<Self>, SessionStoreError> {
@@ -45,7 +56,10 @@ impl SessionLock {
             .open(&path)?;
         set_file_mode(&path)?;
         match file.try_lock_exclusive() {
-            Ok(()) => Ok(Some(Self { _file: file })),
+            Ok(()) => Ok(Some(Self {
+                session_id: session_id.to_string(),
+                _file: file,
+            })),
             Err(err) if err.kind() == io::ErrorKind::WouldBlock => Ok(None),
             Err(err) => Err(SessionStoreError::Io(err)),
         }
@@ -59,22 +73,54 @@ pub fn recover_abandoned_pending(
     store: &CommandRecordStore,
     session_id: &str,
 ) -> Result<Option<RuntimeCommandRecord>, SessionStoreError> {
-    let record = match store.read_raw(session_id) {
+    recover_abandoned_pending_with_hook(store, session_id, None)
+}
+
+/// Same as [`recover_abandoned_pending`], with an optional deterministic hook invoked after the
+/// pre-lock read and before the lock attempt. Tests use this to reproduce the
+/// finalize-between-read-and-lock race without relying on timing.
+pub fn recover_abandoned_pending_with_hook(
+    store: &CommandRecordStore,
+    session_id: &str,
+    pre_lock_hook: Option<&dyn Fn()>,
+) -> Result<Option<RuntimeCommandRecord>, SessionStoreError> {
+    let pre_lock_record = match store.read_raw(session_id) {
         Ok(r) => r,
         Err(SessionStoreError::NotFound(_)) => return Ok(None),
-        Err(SessionStoreError::Contract(msg)) => {
-            return Err(SessionStoreError::Contract(msg));
-        }
         Err(err) => return Err(err),
     };
-    if record.execution.outcome != "pending" {
-        return Ok(Some(record));
+    if pre_lock_record.execution.outcome != "pending" {
+        return Ok(Some(pre_lock_record));
+    }
+    if let Some(hook) = pre_lock_hook {
+        hook();
     }
     let Some(lock) = store.try_lock(session_id)? else {
-        // Active writer still holds the lock.
-        return Ok(Some(record));
+        // Active writer still holds the lock; nothing was mutated, so the pre-lock
+        // snapshot is safe to surface even though it is only advisory.
+        return Ok(Some(pre_lock_record));
     };
-    let mut abandoned = record;
+
+    // The pre-lock read is advisory only: re-read under the lock we now hold before
+    // deciding anything, so a concurrent finalize that landed between the pre-lock read
+    // and this lock acquisition is never overwritten as abandoned (S6.1-03).
+    let current = match store.read_raw(session_id) {
+        Ok(r) => r,
+        Err(SessionStoreError::NotFound(_)) => return Ok(None),
+        Err(err) => return Err(err),
+    };
+    if current.execution.outcome != "pending" {
+        return Ok(Some(current));
+    }
+    if current.session_id != pre_lock_record.session_id
+        || current.plan_digest != pre_lock_record.plan_digest
+    {
+        return Err(SessionStoreError::Contract(
+            "pending record identity changed between pre-lock read and lock acquisition".into(),
+        ));
+    }
+
+    let mut abandoned = current;
     abandoned.execution.outcome = "abandoned".into();
     abandoned.ended_at = Some(utc_now_rfc3339());
     abandoned.error = Some(DiagnosticRecord {

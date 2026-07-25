@@ -13,7 +13,7 @@ pub use streams::{
     stream_or_buffer,
 };
 
-use std::cell::Cell;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 use async_trait::async_trait;
 
@@ -148,12 +148,8 @@ impl Executor for UnavailableExecutor {
 /// Test spy that counts reachability without spawning.
 #[derive(Debug, Default)]
 pub struct SpyExecutor {
-    pub calls: Cell<u32>,
+    pub calls: AtomicU32,
 }
-
-// ponytail: Cell is single-threaded; Sync is required for `&dyn Executor` across `.await`.
-// Tests must not share one SpyExecutor across threads. Prefer AtomicU32 if that ceiling is hit.
-unsafe impl Sync for SpyExecutor {}
 
 #[async_trait]
 impl Executor for SpyExecutor {
@@ -162,13 +158,17 @@ impl Executor for SpyExecutor {
         _plan: &AuthorizedExecutionPlan,
         _options: &ExecutionOptions,
     ) -> ExecutionReport {
-        self.calls.set(self.calls.get().saturating_add(1));
+        self.calls.fetch_add(1, Ordering::SeqCst);
         ExecutionReport::idle("spy_reached")
     }
 }
 
 impl SpyExecutor {
     pub fn reached(&self) -> bool {
-        self.calls.get() > 0
+        self.calls.load(Ordering::SeqCst) > 0
+    }
+
+    pub fn calls(&self) -> u32 {
+        self.calls.load(Ordering::SeqCst)
     }
 }

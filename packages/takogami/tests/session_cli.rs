@@ -277,6 +277,65 @@ fn human_session_output_labels_record_kind() {
     );
 }
 
+// S6.1-08: `show_latest` discards the skipped-record diagnostics that `list` surfaces.
+#[test]
+fn session_latest_drops_skipped_record_diagnostics() {
+    let h = Harness::new();
+    h.write_record(&sample(
+        "tkg_ok",
+        "2026-07-21T09:00:00Z",
+        "planned",
+        Some("2026-07-21T09:00:01Z"),
+    ));
+    fs::write(
+        h.state_home.join("tkg_bad.json"),
+        b"{\"schema_version\":\"0.1.0\",\"record_kind\":\"command_execution\",\"session_id\":\"tkg_bad\"}\n",
+    )
+    .unwrap();
+
+    let list = h.run(&["--json", "session", "list"]);
+    let lv = parse_json(&list);
+    assert_eq!(lv["data"]["count"], 1);
+    assert!(
+        lv["data"]["diagnostics"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|d| d.as_str().unwrap_or_default().contains("tkg_bad")),
+        "list must report the skipped malformed record: {lv}"
+    );
+
+    let latest = h.run(&["--json", "session", "latest"]);
+    let latest_v = parse_json(&latest);
+    assert_eq!(latest_v["data"]["session_id"], "tkg_ok");
+    let mentions_skip = |v: &Value| {
+        v.as_array()
+            .is_some_and(|arr| arr.iter().any(|d| d.to_string().contains("tkg_bad")))
+    };
+    let surfaced =
+        mentions_skip(&latest_v["diagnostics"]) || mentions_skip(&latest_v["data"]["diagnostics"]);
+    assert!(
+        surfaced,
+        "session latest must surface the same skipped-record diagnostic as session list: {latest_v}"
+    );
+}
+
+// S6.1-09: an explicit unknown query profile silently falls through to XDG/HOME instead of
+// failing closed.
+#[test]
+fn session_list_with_unknown_profile_must_fail_closed() {
+    let h = Harness::new();
+    let out = h.run(&["--json", "--profile", "does-not-exist", "session", "list"]);
+    assert_eq!(
+        out.status.code(),
+        Some(USAGE as i32),
+        "an explicit unknown query profile must fail closed with a typed error instead of \
+         silently falling back to XDG/HOME, got exit={:?} stdout={}",
+        out.status.code(),
+        stdout(&out)
+    );
+}
+
 #[test]
 fn empty_session_list_is_success() {
     let h = Harness::new();

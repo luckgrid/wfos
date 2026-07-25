@@ -418,7 +418,23 @@ fn bounded_child_output_and_terminal_outcomes() {
         "abandoned",
         "pending",
     ] {
-        let record = minimal_record(outcome);
+        let mut record = minimal_record(outcome);
+        // S6.1-10: denied/gated outcomes require a matching Deny/Gate decision; minimal_record's
+        // bare default (Allow) is only correct for the other outcomes.
+        record.policy_decision = match outcome {
+            "denied" => PolicyDecision::Deny {
+                policy_id: "agent-git".into(),
+                rule_id: "block-push".into(),
+                reason: "remote writes blocked".into(),
+            },
+            "gated" => PolicyDecision::Gate {
+                policy_id: "agent-bin".into(),
+                rule_id: "gate-archive".into(),
+                reason: "archive requires approval".into(),
+                required_approval: "human".into(),
+            },
+            _ => record.policy_decision,
+        };
         record
             .validate()
             .unwrap_or_else(|e| panic!("{outcome}: {e}"));
@@ -435,6 +451,35 @@ fn bounded_child_output_and_terminal_outcomes() {
         pane_id: None,
     });
     assert_valid(&record_validator, &serde_json::to_value(&linked).unwrap());
+}
+
+// S6.1-10: `validate()` does not yet bind policy_decision to execution.outcome.
+#[test]
+fn decision_outcome_semantic_mismatches_are_rejected() {
+    let mut deny_completed = minimal_record("completed");
+    deny_completed.policy_decision = PolicyDecision::Deny {
+        policy_id: "agent-git".into(),
+        rule_id: "block-push".into(),
+        reason: "remote writes blocked".into(),
+    };
+    deny_completed
+        .validate()
+        .expect_err("Deny decision must not carry a completed execution outcome");
+
+    let mut gate_planned = minimal_record("planned");
+    gate_planned.policy_decision = PolicyDecision::Gate {
+        policy_id: "agent-bin".into(),
+        rule_id: "gate-archive".into(),
+        reason: "archive requires approval".into(),
+        required_approval: "human".into(),
+    };
+    gate_planned
+        .validate()
+        .expect_err("Gate decision must not carry a planned execution outcome");
+
+    minimal_record("denied")
+        .validate()
+        .expect_err("Allow decision must not carry a denied execution outcome");
 }
 
 #[test]

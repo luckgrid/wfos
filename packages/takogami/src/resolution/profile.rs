@@ -4,7 +4,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use super::entrypoint::NormalizedEntrypoint;
 use super::resolver::ResolutionCode;
-use crate::registry::{PoliciesDocument, PolicyRecord, ProfileRecord, ProfilesDocument};
+use crate::registry::{
+    PoliciesDocument, PolicyRecord, ProfileRecord, ProfileSelection, ProfilesDocument,
+};
 
 #[derive(Debug, Clone)]
 pub struct SelectedProfile {
@@ -19,14 +21,9 @@ pub fn select_profile(
     explicit: Option<&str>,
     env_profile: Option<&str>,
 ) -> Result<ProfileRecord, ResolutionCode> {
-    let id = if let Some(p) = explicit.filter(|s| !s.is_empty()) {
-        p.to_string()
-    } else if let Some(p) = env_profile.filter(|s| !s.is_empty()) {
-        p.to_string()
-    } else if docs.profiles.iter().any(|p| p.id == "workspace-dev") {
-        "workspace-dev".to_string()
-    } else {
-        return Err(ResolutionCode::ProfileRequired);
+    let id = match docs.resolve_profile_selection(explicit, env_profile) {
+        ProfileSelection::Explicit(id) | ProfileSelection::Default(id) => id,
+        ProfileSelection::None => return Err(ResolutionCode::ProfileRequired),
     };
 
     let matches: Vec<_> = docs.profiles.iter().filter(|p| p.id == id).collect();

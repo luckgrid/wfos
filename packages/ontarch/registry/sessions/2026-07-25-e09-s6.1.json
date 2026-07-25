@@ -1,0 +1,165 @@
+{
+  "session_id": "2026-07-25-e09-s6.1",
+  "epic": "E09",
+  "story": "S6.1",
+  "title": "Execution record integrity, recovery, stream, and RTK hardening",
+  "status": "in_progress",
+  "started_at": "2026-07-25T03:00:00Z",
+  "baseline": {
+    "wfos": "d760a3f2913156ae1b383f486cdc95970fc685ab",
+    "note": "S6.1 correction baseline per the addendum's repository_snapshot.wfos. Working tree carries uncommitted Phase 1 changes; no commit has been made yet."
+  },
+  "addendum": "Build/bin/wfos/2026-07-24-wfos-e09-s6.1-execution-record-integrity-harderning-addendum.md",
+  "locked_decisions": [
+    "Run the complete pinned gate on macOS in this working effort; record the Linux gate honestly as not-yet-run.",
+    "S6.1 stays open and STATE.md is not advanced to S7 until a follow-up session closes the Linux gate.",
+    "Implementation proceeds in five phases (failing regressions/seams; state-transition core; execution/stream/RTK; query/contract semantics; full gate + evidence), pausing for review after each phase."
+  ],
+  "changed_paths": [
+    "packages/takogami/src/commands.rs",
+    "packages/takogami/src/contracts/mod.rs",
+    "packages/takogami/src/contracts/timestamp.rs",
+    "packages/takogami/src/contracts/types.rs",
+    "packages/takogami/src/execution/mod.rs",
+    "packages/takogami/src/execution/process.rs",
+    "packages/takogami/src/output/mod.rs",
+    "packages/takogami/src/output/rtk.rs",
+    "packages/takogami/src/policy/authorize.rs",
+    "packages/takogami/src/registry/mod.rs",
+    "packages/takogami/src/registry/types.rs",
+    "packages/takogami/src/resolution/profile.rs",
+    "packages/takogami/src/sessions/mod.rs",
+    "packages/takogami/src/sessions/query.rs",
+    "packages/takogami/src/sessions/recovery.rs",
+    "packages/takogami/src/sessions/store.rs",
+    "packages/takogami/tests/contracts_roundtrip.rs",
+    "packages/takogami/tests/execution_cli.rs",
+    "packages/takogami/tests/session_cli.rs",
+    "packages/takogami/tests/session_store.rs",
+    "packages/ontarch/registry/sessions/2026-07-25-e09-s6.1.json"
+  ],
+  "progress": [
+    {
+      "phase": 1,
+      "title": "Failing regressions + test seams",
+      "status": "done",
+      "summary": "Added minimal non-behavior-changing test seams, then wrote deterministic regression tests that fail against the unfixed baseline for 6 of 7 required defect categories. No production behavior was changed in this phase.",
+      "seams_added": [
+        "sessions/store.rs: pub(crate) trait RecordWriter (acquire_lock/write_pending/write_final/write_terminal_unlocked), implemented for CommandRecordStore, so lifecycle coordination can depend on an abstraction instead of a concrete store.",
+        "commands.rs: pub(crate) type StoreFactory (Send + Sync dyn Fn) + default_store_factory, threaded through run_lifecycle_with_executor and persist_terminal, enabling deterministic write-fault injection without relying on filesystem permission bits.",
+        "sessions/recovery.rs: pub fn recover_abandoned_pending_with_hook with an optional pre-lock hook, reproducing the finalize-between-read-and-lock race deterministically.",
+        "commands.rs test harness: fixed a pre-existing env_lock() mutex-poisoning bug (poison recovery via into_inner()) so a failing fault-injection test no longer cascades into unrelated test failures."
+      ],
+      "regressions_added": [
+        {"file": "packages/takogami/src/commands.rs (unit tests)", "count": 8, "findings": ["S6.1-01", "S6.1-02"], "covers": "Sec 7.1 audit-write-propagation matrix: Deny/Gate/plan-only/unavailable terminal-install failure (0 executor calls); initial pending failure (0 calls); PID-bearing pending replace failure; terminal replace failure; unavailable-executor terminal replace failure"},
+        {"file": "packages/takogami/tests/session_store.rs", "count": 5, "findings": ["S6.1-03", "S6.1-04", "S6.1-08"], "covers": "finalize-between-read-and-lock race; lock acquired for one session writing another session's record; final replace not bound to installed pending plan_digest; terminal->pending regression; terminal->different-terminal transition; list ordering by parsed instant vs lexical started_at string across UTC offsets"},
+        {"file": "packages/takogami/tests/contracts_roundtrip.rs", "count": 1, "findings": ["S6.1-10"], "covers": "Deny+completed, Gate+planned, Allow+denied currently accepted by RuntimeCommandRecord::validate()"},
+        {"file": "packages/takogami/tests/session_cli.rs", "count": 2, "findings": ["S6.1-08", "S6.1-09"], "covers": "session latest drops the skipped-record diagnostics that session list surfaces; an explicit unknown --profile silently falls through to XDG/HOME instead of failing closed"},
+        {"file": "packages/takogami/tests/execution_cli.rs", "count": 1, "findings": ["S6.1-05"], "covers": "human-mode RTK-eligible asymmetric overflow: stderr over the capture limit causes finalize_output's combined branch to drop the still-buffered under-limit stdout stream entirely"}
+      ],
+      "deferred": [
+        "S6.1-07 (post-spawn controller-failure truth): AuthorizedExecutionPlan is intentionally evaluator-private (S5.2 boundary), and no seam exists to force a post-spawn pipe-take/signal-install failure through the public CLI surface. The addendum's Sec 5.6 already requires adding an injectable signal-source/process adapter as a production correction, so the seam, its failing regression, and the fix will be added together in Phase 3.",
+        "S6.1-13 (unsound Cell<u32> + unsafe impl Sync SpyExecutor): a pure soundness correction with no meaningful failing-test shape; will be corrected directly alongside the Phase 3 execution/mod.rs work."
+      ],
+      "validation": "cargo check -p takogami --tests: clean. cargo clippy -p takogami --all-targets: zero warnings. cargo fmt -p takogami --check: clean. cargo test -p takogami --no-fail-fast (pinned rustc/cargo 1.96.0): lib 118 passed + 6 failed (expected); cli_smoke 17 passed; contracts_roundtrip 17 passed + 1 failed (expected); execution_cli 7 passed + 1 failed (expected); policy_cli 17 passed; resolution_cli 27 passed; session_cli 6 passed + 2 failed (expected); session_store 13 passed + 5 failed (expected). All 15 new regressions fail for the documented reason; zero regressions among the 222 pre-existing baseline tests."
+    },
+    {
+      "phase": 2,
+      "title": "Correct the state-transition core (lock binding, legal transitions, under-lock recovery re-read, propagate every coordinator write error)",
+      "status": "done",
+      "summary": "Fixed S6.1-01, S6.1-02, S6.1-03, S6.1-04, and S6.1-13 in production code. All Phase 1 regressions for these five findings now pass; no new test seams were required beyond Phase 1's.",
+      "fixes_applied": [
+        "sessions/recovery.rs (S6.1-04): SessionLock now carries the session_id it was acquired for, with a session_id() accessor.",
+        "sessions/store.rs (S6.1-04): write_pending/write_final now call check_lock_matches_record (a lock only authorizes writing the record for its own session) and write_final additionally calls check_legal_transition, which re-reads the currently installed record and requires it to be a live pending record with the same plan_digest before allowing the replace; a terminal record is immutable except for a byte-identical idempotent retry.",
+        "sessions/recovery.rs (S6.1-03): recover_abandoned_pending_with_hook now re-reads the record under the lock it just acquired before finalizing as abandoned, short-circuiting (without writing) if the under-lock read shows the record already went terminal, and failing closed if the session_id/plan_digest identity changed between the pre-lock read and the lock acquisition.",
+        "commands.rs (S6.1-01/S6.1-02): replaced every `let _ = persist_terminal(...)` and `let _ = store.write_final(...)` discard with `?`-propagation mapped to ControllerError::StateIo, at all 5 call sites (Deny/Gate terminal install, execution-class-unavailable terminal install, plan-only terminal install, PID-bearing pending replace, execution_unavailable stand-in terminal replace).",
+        "execution/mod.rs (S6.1-13): SpyExecutor.calls is now AtomicU32 (fetch_add/load) instead of Cell<u32> with a compensating `unsafe impl Sync`; added a calls() accessor. Updated all call sites in commands.rs and policy/authorize.rs from `.calls.get()` to `.calls()`."
+      ],
+      "validation": "cargo check -p takogami --tests: clean. cargo clippy -p takogami --all-targets -- -D warnings: zero warnings. cargo fmt -p takogami --check: clean. cargo test -p takogami --no-fail-fast (pinned rustc/cargo 1.96.0): lib 124 passed (0 failed, up from 118+6); cli_smoke 17 passed; contracts_roundtrip 17 passed + 1 failed (S6.1-10, Phase 4); execution_cli 7 passed + 1 failed (S6.1-05, Phase 3); policy_cli 17 passed; resolution_cli 27 passed; session_cli 6 passed + 2 failed (S6.1-08/09, Phase 4); session_store 17 passed + 1 failed (S6.1-08 ordering, Phase 4). 232 of 237 tests pass; the 5 remaining failures are exactly the Phase 3/4-scoped regressions written in Phase 1."
+    },
+    {
+      "phase": 3,
+      "title": "Correct execution/stream truth and bound RTK (pre-/post-spawn split, independent per-stream emission, canonical RTK identity/bounded I/O/timeout)",
+      "status": "done",
+      "summary": "Fixed S6.1-07, S6.1-05, and S6.1-06 in production code. Re-read the full addendum (Sec 5.4-5.6) and process.rs/streams.rs/rtk.rs/signals.rs/mod.rs before changing anything. The one Phase 1 regression scoped to this phase (execution_cli human_mode_rtk_eligible_asymmetric_overflow_drops_under_limit_stream, S6.1-05) now passes; S6.1-06 and S6.1-07 had no pre-existing failing-test seam (S6.1-07 needed a new injectable seam; S6.1-06 needed a new fake-RTK test harness), so their regressions were written directly against the fix and confirmed to exercise the intended mechanism (e.g. the identity-drift test fails with the wrong diagnostic if the revalidation guard is removed).",
+      "fixes_applied": [
+        "execution/process.rs (S6.1-07): added an injectable SignalFactory seam (TokioExecutor::execute now calls execute_inner via default_signal_factory; tests can substitute a failing factory). Added ExecFailure::controller_error (spawned=true, pid preserved, outcome=controller_error) distinct from the pre-spawn failed_to_spawn constructor. Added reap_after_controller_failure (SIGKILLs the process group, disarms the guard, awaits child.wait()) called before reporting a missing stdout pipe, missing stderr pipe, or signal-factory failure. The post-run_capturing wait-failure path now also uses controller_error instead of overwriting an io-outcome failure's spawned/pid fields post hoc, and only disarms the guard on a successful wait (killing the group first on a wait error).",
+        "execution/process.rs (S6.1-05): finalize_output's Human branch now calls a new finalize_human_stream helper independently for stdout and stderr instead of one combined branch whose guard clause (both streams eligible, neither truncated, both UTF-8) caused the entire branch — including an unaffected under-limit peer stream — to be skipped whenever either stream overflowed. Added write_human_bytes (per-label stdout/stderr dispatch) and merge_compressor (rtk > unsupported > none precedence) helpers.",
+        "output/rtk.rs (S6.1-06): resolve_rtk_binary now requires a canonical, regular, executable file (canonical_rtk_identity) instead of accepting any is_file() candidate. Added adapter_command, which clears the environment, disables telemetry, and puts the adapter in its own process group (setpgid) for both probe and pipe invocations. apply_rtk_if_eligible now revalidates the canonical identity immediately before spawning the pipe (rejecting any drift between probe and pipe as unavailable/rtk_identity_drift, never spawning an unverified binary). pipe_stream now writes stdin and drains stdout/stderr concurrently on three separate threads (fixing the deadlock when the adapter echoes more than one pipe buffer), caps stdout/stderr independently and discards content past the cap while continuing to drain (so an oversized adapter is rejected, not accepted partially, without blocking the adapter), enforces a short default timeout (1.5s) via a try_wait poll loop, and on timeout/wait-failure kills the adapter's process group and reaps it before returning. Stderr remains discarded (never copied into user output or diagnostics)."
+      ],
+      "validation": "cargo check -p takogami --tests: clean. cargo clippy -p takogami --all-targets -- -D warnings: zero warnings. cargo fmt -p takogami --check: clean. cargo test -p takogami --no-fail-fast (pinned rustc/cargo 1.96.0): lib 132 passed (0 failed, up from 124 + 8 new: 2 in execution::process::tests for S6.1-07, 6 in output::rtk::tests for S6.1-06); cli_smoke 17 passed; contracts_roundtrip 17 passed + 1 failed (S6.1-10, Phase 4); execution_cli 8 passed (0 failed, up from 7+1 -- the S6.1-05 regression now passes); policy_cli 17 passed; resolution_cli 27 passed; session_cli 6 passed + 2 failed (S6.1-08/09, Phase 4); session_store 17 passed + 1 failed (S6.1-08 ordering, Phase 4). 236 of 240 tests pass; the 4 remaining failures are exactly the Phase 4-scoped regressions written in Phase 1."
+    },
+    {
+      "phase": 4,
+      "title": "Close query and durable-contract semantics (parsed RFC 3339 ordering, latest diagnostics, strict query-profile resolution, decision/outcome/provenance validation, runtime-context diagnostics)",
+      "status": "done",
+      "summary": "Fixed S6.1-08, S6.1-09, S6.1-10, and S6.1-11 in production code. Re-read addendum Sec 5.7-5.10, 6, and 7.1-7.7 before changing anything. The 4 Phase-1 regressions scoped to this phase (contracts_roundtrip decision_outcome_semantic_mismatches_are_rejected; session_cli session_list_with_unknown_profile_must_fail_closed and session_latest_drops_skipped_record_diagnostics; session_store list_orders_by_parsed_instant_not_lexical_string_despite_offsets) now pass. S6.1-11 had no pre-existing failing regression, so a new end-to-end CLI test was added directly against the fix.",
+      "fixes_applied": [
+        "registry/types.rs + registry/mod.rs (S6.1-09): added ProfileSelection enum (Explicit/Default/None) and ProfilesDocument::resolve_profile_selection(explicit, env_profile), a single strict CLI-then-env-then-workspace-dev-if-present precedence implementation shared by both call sites instead of two divergent inline implementations.",
+        "resolution/profile.rs (S6.1-09): select_profile now delegates to resolve_profile_selection instead of duplicating the precedence logic.",
+        "commands.rs (S6.1-09): run_session's profile resolution now calls access.load_profiles()? (was .ok(), silently swallowing a malformed-profiles error) and matches on ProfileSelection: Explicit(id) requires a matching profile or returns ControllerError::usage(\"unknown profile: {id}\"); Default(id) looks up the state home only if that profile exists; None opens no profile. No state directory is opened before profile resolution succeeds.",
+        "contracts/timestamp.rs (new, S6.1-08): hand-written strict RFC 3339 parser (parse_rfc3339_utc_seconds) with no external date/time crate dependency, validating calendar/leap-year/day-in-month correctness, fractional seconds, and Z/±HH:MM offsets, normalized to epoch seconds via the same days_from_civil algorithm sessions/store.rs already uses for civil_from_days. 6 unit tests (offset equivalence, lexical-vs-chronological ordering, invalid calendar rejection, malformed/missing-offset rejection, fractional-seconds acceptance).",
+        "sessions/query.rs (S6.1-08): load_sorted now parses each record's started_at via parse_rfc3339_utc_seconds, skipping unparseable records with a bounded diagnostic instead of sorting by the raw lexical string; sort compares the parsed instant with session-ID-descending as the deterministic tie-break. Added show_latest_with_diagnostics, returning the same skipped-record diagnostics list as list_sessions; show_latest now delegates to it, discarding diagnostics only for its own backward-compatible callers.",
+        "commands.rs (S6.1-08): SessionCommand::Latest now calls show_latest_with_diagnostics and threads the diagnostics into emit_session_record's JSON output (a data.diagnostics array), matching how session list already surfaces skipped-record diagnostics.",
+        "contracts/types.rs (S6.1-10): RuntimeCommandRecord::validate() now enforces the addendum's full decision/outcome/provenance mapping: policy_decision must match execution.outcome per the required table (denied->Deny, gated->Gate, pending/planned/execution_unavailable/failed_to_spawn/completed/interrupted/controller_error->Allow; abandoned is unconstrained here since it retains whatever the originating pending record carried); embedded resolution must match schema_version/profile_id/request.unit_id/request.verb+request.command/registry_generation.source_fingerprints (in addition to the pre-existing session_id check); started_at/ended_at must parse as RFC 3339 with ended_at >= started_at; plan_digest must be sha256: plus exactly 64 lowercase hex characters; interrupted records' signal must be one of the four names execution/signals.rs::signal_name can produce; runtime_context opaque IDs must satisfy the same bound/character rules sessions/runtime_context.rs::normalize_id enforces at capture time; error.code is now bounded (1-128 bytes) alongside the pre-existing error.message 4 KiB bound.",
+        "contracts_roundtrip.rs: updated bounded_child_output_and_terminal_outcomes to pass a matching Deny/Gate decision for the denied/gated positive fixtures (previously all outcomes shared one Allow default, which is now correctly rejected for denied/gated by the tightened validate()).",
+        "session_store.rs: fixed a latent test-fixture bug in list_limit_bounds_and_default (ended_at was a fixed timestamp earlier than most generated started_at values), now caught by the new ended_at >= started_at check.",
+        "commands.rs + output/mod.rs (S6.1-11): collect_runtime_context's diagnostic is no longer discarded with `_`. Collected once per invocation and threaded through base_record_from_authorized/base_record_from_rejected: the durable record's error field receives the runtime-context diagnostic whenever nothing more severe has been recorded yet (a later execution diagnostic, if any, still overwrites it -- the addendum's 'preserve the more severe execution cause' rule falls out naturally from write order). Independently, the same diagnostic is now threaded as a new extra_diagnostics parameter into emit_plan_with_policy, emit_explanation_with_policy, emit_policy_outcome, emit_error_with_explanation, and emit_executed, appended to each envelope's existing diagnostics list (and printed on stderr in human mode) so it is surfaced even for Deny/Gate records whose error field is already the policy diagnostic."
+      ],
+      "new_tests": [
+        "packages/takogami/src/contracts/timestamp.rs: 6 unit tests for parse_rfc3339_utc_seconds.",
+        "packages/takogami/tests/execution_cli.rs: invalid_tmux_pane_diagnostic_reaches_record_and_envelope (S6.1-11) -- sets TMUX/TMUX_PANE to an invalid opaque id, executes, and asserts the envelope's diagnostics array and the persisted record's error field both carry runtime_context_invalid, execution still completes, and no raw id/slash reaches the diagnostic message."
+      ],
+      "validation": "cargo check -p takogami --tests: clean. cargo clippy -p takogami --all-targets -- -D warnings: zero warnings. cargo fmt -p takogami --check: clean. cargo test -p takogami --no-fail-fast (pinned rustc/cargo 1.96.0): lib 138 passed (up from 132 + 6 new timestamp tests); cli_smoke 17 passed; contracts_roundtrip 18 passed (0 failed, up from 17+1); execution_cli 9 passed (0 failed, up from 8 + 1 new S6.1-11 test); policy_cli 17 passed; resolution_cli 27 passed; session_cli 8 passed (0 failed, up from 6+2); session_store 18 passed (0 failed, up from 17+1). 252 of 252 tests pass; zero known-failing regressions remain in the touched package."
+    },
+    {
+      "phase": 5,
+      "title": "Run the full pinned gate on macOS, finalize evidence, and update SESSIONS.md/STATE.md honestly",
+      "status": "done",
+      "summary": "Ran the complete pinned gate on macOS end-to-end (not just cargo check/test/clippy/fmt for the touched package). All required gates PASS. Linux was not run in this environment (no Docker/Podman/CI available; explicit user decision from before Phase 1). The addendum's full Sec 7.1-7.7 test matrix (native exit/signal/descendant matrix, fake-RTK adapter fixtures, exhaustive stream-edge cases) was not built out as an exhaustive parameterized suite in this correction; Phases 1-4 added targeted regressions for each of the 14 findings, not the complete matrix. Both gaps are recorded honestly in STATE.md/SESSIONS.md (S6.1-14) and tracked as explicit follow-up work in Build/bin/wfos/E09_DEFERRED.md rather than silently claimed done.",
+      "gate_evidence": {
+        "platform": "macos-aarch64 (Darwin, arm64)",
+        "tool_versions": {
+          "rustc": "1.96.0 (ac68faa20 2026-05-25)",
+          "cargo": "1.96.0 (30a34c682 2026-05-25)",
+          "moon": "2.3.2"
+        },
+        "commit": "d760a3f2913156ae1b383f486cdc95970fc685ab (unchanged; no commit made this session)",
+        "results": {
+          "takogami:build": "PASS",
+          "takogami:test": "PASS - 252/252 (lib 138, cli_smoke 17, contracts_roundtrip 18, execution_cli 9, policy_cli 17, resolution_cli 27, session_cli 8, session_store 18)",
+          "takogami:lint (clippy -D warnings)": "PASS - 0 warnings",
+          "takogami:format-check": "PASS",
+          "ontarch:sync": "PASS - registry regenerated, no diff",
+          "ontarch:validate": "PASS",
+          "panoply:gen-check": "PASS",
+          "panoply:validate-substrate": "PASS (6/6)",
+          "ontarch:secrets-scan": "unchanged pre-existing finding only (commit a3a4978, 2026-06-24, age-secret-key in packages/dust/secrets/README.md); not part of the required PASS gate set; not introduced by S6.1"
+        }
+      }
+    }
+  ],
+  "findings_status": {
+    "S6.1-01": "P0 - fixed in Phase 2; regression green",
+    "S6.1-02": "P0 - fixed in Phase 2; regression green",
+    "S6.1-03": "P0 - fixed in Phase 2; regression green",
+    "S6.1-04": "P0 - fixed in Phase 2; regressions green",
+    "S6.1-05": "P1 - fixed in Phase 3; regression green",
+    "S6.1-06": "P1 - fixed in Phase 3; regressions green",
+    "S6.1-07": "P1 - fixed in Phase 3; seam + regressions green",
+    "S6.1-08": "P1 - fixed in Phase 4; regressions green",
+    "S6.1-09": "P1 - fixed in Phase 4; regression green",
+    "S6.1-10": "P1 - fixed in Phase 4; regression green",
+    "S6.1-11": "P1 - fixed in Phase 4; new regression green",
+    "S6.1-12": "P1 - production defects fixed with targeted regressions per finding; the addendum's full Sec 7.1-7.7 exhaustive test matrix and the Linux platform row remain open, tracked in Build/bin/wfos/E09_DEFERRED.md",
+    "S6.1-13": "P2 - fixed in Phase 2 (AtomicU32, no unsafe impl Sync)",
+    "S6.1-14": "P2 - fixed in Phase 5: SESSIONS.md/STATE.md updated with an honest partial-closure entry; STATE.md does not advance to E09.S7"
+  },
+  "next": "Follow-up session: close the Linux gate (pinned rustc/cargo 1.96.0, Moon 2.3.2, Linux x86_64 or arm64) and complete the addendum's Sec 7.1-7.7 test matrix (see Build/bin/wfos/E09_DEFERRED.md D1/D2). Only then does STATE.md advance to E09.S7.",
+  "blockers": [
+    "Linux platform gate has not been run in this environment (no Docker/Podman/CI available); deferred to a follow-up session per the user's explicit decision this session. See E09_DEFERRED.md D1.",
+    "The addendum's full Sec 7.1-7.7 test matrix (native exit/signal/descendant matrix, fake-RTK adapter fixtures, exhaustive stream-edge cases) was not built out exhaustively; each of the 14 findings has targeted regression coverage but not the complete parameterized matrix. See E09_DEFERRED.md D2.",
+    "ontarch:secrets-scan historical age-secret-key finding (commit a3a4978, 2026-06-24) preserved verbatim from S6; not introduced by this correction."
+  ],
+  "token_note": "S6.1 addendum + S6 plan + S5.2 addendum + last 2 session records; Phase 1: 15 new failing regressions across 5 files, 2 new production seams, 1 test-harness poison-recovery fix. Phase 2: fixed S6.1-01/02/03/04/13 in commands.rs, sessions/{store,recovery}.rs, execution/mod.rs; 232/237 tests pass. Phase 3: fixed S6.1-07/05/06 in execution/process.rs and output/rtk.rs (injectable signal-source seam, independent per-stream RTK finalization, canonical RTK identity + concurrent bounded I/O + timeout); 236/240 tests pass. Phase 4: fixed S6.1-08/09/10/11 in registry/{types,mod}.rs, resolution/profile.rs, contracts/timestamp.rs (new), contracts/types.rs, sessions/query.rs, commands.rs, output/mod.rs (strict profile precedence, parsed RFC 3339 query ordering + latest diagnostics, full decision/outcome/provenance validate() hardening, runtime-context diagnostic threading); 252/252 tests pass, clippy/fmt clean. Phase 5: full pinned gate PASS on macOS-aarch64 (rustc/cargo 1.96.0, Moon 2.3.2); Linux gate and full Sec 7.1-7.7 matrix deferred to a follow-up session (E09_DEFERRED.md)."
+}

@@ -11,8 +11,8 @@ use takogami::contracts::types::{
 };
 use takogami::sessions::{
     CommandRecordStore, DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT, RuntimeContextEnv, SessionStoreError,
-    collect_runtime_context, list_sessions, recover_abandoned_pending, show_latest, show_session,
-    validate_session_id,
+    collect_runtime_context, list_sessions, recover_abandoned_pending,
+    recover_abandoned_pending_with_hook, show_latest, show_session, validate_session_id,
 };
 
 fn digest() -> String {
@@ -204,6 +204,169 @@ fn active_lock_not_recovered() {
     drop(lock);
 }
 
+// --- S6.1-03: abandoned recovery must not overwrite a concurrently finalized record. ---
+
+#[test]
+fn recovery_hook_reproduces_finalize_between_read_and_lock_race() {
+    let temp = tempfile::tempdir().unwrap();
+    let store = CommandRecordStore::open(temp.path()).unwrap();
+    {
+        let lock = store.acquire_lock("tkg_race").unwrap();
+        let pending = sample("tkg_race", "2026-07-24T00:00:00Z", "pending", None);
+        store.write_pending(&pending, &lock).unwrap();
+    }
+
+    // Simulates another writer finalizing the session between recovery's pre-lock read
+    // and its own lock acquisition attempt.
+    let hook = || {
+        let lock = store.acquire_lock("tkg_race").unwrap();
+        let mut completed = sample(
+            "tkg_race",
+            "2026-07-24T00:00:00Z",
+            "completed",
+            Some("2026-07-24T00:00:02Z"),
+        );
+        completed.execution.started = true;
+        completed.execution.pid = Some(77);
+        completed.execution.exit_code = Some(0);
+        store.write_final(&completed, &lock).unwrap();
+    };
+
+    let result = recover_abandoned_pending_with_hook(&store, "tkg_race", Some(&hook))
+        .unwrap()
+        .expect("record");
+    assert_eq!(
+        result.execution.outcome, "completed",
+        "recovery must not overwrite a concurrently finalized record as abandoned"
+    );
+    let on_disk = store.read_raw("tkg_race").unwrap();
+    assert_eq!(on_disk.execution.outcome, "completed");
+    assert_eq!(on_disk.execution.pid, Some(77));
+}
+
+// --- S6.1-04: locks and final transitions are not yet bound to the target record. ---
+
+#[test]
+fn lock_acquired_for_one_session_must_not_authorize_writing_another_sessions_record() {
+    let temp = tempfile::tempdir().unwrap();
+    let store = CommandRecordStore::open(temp.path()).unwrap();
+    let lock_a = store.acquire_lock("tkg_a").unwrap();
+    let record_b = sample("tkg_b", "2026-07-24T00:00:00Z", "pending", None);
+    let err = store.write_pending(&record_b, &lock_a).expect_err(
+        "a lock acquired for one session must not authorize installing another session's record",
+    );
+    assert!(matches!(err, SessionStoreError::Contract(_)));
+}
+
+#[test]
+fn final_replace_must_retain_the_installed_pending_plan_digest() {
+    let temp = tempfile::tempdir().unwrap();
+    let store = CommandRecordStore::open(temp.path()).unwrap();
+    let lock = store.acquire_lock("tkg_plan").unwrap();
+    let pending = sample("tkg_plan", "2026-07-24T00:00:00Z", "pending", None);
+    store.write_pending(&pending, &lock).unwrap();
+
+    let mut different_plan = pending;
+    different_plan.plan_digest =
+        "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc".into();
+    different_plan.execution.outcome = "completed".into();
+    different_plan.execution.exit_code = Some(0);
+    different_plan.ended_at = Some("2026-07-24T00:00:02Z".into());
+
+    let err = store.write_final(&different_plan, &lock).expect_err(
+        "finalization must retain the same plan_digest as the installed pending record",
+    );
+    assert!(matches!(err, SessionStoreError::Contract(_)));
+}
+
+#[test]
+fn terminal_record_must_not_transition_back_to_pending() {
+    let temp = tempfile::tempdir().unwrap();
+    let store = CommandRecordStore::open(temp.path()).unwrap();
+    let lock = store.acquire_lock("tkg_term").unwrap();
+    let pending = sample("tkg_term", "2026-07-24T00:00:00Z", "pending", None);
+    store.write_pending(&pending, &lock).unwrap();
+    let mut completed = pending.clone();
+    completed.execution.started = true;
+    completed.execution.pid = Some(42);
+    completed.execution.outcome = "completed".into();
+    completed.execution.exit_code = Some(0);
+    completed.ended_at = Some("2026-07-24T00:00:02Z".into());
+    store.write_final(&completed, &lock).unwrap();
+
+    let err = store
+        .write_final(&pending, &lock)
+        .expect_err("a terminal record must never regress to pending");
+    assert!(matches!(err, SessionStoreError::Contract(_)));
+    let on_disk = store.read_raw("tkg_term").unwrap();
+    assert_eq!(on_disk.execution.outcome, "completed");
+}
+
+#[test]
+fn terminal_record_must_not_transition_to_a_different_terminal_outcome() {
+    let temp = tempfile::tempdir().unwrap();
+    let store = CommandRecordStore::open(temp.path()).unwrap();
+    let lock = store.acquire_lock("tkg_term2").unwrap();
+    let pending = sample("tkg_term2", "2026-07-24T00:00:00Z", "pending", None);
+    store.write_pending(&pending, &lock).unwrap();
+    let mut completed = pending.clone();
+    completed.execution.started = true;
+    completed.execution.pid = Some(42);
+    completed.execution.outcome = "completed".into();
+    completed.execution.exit_code = Some(0);
+    completed.ended_at = Some("2026-07-24T00:00:02Z".into());
+    store.write_final(&completed, &lock).unwrap();
+
+    let mut different_terminal = completed.clone();
+    different_terminal.execution.started = false;
+    different_terminal.execution.pid = None;
+    different_terminal.execution.outcome = "failed_to_spawn".into();
+    different_terminal.execution.exit_code = None;
+    let err = store
+        .write_final(&different_terminal, &lock)
+        .expect_err("a terminal record must never be replaced by a different terminal outcome");
+    assert!(matches!(err, SessionStoreError::Contract(_)));
+    let on_disk = store.read_raw("tkg_term2").unwrap();
+    assert_eq!(on_disk.execution.outcome, "completed");
+}
+
+// S6.1-08: `load_sorted` compares raw `started_at` strings instead of parsed instants.
+#[test]
+fn list_orders_by_parsed_instant_not_lexical_string_despite_offsets() {
+    let temp = tempfile::tempdir().unwrap();
+    let store = CommandRecordStore::open(temp.path()).unwrap();
+
+    // Lexically greater string ("23" > "22"), but chronologically earlier: 21:00 UTC.
+    let lexically_later_chronologically_earlier = sample(
+        "tkg_offset_a",
+        "2026-07-24T23:00:00+02:00",
+        "planned",
+        Some("2026-07-24T23:00:01+02:00"),
+    );
+    // Lexically smaller string, but chronologically later: 22:00 UTC.
+    let lexically_earlier_chronologically_later = sample(
+        "tkg_offset_b",
+        "2026-07-24T22:00:00Z",
+        "planned",
+        Some("2026-07-24T22:00:01Z"),
+    );
+
+    store
+        .write_terminal_unlocked(&lexically_later_chronologically_earlier)
+        .unwrap();
+    store
+        .write_terminal_unlocked(&lexically_earlier_chronologically_later)
+        .unwrap();
+
+    let (list, _) = list_sessions(&store, Some(10)).unwrap();
+    let ids: Vec<_> = list.iter().map(|s| s.session_id.as_str()).collect();
+    assert_eq!(
+        ids,
+        ["tkg_offset_b", "tkg_offset_a"],
+        "list must order by parsed instant, not the raw lexical started_at string"
+    );
+}
+
 #[test]
 fn empty_list_and_latest() {
     let temp = tempfile::tempdir().unwrap();
@@ -265,11 +428,12 @@ fn list_limit_bounds_and_default() {
     let store = CommandRecordStore::open(temp.path()).unwrap();
     for i in 0..60 {
         let id = format!("tkg_{i:03}");
+        let ended_at = format!("2026-07-24T00:{i:02}:01Z");
         let rec = sample(
             &id,
             &format!("2026-07-24T00:{i:02}:00Z"),
             "planned",
-            Some("2026-07-24T00:00:01Z"),
+            Some(ended_at.as_str()),
         );
         store.write_terminal_unlocked(&rec).unwrap();
     }

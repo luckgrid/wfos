@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::fingerprint::SourceFingerprint;
+use super::timestamp::parse_rfc3339_utc_seconds;
 
 /// Wire schema version for all Takogami machine contracts.
 pub const SCHEMA_VERSION: &str = "0.1.0";
@@ -247,6 +248,31 @@ pub struct RuntimeCommandRecord {
 pub const RECORD_KIND_COMMAND_EXECUTION: &str = "command_execution";
 
 const MAX_ERROR_MESSAGE_BYTES: usize = 4096;
+const MAX_ERROR_CODE_BYTES: usize = 128;
+/// Same opaque-id bound `sessions::runtime_context::normalize_id` enforces at capture time.
+const MAX_RUNTIME_CONTEXT_ID_BYTES: usize = 128;
+const KNOWN_SIGNAL_NAMES: [&str; 4] = ["SIGINT", "SIGTERM", "SIGHUP", "SIGKILL"];
+
+fn is_valid_plan_digest(digest: &str) -> bool {
+    match digest.strip_prefix("sha256:") {
+        Some(hex) => {
+            hex.len() == 64
+                && hex
+                    .chars()
+                    .all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c))
+        }
+        None => false,
+    }
+}
+
+fn is_valid_runtime_context_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= MAX_RUNTIME_CONTEXT_ID_BYTES
+        && !id.contains('/')
+        && !id.contains('\\')
+        && !id.contains('\0')
+        && !id.chars().any(|c| c.is_control())
+}
 
 impl RuntimeCommandRecord {
     /// Semantic cross-field invariants beyond JSON Schema.
@@ -260,16 +286,67 @@ impl RuntimeCommandRecord {
         if self.actor != "agent" {
             return Err("actor must be agent".into());
         }
-        if self.plan_digest.is_empty() {
-            return Err("plan_digest must be non-empty".into());
+        if !is_valid_plan_digest(&self.plan_digest) {
+            return Err(
+                "plan_digest must be `sha256:` followed by 64 lowercase hex characters".into(),
+            );
         }
         if self.session_id.is_empty() {
             return Err("session_id must be non-empty".into());
         }
-        if let Some(res) = &self.resolution
-            && res.session_id != self.session_id
-        {
-            return Err("resolution.session_id must equal record session_id".into());
+
+        let started_at = parse_rfc3339_utc_seconds(&self.started_at)
+            .map_err(|e| format!("started_at is not RFC 3339: {e}"))?;
+        if let Some(ended_at) = &self.ended_at {
+            let ended_at = parse_rfc3339_utc_seconds(ended_at)
+                .map_err(|e| format!("ended_at is not RFC 3339: {e}"))?;
+            if ended_at < started_at {
+                return Err("ended_at must not precede started_at".into());
+            }
+        }
+
+        // S6.1-10: embedded resolution must describe the same request this record audits, not
+        // just the same session ID.
+        if let Some(res) = &self.resolution {
+            if res.session_id != self.session_id {
+                return Err("resolution.session_id must equal record session_id".into());
+            }
+            if res.schema_version != self.schema_version {
+                return Err("resolution.schema_version must equal record schema_version".into());
+            }
+            if res.profile_id != self.profile_id {
+                return Err("resolution.profile_id must equal record profile_id".into());
+            }
+            if Some(res.unit_id.as_str()) != self.request.unit_id.as_deref() {
+                return Err("resolution.unit_id must equal request.unit_id".into());
+            }
+            if Some(res.verb.as_str()) != self.request.verb.as_deref()
+                || res.verb != self.request.command
+            {
+                return Err("resolution.verb must equal request.verb and request.command".into());
+            }
+            if res.registry_generation.source_fingerprints != self.source_fingerprints {
+                return Err(
+                    "resolution.registry_generation.source_fingerprints must equal record source_fingerprints"
+                        .into(),
+                );
+            }
+        }
+
+        if let Some(ctx) = &self.runtime_context {
+            if ctx.provider.is_empty() {
+                return Err("runtime_context.provider must be non-empty".into());
+            }
+            for id in [&ctx.workspace_id, &ctx.tab_id, &ctx.pane_id]
+                .into_iter()
+                .flatten()
+            {
+                if !is_valid_runtime_context_id(id) {
+                    return Err(
+                        "runtime_context opaque id fails capture-time normalization rules".into(),
+                    );
+                }
+            }
         }
 
         let outcome = self.execution.outcome.as_str();
@@ -311,6 +388,35 @@ impl RuntimeCommandRecord {
             return Err("Gate/Deny records must omit resolution".into());
         }
 
+        // S6.1-10: bind policy_decision to execution.outcome per the required mapping.
+        // `abandoned` keeps whatever decision the originating pending record carried (always
+        // `Allow` in practice, since only authorized work is ever written pending) and is not
+        // re-derivable from this record alone.
+        let decision_kind = match &self.policy_decision {
+            PolicyDecision::Allow { .. } => "allow",
+            PolicyDecision::Gate { .. } => "gate",
+            PolicyDecision::Deny { .. } => "deny",
+        };
+        let required_decision = match outcome {
+            "denied" => Some("deny"),
+            "gated" => Some("gate"),
+            "pending"
+            | "planned"
+            | "execution_unavailable"
+            | "failed_to_spawn"
+            | "completed"
+            | "interrupted"
+            | "controller_error" => Some("allow"),
+            _ => None,
+        };
+        if let Some(required_decision) = required_decision
+            && decision_kind != required_decision
+        {
+            return Err(format!(
+                "execution outcome `{outcome}` requires policy_decision={required_decision}, found {decision_kind}"
+            ));
+        }
+
         if outcome == "completed" {
             if !self.execution.started || self.execution.pid.is_none() {
                 return Err("completed requires started=true and pid".into());
@@ -324,8 +430,12 @@ impl RuntimeCommandRecord {
             if !self.execution.started || self.execution.pid.is_none() {
                 return Err("interrupted requires started=true and pid".into());
             }
-            if self.execution.signal.is_none() {
-                return Err("interrupted requires signal".into());
+            match &self.execution.signal {
+                None => return Err("interrupted requires signal".into()),
+                Some(signal) if !KNOWN_SIGNAL_NAMES.contains(&signal.as_str()) => {
+                    return Err(format!("unknown signal name: {signal}"));
+                }
+                Some(_) => {}
             }
         }
 
@@ -333,10 +443,15 @@ impl RuntimeCommandRecord {
             return Err("PID requires started=true except pending".into());
         }
 
-        if let Some(err) = &self.error
-            && err.message.len() > MAX_ERROR_MESSAGE_BYTES
-        {
-            return Err("error.message exceeds 4 KiB bound".into());
+        if let Some(err) = &self.error {
+            if err.code.is_empty() || err.code.len() > MAX_ERROR_CODE_BYTES {
+                return Err(format!(
+                    "error.code must be 1 to {MAX_ERROR_CODE_BYTES} bytes"
+                ));
+            }
+            if err.message.len() > MAX_ERROR_MESSAGE_BYTES {
+                return Err("error.message exceeds 4 KiB bound".into());
+            }
         }
 
         Ok(())
