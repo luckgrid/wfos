@@ -22,6 +22,10 @@ use serde::Serialize;
 use std::io::{self, Write};
 use std::path::Path;
 
+fn is_broken_pipe(err: &io::Error) -> bool {
+    err.kind() == io::ErrorKind::BrokenPipe || err.raw_os_error() == Some(libc::EPIPE)
+}
+
 #[derive(Serialize)]
 struct PolicyFailurePlanSummary<'a> {
     schema_version: &'a str,
@@ -555,12 +559,18 @@ impl OutputSink {
             emit_json(&envelope)?;
             let _ = &mut envelope;
         } else {
-            // Human mode already streamed child bytes (or RTK-processed).
-            for diag in &report.diagnostics {
-                writeln!(io::stderr(), "takogami: {}: {}", diag.code, diag.message)?;
-            }
-            for diag in extra_diagnostics {
-                writeln!(io::stderr(), "takogami: {}: {}", diag.code, diag.message)?;
+            // Human mode already streamed child bytes (or RTK-processed). A closed consumer on
+            // the controller's own stderr must not overturn an already-decided outcome: the
+            // child's true exit status (persisted in `record` and reflected in `exit` above) is
+            // the source of truth, so a broken pipe here is swallowed rather than propagated as
+            // a fatal error that would otherwise report a false `INTERNAL` exit code.
+            for diag in report.diagnostics.iter().chain(extra_diagnostics) {
+                if let Err(err) =
+                    writeln!(io::stderr(), "takogami: {}: {}", diag.code, diag.message)
+                    && !is_broken_pipe(&err)
+                {
+                    return Err(err);
+                }
             }
         }
         Ok(exit)

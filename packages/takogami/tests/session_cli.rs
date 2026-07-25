@@ -8,7 +8,7 @@ use takogami::contracts::types::{
     ExecutionRecord, OutputSummary, PolicyDecision, RECORD_KIND_COMMAND_EXECUTION, RequestRecord,
     RuntimeCommandRecord, SCHEMA_VERSION,
 };
-use takogami::exit_codes::{SUCCESS, USAGE};
+use takogami::exit_codes::{CONTRACT, SUCCESS, USAGE};
 
 fn bin() -> Command {
     Command::new(env!("CARGO_BIN_EXE_takogami"))
@@ -356,6 +356,48 @@ fn session_list_with_unknown_env_profile_must_fail_closed() {
         out.status.code(),
         stdout(&out)
     );
+}
+
+// S6.1-12 §7.4: a profiles.json that parses as JSON but fails to deserialize into
+// `ProfilesDocument` must fail closed via `access.load_profiles()?` (typed contract error),
+// not panic and not silently fall back to no-profile.
+#[test]
+fn session_list_with_malformed_profiles_document_fails_closed() {
+    let h = Harness::new();
+    fs::write(
+        h.registry.join("profiles.json"),
+        br#"{"generated_at":"2026-07-25T00:00:00Z","profiles":"not-an-array"}"#,
+    )
+    .unwrap();
+
+    let out = h.run(&["--json", "session", "list"]);
+    assert_eq!(
+        out.status.code(),
+        Some(CONTRACT as i32),
+        "a malformed profiles.json must fail closed with a typed contract error, got exit={:?} stdout={}",
+        out.status.code(),
+        stdout(&out)
+    );
+    let v = parse_json(&out);
+    assert_eq!(v["diagnostics"][0]["code"], "invalid_registry");
+}
+
+// S6.1-12 §7.4: a valid profiles.json with no `workspace-dev` entry must not error.
+// `resolve_profile_selection` returns `ProfileSelection::None`, no profile state home is
+// opened, and the query still succeeds against the resolved state home.
+#[test]
+fn session_list_with_missing_workspace_dev_default_still_succeeds() {
+    let h = Harness::new();
+    fs::write(
+        h.registry.join("profiles.json"),
+        br#"{"generated_at":"2026-07-25T00:00:00Z","profiles":[{"id":"other-profile"}]}"#,
+    )
+    .unwrap();
+
+    let out = h.run(&["--json", "session", "list"]);
+    assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
+    let v = parse_json(&out);
+    assert_eq!(v["data"]["count"], 0);
 }
 
 #[test]

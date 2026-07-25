@@ -377,6 +377,76 @@ fn terminal_record_must_not_transition_to_a_different_terminal_outcome() {
     assert_eq!(on_disk.execution.outcome, "completed");
 }
 
+// S6.1-12 / addendum §7.2: two distinct sessions must proceed concurrently (per-session locks).
+#[test]
+fn concurrent_distinct_session_writers_proceed_independently() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().to_path_buf();
+
+    let handles: Vec<_> = ["tkg_conc_a", "tkg_conc_b", "tkg_conc_c"]
+        .into_iter()
+        .map(|id| {
+            let root = root.clone();
+            std::thread::spawn(move || {
+                let store = CommandRecordStore::open(&root).unwrap();
+                let lock = store.acquire_lock(id).unwrap();
+                let pending = sample(id, "2026-07-24T00:00:00Z", "pending", None);
+                store.write_pending(&pending, &lock).unwrap();
+
+                let mut running = pending;
+                running.execution.started = true;
+                running.execution.pid = Some(1000);
+                store.write_final(&running, &lock).unwrap();
+
+                let mut done = running;
+                done.execution.outcome = "completed".into();
+                done.execution.exit_code = Some(0);
+                done.ended_at = Some("2026-07-24T00:00:02Z".into());
+                store.write_final(&done, &lock).unwrap();
+                id
+            })
+        })
+        .collect();
+
+    for h in handles {
+        let id = h.join().expect("writer thread must not panic/deadlock");
+        let store = CommandRecordStore::open(&root).unwrap();
+        let got = store.read_raw(id).unwrap();
+        assert_eq!(got.execution.outcome, "completed");
+        assert_eq!(got.execution.pid, Some(1000));
+    }
+}
+
+// S6.1-12 / addendum §7.2: a malformed on-disk record under a held lock must never be
+// silently rewritten by a `write_final` call — it must fail closed and leave the bytes intact.
+#[test]
+fn malformed_under_lock_record_is_not_rewritten() {
+    let temp = tempfile::tempdir().unwrap();
+    let store = CommandRecordStore::open(temp.path()).unwrap();
+    let lock = store.acquire_lock("tkg_malformed").unwrap();
+
+    let path = store.record_path("tkg_malformed").unwrap();
+    let garbage = b"{ this is not valid json at all".to_vec();
+    fs::write(&path, &garbage).unwrap();
+
+    let candidate = sample(
+        "tkg_malformed",
+        "2026-07-24T00:00:00Z",
+        "completed",
+        Some("2026-07-24T00:00:02Z"),
+    );
+    let err = store
+        .write_final(&candidate, &lock)
+        .expect_err("a malformed installed record must fail closed, not be silently replaced");
+    assert!(matches!(err, SessionStoreError::Contract(_)));
+
+    let on_disk = fs::read(&path).unwrap();
+    assert_eq!(
+        on_disk, garbage,
+        "malformed record bytes must remain untouched after the rejected write"
+    );
+}
+
 // S6.1-08: `load_sorted` orders by parsed RFC 3339 instants.
 #[test]
 fn list_orders_by_parsed_instant_not_lexical_string_despite_offsets() {

@@ -3,7 +3,7 @@
   "epic": "E09",
   "story": "S6.1",
   "title": "Execution record integrity, recovery, stream, and RTK hardening",
-  "status": "in_progress",
+  "status": "done",
   "started_at": "2026-07-25T03:00:00Z",
   "baseline": {
     "wfos": "d760a3f2913156ae1b383f486cdc95970fc685ab",
@@ -11,9 +11,10 @@
   },
   "addendum": "Build/bin/wfos/2026-07-24-wfos-e09-s6.1-execution-record-integrity-harderning-addendum.md",
   "locked_decisions": [
-    "macOS and Linux pinned gates both required for S6.1 closure; Linux closed via Lima alpine aarch64 in the review follow-up.",
-    "S6.1 stays open and STATE.md is not advanced to S7 until E09_DEFERRED.md D2 (full \u00a77 matrix gaps) closes.",
-    "Review follow-up: create E09_DEFERRED.md; tighten transition identity; RTK projection; wait re-await; expand matrix coverage map."
+    "macOS and Linux pinned gates both required for S6.1 closure; Linux closed via Lima alpine aarch64 in the review follow-up, then re-confirmed against the final D2 diff in review-followup-2.",
+    "S6.1 stayed open and STATE.md was not advanced to S7 until E09_DEFERRED.md D1 and D2 both closed; both are now done as of review-followup-2.",
+    "Review follow-up: create E09_DEFERRED.md; tighten transition identity; RTK projection; wait re-await; expand matrix coverage map.",
+    "Review follow-up 2: close every remaining \u00a77 coverage-map row; fix the broken-pipe exit-code fidelity bug found along the way; S6.1 complete, S7 unblocked."
   ],
   "changed_paths": [
     "packages/takogami/src/commands.rs",
@@ -22,6 +23,7 @@
     "packages/takogami/src/contracts/types.rs",
     "packages/takogami/src/execution/mod.rs",
     "packages/takogami/src/execution/process.rs",
+    "packages/takogami/src/execution/streams.rs",
     "packages/takogami/src/output/mod.rs",
     "packages/takogami/src/output/rtk.rs",
     "packages/takogami/src/policy/authorize.rs",
@@ -37,7 +39,10 @@
     "packages/takogami/tests/session_cli.rs",
     "packages/takogami/tests/session_store.rs",
     "packages/ontarch/registry/sessions/2026-07-25-e09-s6.1.json",
-    "packages/takogami/src/execution/signals.rs"
+    "packages/takogami/src/execution/signals.rs",
+    "packages/takogami/tests/fixtures/execution/sleep_default_signals.py",
+    "packages/takogami/tests/fixtures/execution/ignore_term_sleep.py",
+    "packages/takogami/tests/fixtures/execution/spawn_descendant.py"
   ],
   "progress": [
     {
@@ -211,6 +216,51 @@
           "note": "moon binary not installed in guest; equivalent cargo/ontarch/panoply commands executed"
         }
       }
+    },
+    {
+      "phase": "review-followup-2",
+      "title": "Close E09_DEFERRED.md D2 (remaining \u00a77.1-7.7 matrix gaps)",
+      "status": "done",
+      "summary": "Closed every remaining 'still open' row in E09_DEFERRED.md's \u00a77 coverage map: \u00a77.2 concurrent distinct-session writers + malformed under-lock record; \u00a77.3 full positive outcome set (both pending shapes); \u00a77.4 malformed profiles document + missing workspace-dev default; \u00a77.5 SIGINT/SIGTERM/SIGHUP forwarding, second-signal SIGKILL escalation, descendant process-group cleanup, executable/permission/cwd-drift preflight rejection, missing-pipe and wait-failure error-shape construction, reader failure; \u00a77.6 raw-stream edge table (empty/no-newline/exact-limit/one-byte-over/invalid-utf8/binary), UTF-8 split across reads, one-stream-closes-early, and both broken-pipe directions. \u00a77.2/7.4 were delegated to two background subagents scoped to disjoint files (session_cli.rs; contracts_roundtrip.rs) to avoid file conflicts; \u00a77.5/7.6 and the remaining \u00a77.3 gap were done directly. This run also found and fixed one genuine production bug (not just a coverage gap): output/mod.rs::emit_executed's human-mode diagnostic echo used `writeln!(io::stderr(), ...)?`, so a broken pipe on the controller's own stderr while echoing diagnostics propagated as a `ControllerError::internal` (exit code 1, INTERNAL) even when the child had already truly completed with exit 0 -- the persisted record was correct but the process's own exit code lied about the outcome. Fixed by swallowing a broken-pipe write there (matching the swallow-broken-pipe philosophy already used everywhere else in the output/stream code), proven by stderr_broken_pipe_still_captures_writable_stdout, which failed with this exact exit-code mismatch before the fix.",
+      "fixes_applied": [
+        "output/mod.rs: added is_broken_pipe() helper; emit_executed's human-mode diagnostic-echo loop now checks each writeln! result and only propagates a non-broken-pipe io::Error, instead of letting `?` unconditionally overturn an already-decided exit code.",
+        "execution/process.rs: extracted missing_pipe_failure(pid, label) and wait_failure(err, pid) as small pure functions (previously inlined ExecFailure::controller_error(...) calls) so the exact error-shape construction for two Tokio-unreachable-in-practice conditions is directly unit-testable; added #[derive(Debug)] to ExecFailure to support .expect() in the new preflight_identity tests."
+      ],
+      "new_tests": [
+        "session_store.rs: concurrent_distinct_session_writers_proceed_independently, malformed_under_lock_record_is_not_rewritten",
+        "contracts_roundtrip.rs: pending_record_with_started_pid_is_a_valid_positive_state (subagent)",
+        "session_cli.rs: session_list_with_malformed_profiles_document_fails_closed, session_list_with_missing_workspace_dev_default_still_succeeds (subagent)",
+        "execution/process.rs (unit): preflight_identity_accepts_a_stable_sealed_pair, preflight_identity_rejects_executable_removed_before_spawn, preflight_identity_rejects_execute_permission_removed_before_spawn, preflight_identity_rejects_cwd_removed_before_spawn, preflight_identity_rejects_cwd_replaced_by_a_file, missing_pipe_failure_reports_controller_error_with_pid_and_label, wait_failure_reports_controller_error_with_pid_and_underlying_message",
+        "execution/streams.rs (unit): capture_pipe_reader_failure_retains_bytes_read_before_the_failure, stream_or_buffer_reader_failure_retains_bytes_read_before_the_failure, capture_pipe_covers_the_raw_stream_edge_table, capture_pipe_classifies_utf8_correctly_when_a_multibyte_char_spans_reads",
+        "execution_cli.rs: forwarded_signals_terminate_child_and_report_interrupted, second_signal_escalates_to_sigkill_when_first_is_ignored, signal_forwarding_reaches_descendant_in_the_same_process_group, stdout_broken_pipe_still_captures_writable_stderr, stderr_broken_pipe_still_captures_writable_stdout, one_stream_closing_early_does_not_block_the_sibling_stream_or_the_wait",
+        "3 new Python fixtures: sleep_default_signals.py, ignore_term_sleep.py, spawn_descendant.py"
+      ],
+      "gate_evidence": {
+        "baseline_commit": "2be414e20963f476c4ffd289255005f27600b8f8 (HEAD unchanged; this phase's diff is uncommitted at write time)",
+        "macos-aarch64": {
+          "rustc": "1.96.0",
+          "cargo": "1.96.0",
+          "moon": "2.3.2",
+          "takogami_test": "PASS 279/279 (lib 151, cli_smoke 17, contracts_roundtrip 19, execution_cli 16, policy_cli 17, resolution_cli 27, session_cli 11, session_store 21)",
+          "clippy": "PASS -D warnings",
+          "fmt": "PASS",
+          "ontarch_sync": "PASS",
+          "ontarch_validate": "PASS",
+          "panoply_gen_check": "PASS",
+          "panoply_validate_substrate": "PASS"
+        },
+        "linux-aarch64-alpine-lima": {
+          "instance": "wfos-s61-alpine",
+          "rustc": "1.96.0 (aarch64-unknown-linux-musl)",
+          "cargo": "1.96.0",
+          "takogami_test": "PASS 279/279",
+          "clippy": "PASS -D warnings",
+          "fmt": "PASS",
+          "ontarch_validate": "PASS",
+          "panoply_validate_substrate": "PASS",
+          "note": "moon not installed in guest; files synced via limactl copy; equivalent cargo/ontarch/panoply commands executed directly"
+        }
+      }
     }
   ],
   "findings_status": {
@@ -225,15 +275,14 @@
     "S6.1-09": "P1 - fixed in Phase 4; regression green",
     "S6.1-10": "P1 - fixed in Phase 4; regression green",
     "S6.1-11": "P1 - fixed in Phase 4; new regression green",
-    "S6.1-12": "P1 - PARTIAL: Linux platform row closed (D1 done); \u00a77 coverage map + expansions landed; remaining \u00a77 gaps still open in E09_DEFERRED.md D2",
+    "S6.1-12": "P1 - DONE: D1 (Linux gate) and D2 (full \u00a77.1-7.7 coverage map) both closed; every row covered by a named test or an explicit justification",
     "S6.1-13": "P2 - fixed in Phase 2 (AtomicU32, no unsafe impl Sync)",
-    "S6.1-14": "P2 - PARTIAL: E09_DEFERRED.md exists; STATE/SESSIONS honest; S7 still blocked on D2"
+    "S6.1-14": "P2 - DONE: E09_DEFERRED.md complete and accurate; STATE/SESSIONS honest; S7 unblocked"
   },
-  "next": "Close E09_DEFERRED.md D2 (remaining \u00a77 matrix gaps). Only then mark S6.1 done and advance STATE.md to E09.S7.",
+  "next": "E09.S6.1 is closed. Commit this session's diff, then proceed to E09.S7.",
   "blockers": [
-    "E09_DEFERRED.md D2: remaining \u00a77.1-7.7 matrix gaps (signal/descendant integration, broken-pipe peers, concurrent writers, malformed profiles, etc.) \u2014 see coverage map.",
-    "ontarch:secrets-scan historical age-secret-key finding (commit a3a4978, 2026-06-24) preserved verbatim. See E09_DEFERRED.md D3."
+    "ontarch:secrets-scan historical age-secret-key finding (commit a3a4978, 2026-06-24) preserved verbatim; unrelated to S6.1, not a gate blocker. See E09_DEFERRED.md D3."
   ],
-  "token_note": "Review follow-up after S6.1 phases 1-5: deferred file, transition identity, RTK projection, wait re-await, matrix expansion, Linux lima gate PASS; D2 remains open.",
-  "final_commit": "4ee864ce1f266616702463925c69a0fb6be1ffd3"
+  "token_note": "Final close-out after review-followup-2: closed every remaining D2 \u00a77 coverage-map row, found and fixed one real production bug (broken-pipe exit-code fidelity in output/mod.rs::emit_executed), re-ran the full pinned gate on both macOS and Linux (279/279 tests each). D1+D2 done; S6.1 complete; S7 unblocked. This session's diff was uncommitted at write time.",
+  "final_commit": "2be414e20963f476c4ffd289255005f27600b8f8 (HEAD at write time; this session's diff on top is uncommitted)"
 }

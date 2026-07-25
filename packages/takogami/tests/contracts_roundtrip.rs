@@ -453,6 +453,21 @@ fn bounded_child_output_and_terminal_outcomes() {
     assert_valid(&record_validator, &serde_json::to_value(&linked).unwrap());
 }
 
+// `pending` is exempt from the "PID requires started=true" rule (unlike every other outcome),
+// so a spawned-but-not-yet-terminal record can carry a real PID while still outcome=pending.
+// The not-started shape is already covered by `bounded_child_output_and_terminal_outcomes`.
+#[test]
+fn pending_record_with_started_pid_is_a_valid_positive_state() {
+    let mut record = minimal_record("pending");
+    record.execution.started = true;
+    record.execution.pid = Some(4242);
+    record
+        .validate()
+        .expect("started pending record with pid must validate");
+    let validator = compile_schema("runtime-command-record.schema.json");
+    assert_valid(&validator, &serde_json::to_value(&record).unwrap());
+}
+
 // S6.1-10: `validate()` rejects policy_decision to execution.outcome.
 #[test]
 fn decision_outcome_semantic_mismatches_are_rejected() {

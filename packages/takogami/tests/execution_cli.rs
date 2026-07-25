@@ -231,6 +231,25 @@ impl Harness {
         assert!(!self.marker.exists(), "marker executable must never run");
     }
 
+    /// Spawn the CLI as a background child so a test can send it a real signal mid-execution
+    /// (`h.run`/`h.run_env` block until exit and cannot be signaled first).
+    fn spawn_background(&self, args: &[&str]) -> std::process::Child {
+        bin()
+            .arg("--state-home")
+            .arg(&self.state_home)
+            .args(args)
+            .env("TAKOGAMI_ONTARCH_REGISTRY", &self.registry)
+            .env("TAKOGAMI_WORKSPACE_ROOT", &self.workspace)
+            .env("TAKOGAMI_STATE_HOME", &self.state_home)
+            .env("PATH", &self.path_dir)
+            .env_remove("TAKOGAMI_PROFILE")
+            .env_remove("XDG_STATE_HOME")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("spawn takogami in background")
+    }
+
     /// Marks `workspace-dev` as RTK-eligible so human-mode `finalize_output` takes its
     /// combined-stream branch, without requiring a real RTK adapter binary on `PATH`.
     fn enable_rtk_compressor(&self) {
@@ -666,4 +685,304 @@ fn invalid_tmux_pane_diagnostic_reaches_record_and_envelope() {
     assert!(rec["runtime_context"].is_null());
     assert_eq!(rec["error"]["code"], "runtime_context_invalid");
     assert!(!rec["error"]["message"].as_str().unwrap().contains('/'));
+}
+
+// --- §7.5: real signal forwarding / escalation / descendant process-group cleanup. ---
+
+fn send_signal(pid: u32, sig: i32) {
+    unsafe {
+        libc::kill(pid as libc::pid_t, sig);
+    }
+}
+
+fn process_alive(pid: u32) -> bool {
+    unsafe { libc::kill(pid as libc::pid_t, 0) == 0 }
+}
+
+fn wait_until(mut cond: impl FnMut() -> bool, timeout: Duration) -> bool {
+    let deadline = Instant::now() + timeout;
+    loop {
+        if cond() {
+            return true;
+        }
+        if Instant::now() >= deadline {
+            return false;
+        }
+        thread::sleep(Duration::from_millis(20));
+    }
+}
+
+// S6.1-12 / §7.5: the controller must forward the exact received signal to the child's
+// process group, and a child that dies via that signal's OS default action must be reported
+// as `interrupted` with the matching signal name and the standard 128+signal exit code.
+#[test]
+fn forwarded_signals_terminate_child_and_report_interrupted() {
+    for (sig, name, exit) in [
+        (libc::SIGINT, "SIGINT", 130u8),
+        (libc::SIGTERM, "SIGTERM", 143u8),
+        (libc::SIGHUP, "SIGHUP", 129u8),
+    ] {
+        let mut h = Harness::new();
+        h.install_python_child("demo-bin", "sleep_default_signals.py");
+        let marker_path = h.workspace.join("READY");
+        h.set_demo_build(
+            "demo-bin",
+            &[marker_path.to_str().unwrap(), "10"],
+            &["PATH"],
+        );
+
+        let child = h.spawn_background(&["--json", "build", "demo", "--execute"]);
+        let controller_pid = child.id();
+        // `takogami`'s own on-disk record only gains a PID once the whole run has already
+        // completed (S6.1 writes the PID-bearing pending record right before the terminal
+        // write, not as a separate live update), so readiness must come from the child
+        // itself: the marker file it writes right after installing signal handlers.
+        assert!(
+            wait_until(|| marker_path.exists(), Duration::from_secs(3)),
+            "{name}: child readiness marker never appeared"
+        );
+        thread::sleep(Duration::from_millis(100));
+        send_signal(controller_pid, sig);
+
+        let out = child.wait_with_output().expect("wait");
+        assert_eq!(
+            out.status.code(),
+            Some(exit as i32),
+            "{name}: {}",
+            stderr(&out)
+        );
+        let records = h.load_records();
+        assert_eq!(records.len(), 1, "{name}");
+        let rec = &records[0];
+        assert_eq!(rec["execution"]["outcome"], "interrupted", "{name}");
+        assert_eq!(rec["execution"]["signal"], name, "{name}");
+        assert!(
+            !process_alive(controller_pid),
+            "{name}: controller must have exited"
+        );
+    }
+}
+
+// S6.1-12 / §7.5: a first forwarded signal that the child ignores must not be treated as
+// success — any additional signal must escalate to an unignorable SIGKILL on the group.
+#[test]
+fn second_signal_escalates_to_sigkill_when_first_is_ignored() {
+    let mut h = Harness::new();
+    h.install_python_child("demo-bin", "ignore_term_sleep.py");
+    let marker_path = h.workspace.join("READY");
+    h.set_demo_build(
+        "demo-bin",
+        &[marker_path.to_str().unwrap(), "10"],
+        &["PATH"],
+    );
+
+    let child = h.spawn_background(&["--json", "build", "demo", "--execute"]);
+    let controller_pid = child.id();
+    assert!(
+        wait_until(|| marker_path.exists(), Duration::from_secs(3)),
+        "child readiness marker never appeared"
+    );
+    thread::sleep(Duration::from_millis(100));
+
+    send_signal(controller_pid, libc::SIGTERM); // forwarded verbatim; the child ignores it
+    thread::sleep(Duration::from_millis(250));
+    send_signal(controller_pid, libc::SIGTERM); // second signal escalates to SIGKILL
+
+    let out = child.wait_with_output().expect("wait");
+    assert_eq!(
+        out.status.code(),
+        Some(137),
+        "second signal must escalate to SIGKILL: {}",
+        stderr(&out)
+    );
+    let records = h.load_records();
+    assert_eq!(records.len(), 1);
+    let rec = &records[0];
+    assert_eq!(rec["execution"]["outcome"], "interrupted");
+    assert_eq!(rec["execution"]["signal"], "SIGKILL");
+}
+
+// S6.1-12 / §7.5: `kill(-pgid, sig)` must reach descendants sharing the child's process group,
+// not only the direct child, so no orphaned grandchild survives a signaled build.
+#[test]
+fn signal_forwarding_reaches_descendant_in_the_same_process_group() {
+    let mut h = Harness::new();
+    h.install_python_child("demo-bin", "spawn_descendant.py");
+    let marker_path = h.workspace.join("GRANDCHILD_PID");
+    h.set_demo_build(
+        "demo-bin",
+        &[marker_path.to_str().unwrap(), "10"],
+        &["PATH"],
+    );
+
+    let child = h.spawn_background(&["--json", "build", "demo", "--execute"]);
+    let controller_pid = child.id();
+    assert!(
+        wait_until(|| marker_path.exists(), Duration::from_secs(3)),
+        "grandchild PID marker never appeared"
+    );
+    thread::sleep(Duration::from_millis(150));
+    let grandchild_pid: u32 = fs::read_to_string(&marker_path)
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap();
+    assert!(
+        process_alive(grandchild_pid),
+        "grandchild must be running before the signal"
+    );
+
+    send_signal(controller_pid, libc::SIGTERM);
+    let out = child.wait_with_output().expect("wait");
+    assert_eq!(out.status.code(), Some(143), "{}", stderr(&out));
+
+    assert!(
+        wait_until(|| !process_alive(grandchild_pid), Duration::from_secs(2)),
+        "grandchild must be cleaned up via process-group-wide signal delivery"
+    );
+}
+
+// --- §7.6: broken-pipe on one of the controller's own stdout/stderr, with a writable peer. ---
+
+// S6.1-12 / §7.6: if the consumer of the controller's own stdout closes early, the stdout
+// stream must be diagnosed as broken-pipe without blocking or corrupting the sibling stderr
+// stream, which must still be captured in full.
+#[test]
+fn stdout_broken_pipe_still_captures_writable_stderr() {
+    let mut h = Harness::new();
+    let py = python_executable();
+    let script = format!(
+        "#!{}\nimport sys, time\ntime.sleep(0.2)\nsys.stdout.write('STDOUT_PAYLOAD\\n')\nsys.stdout.flush()\nsys.stderr.write('SMALL_STDERR_MARKER')\nsys.stderr.flush()\n",
+        py.display(),
+    );
+    fs::write(h.path_dir.join("demo-bin"), script).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(
+            h.path_dir.join("demo-bin"),
+            fs::Permissions::from_mode(0o755),
+        )
+        .unwrap();
+    }
+    h.set_demo_build("demo-bin", &[], &["PATH"]);
+
+    let mut child = h.spawn_background(&["build", "demo", "--execute"]);
+    // Close our end of the controller's stdout immediately, before the child has written
+    // anything, so the controller's own forwarding write() reliably observes EPIPE.
+    drop(child.stdout.take());
+    let mut stderr_pipe = child.stderr.take().unwrap();
+    let stderr_reader = thread::spawn(move || {
+        use std::io::Read;
+        let mut buf = Vec::new();
+        stderr_pipe.read_to_end(&mut buf).ok();
+        buf
+    });
+
+    let status = child.wait().expect("wait");
+    let stderr_bytes = stderr_reader.join().unwrap();
+    let stderr_text = String::from_utf8_lossy(&stderr_bytes);
+    assert!(
+        stderr_text.contains("SMALL_STDERR_MARKER"),
+        "the writable stderr peer must still be emitted in full: {stderr_text:?}"
+    );
+    assert_eq!(status.code(), Some(SUCCESS as i32));
+
+    let records = h.load_records();
+    assert_eq!(records.len(), 1);
+    let rec = &records[0];
+    assert_eq!(rec["execution"]["outcome"], "completed");
+}
+
+// S6.1-12 / §7.6: mirror of the above with the broken pipe on stderr instead of stdout.
+#[test]
+fn stderr_broken_pipe_still_captures_writable_stdout() {
+    let mut h = Harness::new();
+    let py = python_executable();
+    let script = format!(
+        "#!{}\nimport sys, time\ntime.sleep(0.2)\nsys.stdout.write('SMALL_STDOUT_MARKER')\nsys.stdout.flush()\nsys.stderr.write('STDERR_PAYLOAD\\n')\nsys.stderr.flush()\n",
+        py.display(),
+    );
+    fs::write(h.path_dir.join("demo-bin"), script).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(
+            h.path_dir.join("demo-bin"),
+            fs::Permissions::from_mode(0o755),
+        )
+        .unwrap();
+    }
+    h.set_demo_build("demo-bin", &[], &["PATH"]);
+
+    let mut child = h.spawn_background(&["build", "demo", "--execute"]);
+    drop(child.stderr.take());
+    let mut stdout_pipe = child.stdout.take().unwrap();
+    let stdout_reader = thread::spawn(move || {
+        use std::io::Read;
+        let mut buf = Vec::new();
+        stdout_pipe.read_to_end(&mut buf).ok();
+        buf
+    });
+
+    let status = child.wait().expect("wait");
+    let stdout_bytes = stdout_reader.join().unwrap();
+    let stdout_text = String::from_utf8_lossy(&stdout_bytes);
+    assert!(
+        stdout_text.contains("SMALL_STDOUT_MARKER"),
+        "the writable stdout peer must still be emitted in full: {stdout_text:?}"
+    );
+    assert_eq!(
+        status.code(),
+        Some(SUCCESS as i32),
+        "a broken pipe on the controller's own stderr diagnostic echo must not overturn a \
+         successfully completed child: the process exit code must stay faithful to the record"
+    );
+
+    let records = h.load_records();
+    assert_eq!(records.len(), 1);
+    let rec = &records[0];
+    assert_eq!(rec["execution"]["outcome"], "completed");
+}
+
+// S6.1-12 / §7.6 "one stream closes early": the child closes its own stdout descriptor
+// (distinct from a broken pipe on the controller's side) while it keeps running and writing to
+// stderr. The stdout capture future must resolve at EOF without blocking the stderr capture or
+// the wait future, and the run must still finish `completed` with the full stderr content.
+#[test]
+fn one_stream_closing_early_does_not_block_the_sibling_stream_or_the_wait() {
+    let mut h = Harness::new();
+    let py = python_executable();
+    let script = format!(
+        "#!{}\nimport sys, os, time\nsys.stdout.write('BEFORE_CLOSE')\nsys.stdout.flush()\nos.close(1)\ntime.sleep(0.3)\nsys.stderr.write('STILL_RUNNING_AFTER_STDOUT_CLOSED')\nsys.stderr.flush()\n",
+        py.display(),
+    );
+    fs::write(h.path_dir.join("demo-bin"), script).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(
+            h.path_dir.join("demo-bin"),
+            fs::Permissions::from_mode(0o755),
+        )
+        .unwrap();
+    }
+    h.set_demo_build("demo-bin", &[], &["PATH"]);
+
+    let out = h.run(&["build", "demo", "--execute"]);
+    assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
+    assert!(
+        stdout(&out).contains("BEFORE_CLOSE"),
+        "bytes written before the early close must still be captured: {:?}",
+        stdout(&out)
+    );
+    assert!(
+        stderr(&out).contains("STILL_RUNNING_AFTER_STDOUT_CLOSED"),
+        "the sibling stream must keep draining to completion, unblocked by stdout's early EOF: {:?}",
+        stderr(&out)
+    );
+
+    let records = h.load_records();
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0]["execution"]["outcome"], "completed");
 }

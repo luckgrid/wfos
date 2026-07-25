@@ -45,6 +45,7 @@ fn default_signal_factory() -> io::Result<Box<dyn SignalSource>> {
     UnixSignalSource::install().map(|s| Box::new(s) as Box<dyn SignalSource>)
 }
 
+#[derive(Debug)]
 struct ExecFailure {
     outcome: String,
     diagnostics: Vec<DiagnosticRecord>,
@@ -172,22 +173,14 @@ async fn execute_inner(
         Some(s) => s,
         None => {
             reap_after_controller_failure(&mut guard, &mut child).await;
-            return Err(ExecFailure::controller_error(
-                "execution_io",
-                "child stdout pipe missing",
-                pid,
-            ));
+            return Err(missing_pipe_failure(pid, "stdout"));
         }
     };
     let stderr = match child.stderr.take() {
         Some(s) => s,
         None => {
             reap_after_controller_failure(&mut guard, &mut child).await;
-            return Err(ExecFailure::controller_error(
-                "execution_io",
-                "child stderr pipe missing",
-                pid,
-            ));
+            return Err(missing_pipe_failure(pid, "stderr"));
         }
     };
 
@@ -258,11 +251,7 @@ async fn execute_inner(
             }
             // Re-await so the child is reaped even when the first wait failed (S6.1-07 / §5.6).
             let _ = child.wait().await;
-            return Err(ExecFailure::controller_error(
-                "execution_io",
-                format!("failed to wait for child: {e}"),
-                pid,
-            ));
+            return Err(wait_failure(&e, pid));
         }
     };
 
@@ -375,6 +364,26 @@ fn preflight_identity(exe: &Path, cwd: &Path) -> Result<(), ExecFailure> {
         ));
     }
     Ok(())
+}
+
+/// A pipe Tokio should always populate once `Stdio::piped()` was requested and `spawn()`
+/// succeeded; a genuine `None` here is unreachable through the public `execute` surface. Kept
+/// as its own pure function (S6.1-12 / §7.5 "missing child pipe after spawn") so the exact
+/// error shape (`controller_error`, spawned=true, pid preserved) is directly unit-testable.
+fn missing_pipe_failure(pid: Option<u32>, label: &str) -> ExecFailure {
+    ExecFailure::controller_error("execution_io", format!("child {label} pipe missing"), pid)
+}
+
+/// S6.1-12 / §7.5 "wait failure": kept as its own pure function so the error shape produced
+/// after the SIGKILL-then-re-await recovery (S6.1-07 / §5.6, above) is directly unit-testable
+/// without needing a real, OS-level `wait()` failure (which `tokio::process::Child::wait`
+/// cannot be made to produce deterministically through the public API).
+fn wait_failure(err: &io::Error, pid: Option<u32>) -> ExecFailure {
+    ExecFailure::controller_error(
+        "execution_io",
+        format!("failed to wait for child: {err}"),
+        pid,
+    )
 }
 
 fn accept_regular_executable(path: &Path) -> Option<PathBuf> {
@@ -769,5 +778,136 @@ mod tests {
         assert_eq!(report.outcome, "completed");
         assert!(report.spawned);
         assert!(report.pid.is_some());
+    }
+
+    // §7.5: "executable removed before spawn" / "execute permission removed before spawn" /
+    // "cwd identity drift" are TOCTOU races against the resolution-time seal. Exercising the
+    // real `--execute` CLI path cannot deterministically land the file mutation inside the
+    // narrow window between resolution and spawn, so these are proven directly against
+    // `preflight_identity`, the exact fail-closed gate `execute_inner` calls first (S6.1-07
+    // hardened this path; it must never let a drifted sealed path reach `Command::spawn`).
+
+    fn preflight_workspace() -> (TempDir, PathBuf, PathBuf) {
+        let temp = tempfile::tempdir().unwrap();
+        let exe = temp.path().join("sealed-exe");
+        fs::write(&exe, "#!/bin/sh\nexit 0\n").unwrap();
+        fs::set_permissions(&exe, fs::Permissions::from_mode(0o755)).unwrap();
+        let cwd = temp.path().join("sealed-cwd");
+        fs::create_dir_all(&cwd).unwrap();
+        let exe = exe.canonicalize().unwrap();
+        let cwd = cwd.canonicalize().unwrap();
+        (temp, exe, cwd)
+    }
+
+    #[test]
+    fn preflight_identity_accepts_a_stable_sealed_pair() {
+        let (_temp, exe, cwd) = preflight_workspace();
+        preflight_identity(&exe, &cwd).expect("unchanged sealed executable/cwd must pass");
+    }
+
+    #[test]
+    fn preflight_identity_rejects_executable_removed_before_spawn() {
+        let (_temp, exe, cwd) = preflight_workspace();
+        fs::remove_file(&exe).unwrap();
+        let err = preflight_identity(&exe, &cwd)
+            .expect_err("a removed sealed executable must fail closed");
+        assert_eq!(err.outcome, "failed_to_spawn");
+        assert!(!err.spawned);
+        assert!(
+            err.diagnostics
+                .iter()
+                .any(|d| d.code == "execution_contract"),
+            "{:?}",
+            err.diagnostics
+        );
+    }
+
+    #[test]
+    fn preflight_identity_rejects_execute_permission_removed_before_spawn() {
+        let (_temp, exe, cwd) = preflight_workspace();
+        fs::set_permissions(&exe, fs::Permissions::from_mode(0o644)).unwrap();
+        let err = preflight_identity(&exe, &cwd)
+            .expect_err("a non-executable sealed path must fail closed");
+        assert_eq!(err.outcome, "failed_to_spawn");
+        assert!(!err.spawned);
+        assert!(
+            err.diagnostics
+                .iter()
+                .any(|d| d.code == "execution_contract"),
+            "{:?}",
+            err.diagnostics
+        );
+    }
+
+    #[test]
+    fn preflight_identity_rejects_cwd_removed_before_spawn() {
+        let (_temp, exe, cwd) = preflight_workspace();
+        fs::remove_dir(&cwd).unwrap();
+        let err =
+            preflight_identity(&exe, &cwd).expect_err("a removed sealed cwd must fail closed");
+        assert_eq!(err.outcome, "failed_to_spawn");
+        assert!(
+            err.diagnostics
+                .iter()
+                .any(|d| d.code == "execution_contract"),
+            "{:?}",
+            err.diagnostics
+        );
+    }
+
+    // §7.5 "missing child pipe after spawn" / "wait failure": both conditions are unreachable
+    // through the public `execute` surface (Tokio always populates `Stdio::piped()` pipes on a
+    // successful spawn; `Child::wait` cannot be forced to fail deterministically), so the exact
+    // error-shape construction is proven directly against the extracted pure functions instead.
+
+    #[test]
+    fn missing_pipe_failure_reports_controller_error_with_pid_and_label() {
+        let err = missing_pipe_failure(Some(4242), "stdout");
+        assert_eq!(err.outcome, "controller_error");
+        assert!(
+            err.spawned,
+            "the child existed; this must never be failed_to_spawn"
+        );
+        assert_eq!(err.pid, Some(4242));
+        assert!(
+            err.diagnostics
+                .iter()
+                .any(|d| d.code == "execution_io" && d.message.contains("stdout pipe missing")),
+            "{:?}",
+            err.diagnostics
+        );
+    }
+
+    #[test]
+    fn wait_failure_reports_controller_error_with_pid_and_underlying_message() {
+        let os_err = io::Error::other("simulated wait() failure");
+        let err = wait_failure(&os_err, Some(777));
+        assert_eq!(err.outcome, "controller_error");
+        assert!(err.spawned);
+        assert_eq!(err.pid, Some(777));
+        assert!(
+            err.diagnostics.iter().any(|d| d.code == "execution_io"
+                && d.message.contains("failed to wait for child")
+                && d.message.contains("simulated wait() failure")),
+            "{:?}",
+            err.diagnostics
+        );
+    }
+
+    #[test]
+    fn preflight_identity_rejects_cwd_replaced_by_a_file() {
+        let (_temp, exe, cwd) = preflight_workspace();
+        fs::remove_dir(&cwd).unwrap();
+        fs::write(&cwd, b"not a directory anymore").unwrap();
+        let err = preflight_identity(&exe, &cwd)
+            .expect_err("a sealed cwd replaced by a regular file must fail closed");
+        assert_eq!(err.outcome, "failed_to_spawn");
+        assert!(
+            err.diagnostics
+                .iter()
+                .any(|d| d.code == "execution_contract"),
+            "{:?}",
+            err.diagnostics
+        );
     }
 }

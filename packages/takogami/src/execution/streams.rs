@@ -226,7 +226,132 @@ fn write_all_ignore_closed(writer: &mut dyn Write, bytes: &[u8]) -> io::Result<(
 mod tests {
     use super::*;
     use std::io::Cursor;
-    use tokio::io::BufReader;
+    use std::pin::Pin;
+    use std::task::{Context, Poll};
+    use tokio::io::{BufReader, ReadBuf};
+
+    /// Yields a fixed byte sequence, then fails every subsequent read. Used to prove §7.5/§7.6
+    /// "reader failure": bytes already read before the failure must not be lost, and the
+    /// failure must surface as `read_error` rather than a panic or a silently truncated capture.
+    struct FailingAfterNReader {
+        data: Vec<u8>,
+        pos: usize,
+    }
+
+    impl AsyncRead for FailingAfterNReader {
+        fn poll_read(
+            mut self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+            buf: &mut ReadBuf<'_>,
+        ) -> Poll<io::Result<()>> {
+            if self.pos < self.data.len() {
+                let remaining = &self.data[self.pos..];
+                let n = remaining.len().min(buf.remaining());
+                buf.put_slice(&remaining[..n]);
+                self.pos += n;
+                Poll::Ready(Ok(()))
+            } else {
+                Poll::Ready(Err(io::Error::other("simulated reader failure")))
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn capture_pipe_reader_failure_retains_bytes_read_before_the_failure() {
+        let reader = FailingAfterNReader {
+            data: b"partial-bytes".to_vec(),
+            pos: 0,
+        };
+        let capture = capture_pipe(reader, 1024).await;
+        assert_eq!(capture.bytes, b"partial-bytes");
+        assert_eq!(capture.total_bytes, 13);
+        assert!(!capture.truncated);
+        let msg = capture.read_error.expect("reader failure must be reported");
+        assert!(msg.contains("simulated reader failure"), "{msg}");
+    }
+
+    #[tokio::test]
+    async fn stream_or_buffer_reader_failure_retains_bytes_read_before_the_failure() {
+        let reader = FailingAfterNReader {
+            data: b"partial-bytes".to_vec(),
+            pos: 0,
+        };
+        let capture = stream_or_buffer(reader, StreamDest::None, 1024, true, true).await;
+        assert_eq!(capture.bytes, b"partial-bytes");
+        assert_eq!(capture.total_bytes, 13);
+        assert!(!capture.broken_pipe);
+        let msg = capture.read_error.expect("reader failure must be reported");
+        assert!(msg.contains("simulated reader failure"), "{msg}");
+    }
+
+    /// Yields one byte per `poll_read`, forcing any multi-byte sequence to straddle several
+    /// separate reads. Used for §7.6 "UTF-8 split across reads".
+    struct OneByteAtATimeReader {
+        data: Vec<u8>,
+        pos: usize,
+    }
+
+    impl AsyncRead for OneByteAtATimeReader {
+        fn poll_read(
+            mut self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+            buf: &mut ReadBuf<'_>,
+        ) -> Poll<io::Result<()>> {
+            if self.pos < self.data.len() {
+                buf.put_slice(&self.data[self.pos..self.pos + 1]);
+                self.pos += 1;
+            }
+            Poll::Ready(Ok(()))
+        }
+    }
+
+    // §7.6 raw-stream matrix: empty / no-newline / exact-limit / one-byte-over / invalid-UTF-8 /
+    // NUL-binary. Each row is exercised directly against `capture_pipe` (the same drain used by
+    // JSON mode) since the capture/classification behavior does not depend on process spawning.
+    #[tokio::test]
+    async fn capture_pipe_covers_the_raw_stream_edge_table() {
+        let limit = 8;
+        let cases: &[(&str, &[u8], bool, StreamEncoding)] = &[
+            ("empty", b"", false, StreamEncoding::Utf8),
+            ("no_newline", b"hello", false, StreamEncoding::Utf8),
+            ("exact_limit", b"12345678", false, StreamEncoding::Utf8),
+            ("one_byte_over", b"123456789", true, StreamEncoding::Utf8),
+            (
+                "invalid_utf8",
+                &[0xff, 0xfe],
+                false,
+                StreamEncoding::LossyUtf8,
+            ),
+            ("nul_binary", b"a\0b", false, StreamEncoding::Binary),
+        ];
+        for (label, input, expect_truncated, expect_encoding) in cases.iter().copied() {
+            let capture = capture_pipe(Cursor::new(input.to_vec()), limit).await;
+            assert_eq!(capture.total_bytes, input.len() as u64, "{label}");
+            assert_eq!(capture.truncated, expect_truncated, "{label}");
+            assert!(capture.read_error.is_none(), "{label}");
+            let expected_len = if expect_truncated { limit } else { input.len() };
+            assert_eq!(capture.bytes.len(), expected_len, "{label}");
+            assert_eq!(
+                capture.encoding, expect_encoding,
+                "{label}: {:?}",
+                capture.bytes
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn capture_pipe_classifies_utf8_correctly_when_a_multibyte_char_spans_reads() {
+        // "café" — the "é" (0xC3 0xA9) straddles two separate one-byte poll_read calls.
+        let input = "café".as_bytes().to_vec();
+        let reader = OneByteAtATimeReader {
+            data: input.clone(),
+            pos: 0,
+        };
+        let capture = capture_pipe(reader, 1024).await;
+        assert_eq!(capture.bytes, input);
+        assert_eq!(capture.encoding, StreamEncoding::Utf8);
+        assert!(!capture.truncated);
+    }
 
     #[test]
     fn classify_prefers_binary_on_nul() {
