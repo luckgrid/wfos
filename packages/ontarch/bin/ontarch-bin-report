@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # ontarch-bin-report — read-only inventory of Workstreams/*/bin/<workflow>/ directories.
 # Writes registry/bin-inventory.json (machine) and registry/BIN-INVENTORY.md (human table).
-# One report replaces N du/ls/stat explorations. Agent-safe: no writes under bin/.
+# --json: exactly one validated inventory document on stdout; progress on stderr.
+# Agent-safe: no writes under bin/.
 set -uo pipefail
 
 _self="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -13,11 +14,51 @@ source "$_self/../lib/registry.sh"
 ontarch_require_jq
 mkdir -p "$ONTARCH_REGISTRY"
 
+JSON_MODE=0
+# Locked option policy: last --json wins as presence flag; unknown args fail;
+# duplicate --json is accepted (idempotent). No --json=value form.
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --json) JSON_MODE=1; shift ;;
+    -h|--help)
+      cat <<EOF
+ontarch bin-report — read-only bin inventory
+
+usage: ontarch bin-report [--json]
+
+  --json   emit exactly one validated inventory JSON document on stdout
+EOF
+      exit 0
+      ;;
+    *) ontarch_err "unknown argument: $1"; exit 1 ;;
+  esac
+done
+
+if [ "$JSON_MODE" -eq 1 ]; then
+  ontarch_info() { printf '%s\n' "${_C_BLUE}::${_C_RESET} $*" >&2; }
+  ontarch_ok()   { printf '%s\n' "${_C_GREEN}ok${_C_RESET} $*" >&2; }
+fi
+
 ontarch_info "ontarch bin-report — read-only inventory ($WS_ROOT/*/bin)"
 
-ontarch_emit_bin_inventory > "$ONTARCH_REGISTRY/bin-inventory.json"
+tmp="$(mktemp "${TMPDIR:-/tmp}/ontarch-bin-inv.XXXXXX")"
+trap 'rm -f "$tmp"' EXIT
 
-# BIN-INVENTORY.md: human projection, one row per workflow directory.
+if ! ontarch_emit_bin_inventory > "$tmp"; then
+  ontarch_err "bin inventory generation failed"
+  exit 1
+fi
+
+if ! ontarch_validate_bin_inventory_doc "$tmp" "$WS_ROOT"; then
+  ontarch_err "bin inventory validation failed — previous inventory retained if present"
+  exit 1
+fi
+
+# Atomic install of validated document.
+mv -f "$tmp" "$ONTARCH_REGISTRY/bin-inventory.json"
+trap - EXIT
+
+# Markdown from the same validated installed document.
 {
   printf '# Bin inventory report\n\n'
   # shellcheck disable=SC2016  # literal backticks for the generated markdown note
@@ -41,3 +82,8 @@ n=$(jq -r '.summary.total' "$ONTARCH_REGISTRY/bin-inventory.json")
 m=$(jq -r '.summary.with_manifest' "$ONTARCH_REGISTRY/bin-inventory.json")
 ontarch_ok "bin-inventory.json ($n workflow dirs: $m with manifest)"
 ontarch_ok "BIN-INVENTORY.md  -> registry/BIN-INVENTORY.md"
+
+if [ "$JSON_MODE" -eq 1 ]; then
+  cat "$ONTARCH_REGISTRY/bin-inventory.json"
+  printf '\n'
+fi

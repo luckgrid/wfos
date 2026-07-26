@@ -256,10 +256,25 @@ ontarch_emit_graph() {
   local skills="$ONTARCH_REGISTRY/skills.json"
   [ -f "$units" ]   || { ontarch_warn "units.json absent — graph requires sync to run first"; return 1; }
   [ -f "$policies" ] || { ontarch_warn "policies.json absent — graph requires sync to run first"; return 1; }
-  [ -f "$profiles" ] || printf '{"profiles":[]}' > "$profiles"
-  [ -f "$skills" ]   || printf '{"skills":[]}' > "$skills"
+  # Defensive empty docs are fingerprinted (must exist before digest).
+  local ts_empty="$(_ontarch_now)"
+  [ -f "$profiles" ] || printf '{"generated_at":"%s","profiles":[]}\n' "$ts_empty" > "$profiles"
+  [ -f "$skills" ]   || printf '{"generated_at":"%s","skills":[]}\n' "$ts_empty" > "$skills"
 
-  jq -n --arg ts "$(_ontarch_now)" \
+  # Exact four upstream registry docs; stable package-relative paths; sorted by path.
+  local gen fps='[]' name f digest
+  for name in policies.json profiles.json skills.json units.json; do
+    f="$ONTARCH_REGISTRY/$name"
+    [ -f "$f" ] || { ontarch_err "graph fingerprint: missing $f"; return 1; }
+    digest="$(_ontarch_sha256_file "$f")" || { ontarch_err "graph fingerprint: digest failed for $f"; return 1; }
+    fps="$(jq -c --arg path "registry/$name" --arg digest "$digest" \
+      '. + [{path: $path, algorithm: "sha256", digest: $digest}]' <<<"$fps")"
+  done
+  fps="$(jq -c 'sort_by(.path)' <<<"$fps")"
+  gen="$(jq -nc --arg ts "$(_ontarch_now)" --argjson fps "$fps" \
+    '{generated_at: $ts, source_fingerprints: $fps}')"
+
+  jq -n --argjson gen "$gen" \
     --slurpfile U "$units" --slurpfile P "$policies" \
     --slurpfile PR "$profiles" --slurpfile SK "$skills" '
     ($U[0].units)    as $units    |
@@ -306,9 +321,13 @@ ontarch_emit_graph() {
       as $actor_nodes |
     ($profiles | map({id: ("profile:" + .id), kind: "profile"})) as $profile_nodes |
     {
-      generated_at: $ts,
-      nodes: ($unit_nodes + $cap_nodes + $policy_nodes + $actor_nodes + $profile_nodes + $skill_nodes),
-      edges: ($provides_edges + $requires_edges + $uses_edges + $governed_edges + $blocked_edges + $selects_edges + $can_invoke_edges)
+      generated_at: $gen.generated_at,
+      registry_generation: $gen,
+      nodes: ($unit_nodes + $cap_nodes + $policy_nodes + $actor_nodes + $profile_nodes + $skill_nodes
+              | sort_by(.kind, .id)),
+      edges: ($provides_edges + $requires_edges + $uses_edges + $governed_edges + $blocked_edges
+              + $selects_edges + $can_invoke_edges
+              | sort_by(.from, .rel, .to))
     }
   '
 }
@@ -405,9 +424,15 @@ _ontarch_file_age_days() {
   [ -n "$paths" ] || { printf ' \n'; return 0; }
   while IFS= read -r f; do
     [ -n "$f" ] || continue
-    # BSD/macOS: -f %m; GNU: -c %Y
-    mtime="$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f" 2>/dev/null || echo "")"
-    [ -n "$mtime" ] || continue
+    # Prefer GNU -c %Y first: on Linux, BSD-style `stat -f` is --file-system and can
+    # succeed with non-epoch output. Fall back to BSD -f %m (macOS). Digits-only guard.
+    mtime="$(stat -c %Y "$f" 2>/dev/null || true)"
+    case "$mtime" in
+      ''|*[!0-9]*) mtime="$(stat -f %m "$f" 2>/dev/null || true)" ;;
+    esac
+    case "$mtime" in
+      ''|*[!0-9]*) continue ;;
+    esac
     age=$(( (now - mtime) / 86400 ))
     [ "$age" -lt 0 ] && age=0
     if [ -z "$oldest" ] || [ "$age" -gt "$oldest" ]; then oldest="$age"; fi
@@ -543,4 +568,222 @@ ontarch_emit_manifest() {
     }
     + (if $tool_version == "" then {} else {tool_version: $tool_version} end)
     + (if $notes == "" then {} else {notes: $notes} end)'
+}
+
+# ── Phase 1 machine-contract validators (jq structural + semantic) ────────────
+# Print a stable diagnostic code on stderr and return nonzero on failure.
+
+_ontarch_diag() { printf 'xx %s\n' "$*" >&2; }
+
+# Args: <graph.json path>
+# Requires exact four registry/*.json fingerprints matching file digests.
+ontarch_validate_graph_doc() {
+  local graph="$1"
+  local schema="${2:-$ONTARCH_GRAPHS/edges.schema.json}"
+  [ -f "$graph" ] || { _ontarch_diag "graph:missing_file"; return 1; }
+  [ -f "$schema" ] || { _ontarch_diag "graph:missing_schema"; return 1; }
+
+  jq -e 'type == "object"' "$graph" >/dev/null \
+    || { _ontarch_diag "graph:not_object"; return 1; }
+
+  # Closed root keys
+  jq -e '
+    (keys | sort) == ["edges","generated_at","nodes","registry_generation"]
+  ' "$graph" >/dev/null || { _ontarch_diag "graph:unknown_or_missing_root_field"; return 1; }
+
+  jq -e '
+    (.registry_generation | type == "object")
+    and ((.registry_generation | keys | sort) == ["generated_at","source_fingerprints"])
+  ' "$graph" >/dev/null || { _ontarch_diag "graph:invalid_registry_generation"; return 1; }
+
+  local fps_err
+  fps_err="$(jq -r '
+    (.registry_generation.source_fingerprints // null) as $fps |
+    if ($fps | type) != "array" then "graph:fingerprints_not_array"
+    elif ($fps | length) != 4 then "graph:fingerprint_count"
+    elif ($fps | map(.path) | unique | length) != 4 then "graph:duplicate_fingerprint_path"
+    elif any($fps[]; (.path | type) != "string" or (.path | test("^/"))) then "graph:absolute_fingerprint_path"
+    elif any($fps[]; .path | test("\\\\|\\.\\.")) then "graph:unsafe_fingerprint_path"
+    elif any($fps[]; (.path | test("^registry/[a-z0-9][a-z0-9._-]*\\.json$") | not)) then "graph:bad_fingerprint_path"
+    elif ($fps | map(.path) | sort) != ($fps | map(.path)) then "graph:fingerprint_paths_unsorted"
+    elif any($fps[]; .algorithm != "sha256") then "graph:unsupported_fingerprint_algorithm"
+    elif any($fps[]; (.digest | type) != "string" or (.digest | test("^[0-9a-f]{64}$") | not)) then "graph:malformed_fingerprint_digest"
+    elif any($fps[]; ((keys | sort) != ["algorithm","digest","path"])) then "graph:unknown_fingerprint_field"
+    elif ($fps | map(.path) | sort) != [
+      "registry/policies.json","registry/profiles.json","registry/skills.json","registry/units.json"
+    ] then "graph:fingerprint_path_set"
+    else empty end
+  ' "$graph")"
+  [ -z "$fps_err" ] || { _ontarch_diag "$fps_err"; return 1; }
+
+  # Exact digest match vs registry upstream docs (not the temp graph dirname).
+  local name expected got
+  local reg_dir="${ONTARCH_REGISTRY:-}"
+  if [ -z "$reg_dir" ] || [ ! -d "$reg_dir" ]; then
+    reg_dir="$(cd "$(dirname "$graph")" && pwd)"
+  fi
+  for name in policies.json profiles.json skills.json units.json; do
+    [ -f "$reg_dir/$name" ] || { _ontarch_diag "graph:missing_upstream:$name"; return 1; }
+    expected="$(_ontarch_sha256_file "$reg_dir/$name")" || return 1
+    got="$(jq -r --arg p "registry/$name" \
+      '.registry_generation.source_fingerprints[] | select(.path == $p) | .digest' "$graph")"
+    [ "$got" = "$expected" ] || { _ontarch_diag "graph:fingerprint_digest_mismatch:$name"; return 1; }
+  done
+
+  jq -e '
+    (.nodes | type == "array") and (.edges | type == "array")
+    and all(.nodes[]; ((keys | sort) == ["id","kind"]) and (.id | type == "string" and length > 0))
+    and all(.edges[]; ((keys | sort) == ["from","rel","to"]))
+  ' "$graph" >/dev/null || { _ontarch_diag "graph:invalid_node_or_edge_shape"; return 1; }
+
+  # Node/edge sort + dangling endpoints
+  local sort_err
+  sort_err="$(jq -r '
+    ( .nodes as $n |
+      if ($n | sort_by(.kind, .id)) != $n then "graph:nodes_unsorted"
+      elif (.edges | sort_by(.from, .rel, .to)) != .edges then "graph:edges_unsorted"
+      else
+        [$n[].id] as $ids |
+        if any(.edges[]; (.from as $f | $ids | index($f) | not) or (.to as $t | $ids | index($t) | not))
+        then "graph:dangling_edge_endpoint"
+        else empty end
+      end
+    )
+  ' "$graph")"
+  [ -z "$sort_err" ] || { _ontarch_diag "$sort_err"; return 1; }
+
+  # Kind/rel enums from schema
+  local node_kinds edge_rels
+  node_kinds="$(jq -r '.properties.nodes.items.properties.kind.enum[]' "$schema")"
+  edge_rels="$(jq -r '.properties.edges.items.properties.rel.enum[]' "$schema")"
+  local k r
+  for k in $(jq -r '.nodes[].kind' "$graph" | sort -u); do
+    echo "$node_kinds" | grep -qx "$k" || { _ontarch_diag "graph:invalid_node_kind:$k"; return 1; }
+  done
+  for r in $(jq -r '.edges[].rel' "$graph" | sort -u); do
+    echo "$edge_rels" | grep -qx "$r" || { _ontarch_diag "graph:invalid_edge_rel:$r"; return 1; }
+  done
+  return 0
+}
+
+# Semantic + closed-shape checks for bin inventory (schema mirror).
+# Args: <inventory.json> [expected_root]
+ontarch_validate_bin_inventory_doc() {
+  local inv="$1"
+  local expected_root="${2:-}"
+  [ -f "$inv" ] || { _ontarch_diag "bin_inventory:missing_file"; return 1; }
+
+  jq -e '
+    type == "object"
+    and ((keys | sort) == ["generated_at","root","summary","workflows"])
+    and (.generated_at | type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"))
+    and (.root | type == "string" and length > 0)
+    and ((.summary | keys | sort) == ["total","with_manifest"])
+    and (.summary.total | type == "number")
+    and (.summary.total >= 0)
+    and (.summary.with_manifest | type == "number")
+    and (.summary.with_manifest >= 0)
+    and (.summary.with_manifest <= .summary.total)
+    and (.workflows | type == "array")
+  ' "$inv" >/dev/null || { _ontarch_diag "bin_inventory:schema"; return 1; }
+
+  if [ -n "$expected_root" ]; then
+    local root
+    root="$(jq -r '.root' "$inv")"
+    [ "$root" = "$expected_root" ] || { _ontarch_diag "bin_inventory:root_mismatch"; return 1; }
+  fi
+
+  local err
+  err="$(jq -r '
+    (.workflows) as $w |
+    if ($w | length) != .summary.total then "bin_inventory:summary_total_mismatch"
+    elif ([ $w[] | select(.manifest_present == true) ] | length) != .summary.with_manifest
+      then "bin_inventory:summary_manifest_mismatch"
+    elif ($w | map(.path) | unique | length) != ($w | length) then "bin_inventory:duplicate_path"
+    elif ($w | map(.path) | sort) != ($w | map(.path)) then "bin_inventory:unsorted_paths"
+    elif any($w[]; ((keys | sort) != [
+      "file_count","manifest_count","manifest_present","newest_file_age_days",
+      "oldest_file_age_days","path","size_bytes"
+    ])) then "bin_inventory:unknown_workflow_field"
+    elif any($w[];
+      (.path | type) != "string"
+      or (.path | test("^/") )
+      or (.path | test("\\\\|\\.\\.|\\n|\\r|\\t"))
+      or (.path | test("^[^/]+/bin(/[^/]+)+$") | not)
+      or (.path | test("(^|/)(lib|src)(/|$)"))
+    ) then "bin_inventory:unsafe_path"
+    elif any($w[];
+      (.size_bytes | type) != "number" or .size_bytes < 0
+      or (.file_count | type) != "number" or .file_count < 0
+      or (.manifest_count | type) != "number" or .manifest_count < 0
+      or (.manifest_present != (.manifest_count > 0))
+    ) then "bin_inventory:count_inconsistency"
+    elif any($w[];
+      (.oldest_file_age_days != null and (.oldest_file_age_days | type) != "number")
+      or (.newest_file_age_days != null and (.newest_file_age_days | type) != "number")
+      or (
+        .oldest_file_age_days != null and .newest_file_age_days != null
+        and .newest_file_age_days > .oldest_file_age_days
+      )
+    ) then "bin_inventory:age_inconsistency"
+    else empty end
+  ' "$inv")"
+  [ -z "$err" ] || { _ontarch_diag "$err"; return 1; }
+  return 0
+}
+
+# Args: <cleanup-plan.json>
+ontarch_validate_bin_cleanup_plan_doc() {
+  local plan="$1"
+  [ -f "$plan" ] || { _ontarch_diag "bin_cleanup:missing_file"; return 1; }
+
+  jq -e '
+    type == "object"
+    and ((keys | sort) == [
+      "entries","generated_at","inventory_generated_at","inventory_refreshed",
+      "mode","mutation_executed","scope","summary"
+    ])
+    and (.mutation_executed == false)
+    and (.mode | IN("report-only","dry-run","archive","delete-approved"))
+    and (.inventory_refreshed | type == "boolean")
+    and (.generated_at | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"))
+    and (.inventory_generated_at | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"))
+    and ((.summary | keys | sort) == ["advisory","blocked","total","would_archive","would_delete"])
+  ' "$plan" >/dev/null || { _ontarch_diag "bin_cleanup:schema"; return 1; }
+
+  local err
+  err="$(jq -r '
+    (.entries) as $e |
+    if (.mutation_executed != false) then "bin_cleanup:mutation_executed"
+    elif ($e | length) != .summary.total then "bin_cleanup:summary_total_mismatch"
+    elif ([ $e[] | select(.disposition == "advisory") ] | length) != .summary.advisory
+      then "bin_cleanup:summary_advisory_mismatch"
+    elif ([ $e[] | select(.disposition == "would_archive") ] | length) != .summary.would_archive
+      then "bin_cleanup:summary_would_archive_mismatch"
+    elif ([ $e[] | select(.disposition == "would_delete") ] | length) != .summary.would_delete
+      then "bin_cleanup:summary_would_delete_mismatch"
+    elif ([ $e[] | select(.disposition == "blocked") ] | length) != .summary.blocked
+      then "bin_cleanup:summary_blocked_mismatch"
+    elif ($e | map(.path) | unique | length) != ($e | length) then "bin_cleanup:duplicate_path"
+    elif ($e | map(.path) | sort) != ($e | map(.path)) then "bin_cleanup:unsorted_paths"
+    elif any($e[]; ((keys | sort) != [
+      "approved_to_matches","disposition","path","reason","retention"
+    ])) then "bin_cleanup:unknown_entry_field"
+    elif any($e[];
+      (.disposition | IN("advisory","would_archive","would_delete","blocked") | not)
+      or (.reason | type) != "string" or (.reason | length) < 1
+      or (.path | test("^/") )
+      or (.path | test("\\\\|\\.\\.|\\n|\\r"))
+      or (.path | test("^[^/]+/bin(/[^/]+)+$") | not)
+    ) then "bin_cleanup:invalid_entry"
+    elif .scope != null and (
+      (.scope | type) != "string"
+      or (.scope | test("^/") )
+      or (.scope | test("\\\\|\\.\\."))
+      or ((.scope) as $scope | any($e[]; (.path != $scope) and (.path | startswith($scope + "/") | not)))
+    ) then "bin_cleanup:scope_violation"
+    else empty end
+  ' "$plan")"
+  [ -z "$err" ] || { _ontarch_diag "$err"; return 1; }
+  return 0
 }

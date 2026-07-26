@@ -593,38 +593,44 @@ _validate_scan() {
   fi
 }
 
-# Soft structural check for the bin inventory (no dedicated schema — fields are
-# defined by ontarch_emit_bin_inventory). Warns if absent; validates shape when present.
+# Closed schema + semantic gate for bin inventory (Phase 1).
 _validate_bin_inventory() {
   local inv="$ONTARCH_REGISTRY/bin-inventory.json"
+  local schema="$ONTARCH_SCHEMAS/bin-inventory.schema.json"
+  [ -f "$schema" ] || ontarch_die "missing schema: $schema"
   [ -f "$inv" ] || { ontarch_warn "bin-inventory.json absent — run 'moon run ontarch:bin-report' first"; return 0; }
 
-  ontarch_info "bin inventory (structural)"
-  local ifail=0 req
-  for req in generated_at root summary workflows; do
-    jq -e --arg k "$req" 'has($k)' "$inv" >/dev/null \
-      || { ontarch_err "bin-inventory: missing required '$req'"; ifail=1; }
-  done
-
-  local missing
-  for req in path size_bytes file_count manifest_present manifest_count; do
-    missing="$(jq -r --arg k "$req" '[.workflows[] | select(has($k) | not) | .path] | length' "$inv")"
-    [ "$missing" = "0" ] || { ontarch_err "bin-inventory: $missing workflow(s) missing '$req'"; ifail=1; }
-  done
-
-  # oldest >= newest when both present (ages are days-since-mtime)
-  local badage
-  badage="$(jq -r '[.workflows[]
-    | select(.oldest_file_age_days != null and .newest_file_age_days != null)
-    | select(.oldest_file_age_days < .newest_file_age_days)] | length' "$inv")"
-  [ "$badage" = "0" ] || { ontarch_err "bin-inventory: $badage workflow(s) with oldest < newest age"; ifail=1; }
-
-  if [ "$ifail" -eq 0 ]; then
-    printf '  %sok%s  bin-inventory.json (%s workflows) — report valid\n' \
+  ontarch_info "bin inventory (vs schemas/bin-inventory.schema.json)"
+  if ontarch_validate_bin_inventory_doc "$inv" "$WS_ROOT"; then
+    printf '  %sok%s  bin-inventory.json (%s workflows) — schema+semantics\n' \
       "$_C_GREEN" "$_C_RESET" "$(jq -r '.summary.total' "$inv")"
   else
     fail=1
   fi
+}
+
+# Inline cleanup-plan contract selfcheck (no registry artifact required).
+_selfcheck_bin_cleanup_plan() {
+  ontarch_info "bin cleanup plan (selfcheck)"
+  local good bad tmp
+  tmp="$(mktemp "${TMPDIR:-/tmp}/ontarch-cleanup-selfcheck.XXXXXX")"
+  good='{"generated_at":"2026-07-25T00:00:00Z","mode":"report-only","scope":null,"inventory_generated_at":"2026-07-25T00:00:00Z","inventory_refreshed":false,"summary":{"total":0,"advisory":0,"would_archive":0,"would_delete":0,"blocked":0},"entries":[],"mutation_executed":false}'
+  printf '%s\n' "$good" > "$tmp"
+  if ontarch_validate_bin_cleanup_plan_doc "$tmp"; then
+    printf '  %sok%s  positive cleanup plan accepted\n' "$_C_GREEN" "$_C_RESET"
+  else
+    ontarch_err "cleanup plan selfcheck: positive fixture should pass"
+    fail=1
+  fi
+  bad="$(jq -c '.mutation_executed = true | .summary.total = 1 | .summary.blocked = 1 | .entries = [{path:"Build/bin/demo",disposition:"blocked",reason:"test",retention:null,approved_to_matches:null}]' <<<"$good")"
+  printf '%s\n' "$bad" > "$tmp"
+  if ontarch_validate_bin_cleanup_plan_doc "$tmp" 2>/dev/null; then
+    ontarch_err "cleanup plan selfcheck: mutation_executed true should fail"
+    fail=1
+  else
+    printf '  %sok%s  mutation_executed true rejected\n' "$_C_GREEN" "$_C_RESET"
+  fi
+  rm -f "$tmp"
 }
 
 # Retention pattern from manifest.schema.json (concrete auto-archive-after:<N>d allowed).
@@ -893,48 +899,12 @@ _validate_graph() {
   [ -f "$schema" ] || ontarch_die "missing schema: $schema"
   [ -f "$graph" ]  || { ontarch_warn "graph.json absent — run 'moon run ontarch:sync' first"; return 0; }
 
-  ontarch_info "graph (vs graphs/edges.schema.json)"
-  local gfail=0
-
-  # required top-level keys
-  jq -e 'has("nodes") and has("edges")' "$graph" >/dev/null \
-    || { ontarch_err "graph: missing required 'nodes' or 'edges'"; gfail=1; }
-
-  # node kind enum
-  local node_kinds
-  node_kinds="$(jq -r '.properties.nodes.items.properties.kind.enum[]' "$schema")"
-  for k in $(jq -r '.nodes[].kind' "$graph" | sort -u); do
-    echo "$node_kinds" | grep -qx "$k" \
-      || { ontarch_err "graph: node kind '$k' not in schema enum"; gfail=1; }
-  done
-
-  # edge rel enum
-  local edge_rels
-  edge_rels="$(jq -r '.properties.edges.items.properties.rel.enum[]' "$schema")"
-  for r in $(jq -r '.edges[].rel' "$graph" | sort -u); do
-    echo "$edge_rels" | grep -qx "$r" \
-      || { ontarch_err "graph: edge rel '$r' not in schema enum"; gfail=1; }
-  done
-
-  # each edge endpoint must reference an existing node
-  local dangling
-  dangling="$(jq -r '
-    [.nodes[].id] as $ids |
-    (.edges | map(.from) + map(.to)) |
-    map(select(. as $e | $ids | index($e) | not)) | unique | .[]
-  ' "$graph" 2>/dev/null)"
-  if [ -n "$dangling" ]; then
-    ontarch_err "graph: dangling edge endpoints: $dangling"
-    gfail=1
-  fi
-
-  local nn en
-  nn=$(jq -r '.nodes | length' "$graph")
-  en=$(jq -r '.edges | length' "$graph")
-
-  if [ "$gfail" -eq 0 ]; then
-    printf '  %sok%s  graph.json (%s nodes, %s edges) — all endpoints resolve\n' \
-      "$_C_GREEN" "$_C_RESET" "$nn" "$en"
+  ontarch_info "graph (vs graphs/edges.schema.json + fingerprints)"
+  if ontarch_validate_graph_doc "$graph" "$schema"; then
+    printf '  %sok%s  graph.json (%s nodes, %s edges) — schema+fingerprints\n' \
+      "$_C_GREEN" "$_C_RESET" \
+      "$(jq -r '.nodes | length' "$graph")" \
+      "$(jq -r '.edges | length' "$graph")"
   else
     fail=1
   fi
@@ -953,6 +923,7 @@ main() {
   _selfcheck_registry_generation
   _validate_scan
   _validate_bin_inventory
+  _selfcheck_bin_cleanup_plan
   _validate_manifest
   _selfcheck_manifest_retention
   _selfcheck_manifest_archive_reason

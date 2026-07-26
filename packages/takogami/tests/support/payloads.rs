@@ -33,15 +33,28 @@ pub fn sample_cleanup_plan(mode: &str) -> Value {
     })
 }
 
+/// Invalid fixture: every other field consistent; only mutation_executed is wrong.
 pub fn sample_cleanup_mutation_true() -> Value {
-    let mut doc = sample_cleanup_plan("report-only");
-    doc["mutation_executed"] = json!(true);
-    doc["entries"] = json!([{
-        "path": "Build/bin/demo",
-        "disposition": "would_delete",
-        "reason": "test",
-        "retention": null,
-        "approved_to_matches": null
-    }]);
-    doc
+    json!({
+        "generated_at": "2026-07-25T00:00:00Z",
+        "mode": "report-only",
+        "scope": null,
+        "inventory_generated_at": "2026-07-25T00:00:00Z",
+        "inventory_refreshed": false,
+        "summary": {
+            "total": 1,
+            "advisory": 0,
+            "would_archive": 0,
+            "would_delete": 0,
+            "blocked": 1
+        },
+        "entries": [{
+            "path": "Build/bin/demo",
+            "disposition": "blocked",
+            "reason": "test",
+            "retention": null,
+            "approved_to_matches": null
+        }],
+        "mutation_executed": true
+    })
 }

@@ -8,6 +8,8 @@
 
 mod ontarch_fixture;
 mod payloads;
+mod schemas;
 
 pub use ontarch_fixture::*;
 pub use payloads::*;
+pub use schemas::*;

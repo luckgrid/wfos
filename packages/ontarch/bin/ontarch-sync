@@ -34,13 +34,22 @@ ontarch_ok "skills.json   ($s skills)"
 ontarch_ok "profiles.json ($pr profiles)"
 
 # Graph: derive relationships from units + policies (must run after units/policies are written).
-if ontarch_emit_graph > "$ONTARCH_REGISTRY/graph.json" 2>/dev/null; then
-  gn=$(jq -r '.nodes | length' "$ONTARCH_REGISTRY/graph.json")
-  ge=$(jq -r '.edges | length' "$ONTARCH_REGISTRY/graph.json")
-  ontarch_emit_graph_dot < "$ONTARCH_REGISTRY/graph.json" > "$ONTARCH_REGISTRY/graph.dot"
-  ontarch_ok "graph.json    ($gn nodes, $ge edges)"
-  ontarch_ok "graph.dot     -> registry/graph.dot"
+# Validate before install; DOT derives from the validated installed document.
+_graph_tmp="$(mktemp "${TMPDIR:-/tmp}/ontarch-graph.XXXXXX")"
+if ontarch_emit_graph > "$_graph_tmp"; then
+  if ontarch_validate_graph_doc "$_graph_tmp"; then
+    mv -f "$_graph_tmp" "$ONTARCH_REGISTRY/graph.json"
+    ontarch_emit_graph_dot < "$ONTARCH_REGISTRY/graph.json" > "$ONTARCH_REGISTRY/graph.dot"
+    gn=$(jq -r '.nodes | length' "$ONTARCH_REGISTRY/graph.json")
+    ge=$(jq -r '.edges | length' "$ONTARCH_REGISTRY/graph.json")
+    ontarch_ok "graph.json    ($gn nodes, $ge edges)"
+    ontarch_ok "graph.dot     -> registry/graph.dot"
+  else
+    rm -f "$_graph_tmp"
+    ontarch_warn "graph validation failed — graph.json not updated"
+  fi
 else
+  rm -f "$_graph_tmp"
   ontarch_warn "graph not generated (units.json or policies.json missing)"
 fi
 

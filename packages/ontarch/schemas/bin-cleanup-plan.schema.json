@@ -1,0 +1,71 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "wfos/ontarch/schemas/bin-cleanup-plan.schema.json",
+  "title": "Ontarch bin cleanup plan",
+  "description": "Non-mutating machine cleanup plan from ontarch bin-cleanup report-only/dry-run. mutation_executed is always false.",
+  "type": "object",
+  "required": [
+    "generated_at",
+    "mode",
+    "scope",
+    "inventory_generated_at",
+    "inventory_refreshed",
+    "summary",
+    "entries",
+    "mutation_executed"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "generated_at": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["report-only", "dry-run", "archive", "delete-approved"]
+    },
+    "scope": { "type": ["string", "null"] },
+    "inventory_generated_at": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "inventory_refreshed": { "type": "boolean" },
+    "summary": {
+      "type": "object",
+      "required": ["total", "advisory", "would_archive", "would_delete", "blocked"],
+      "additionalProperties": false,
+      "properties": {
+        "total": { "type": "integer", "minimum": 0, "maximum": 100000 },
+        "advisory": { "type": "integer", "minimum": 0, "maximum": 100000 },
+        "would_archive": { "type": "integer", "minimum": 0, "maximum": 100000 },
+        "would_delete": { "type": "integer", "minimum": 0, "maximum": 100000 },
+        "blocked": { "type": "integer", "minimum": 0, "maximum": 100000 }
+      }
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "disposition", "reason", "retention", "approved_to_matches"],
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[^/\\\\]+/bin(/[^/\\\\]+)+$"
+          },
+          "disposition": {
+            "type": "string",
+            "enum": ["advisory", "would_archive", "would_delete", "blocked"]
+          },
+          "reason": { "type": "string", "minLength": 1 },
+          "retention": { "type": ["string", "null"] },
+          "approved_to_matches": { "type": ["boolean", "null"] }
+        }
+      }
+    },
+    "mutation_executed": { "type": "boolean", "const": false }
+  }
+}
