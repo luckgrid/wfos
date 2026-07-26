@@ -1,7 +1,6 @@
-digraph {
-  "demo";
-  "policy:takogami.agent";
-  "profile:workspace-dev";
-  "profile:workspace-dev" -> "policy:takogami.agent" [label="selects"];
+digraph ontarch {
+  rankdir=LR;
+  node [shape=box];
   "demo" -> "policy:takogami.agent" [label="governed-by"];
+  "profile:workspace-dev" -> "policy:takogami.agent" [label="selects"];
 }

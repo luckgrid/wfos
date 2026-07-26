@@ -33,25 +33,40 @@ ontarch_ok "policies.json ($p policies)"
 ontarch_ok "skills.json   ($s skills)"
 ontarch_ok "profiles.json ($pr profiles)"
 
-# Graph: derive relationships from units + policies (must run after units/policies are written).
-# Validate before install; DOT derives from the validated installed document.
-_graph_tmp="$(mktemp "${TMPDIR:-/tmp}/ontarch-graph.XXXXXX")"
-if ontarch_emit_graph > "$_graph_tmp"; then
-  if ontarch_validate_graph_doc "$_graph_tmp"; then
-    mv -f "$_graph_tmp" "$ONTARCH_REGISTRY/graph.json"
-    ontarch_emit_graph_dot < "$ONTARCH_REGISTRY/graph.json" > "$ONTARCH_REGISTRY/graph.dot"
-    gn=$(jq -r '.nodes | length' "$ONTARCH_REGISTRY/graph.json")
-    ge=$(jq -r '.edges | length' "$ONTARCH_REGISTRY/graph.json")
-    ontarch_ok "graph.json    ($gn nodes, $ge edges)"
-    ontarch_ok "graph.dot     -> registry/graph.dot"
-  else
-    rm -f "$_graph_tmp"
-    ontarch_warn "graph validation failed — graph.json not updated"
-  fi
-else
-  rm -f "$_graph_tmp"
-  ontarch_warn "graph not generated (units.json or policies.json missing)"
+# Graph: validate then pair-install with DOT derived from the same validated bytes.
+# Failure is fatal for sync — do not claim current-generation graph success.
+_graph_ok=0
+_graph_tmp="$(ontarch_mktemp_registry graph-json)" || exit 1
+_dot_tmp="$(ontarch_mktemp_registry graph-dot)" || { rm -f "$_graph_tmp"; exit 1; }
+_cleanup_graph_temps() { rm -f "$_graph_tmp" "$_dot_tmp"; }
+trap _cleanup_graph_temps EXIT HUP INT TERM
+
+if ! ontarch_emit_graph >"$_graph_tmp"; then
+  ontarch_err "graph generation failed"
+  exit 1
 fi
+if ! ontarch_validate_graph_doc "$_graph_tmp"; then
+  ontarch_err "graph validation failed — previous graph pair retained if present"
+  exit 1
+fi
+if ! ontarch_emit_graph_dot <"$_graph_tmp" >"$_dot_tmp"; then
+  ontarch_err "graph DOT render failed"
+  exit 1
+fi
+if ! ontarch_install_generated_pair \
+  "$_graph_tmp" "$ONTARCH_REGISTRY/graph.json" \
+  "$_dot_tmp" "$ONTARCH_REGISTRY/graph.dot"; then
+  ontarch_err "graph install failed — previous graph pair retained if present"
+  exit 1
+fi
+_graph_tmp=""
+_dot_tmp=""
+trap - EXIT HUP INT TERM
+_graph_ok=1
+gn=$(jq -r '.nodes | length' "$ONTARCH_REGISTRY/graph.json")
+ge=$(jq -r '.edges | length' "$ONTARCH_REGISTRY/graph.json")
+ontarch_ok "graph.json    ($gn nodes, $ge edges)"
+ontarch_ok "graph.dot     -> registry/graph.dot"
 
 if [ -f "$ONTARCH_REGISTRY/tools.json" ]; then
   t=$(jq -r '.summary.total' "$ONTARCH_REGISTRY/tools.json" 2>/dev/null || echo "?")
@@ -60,16 +75,16 @@ else
   ontarch_warn "tools.json absent — run 'panoply doctor' (or 'moon run panoply:doctor') to produce it"
 fi
 
-# .agents/ navigation view: the local toolkit list (present/missing/candidate/deprecated).
 if [ -f "$ONTARCH_REGISTRY/tools.json" ]; then
   mkdir -p "$AGENTS_HOME/tools"
   ontarch_emit_local_toolkit > "$AGENTS_HOME/tools/local-toolkit.yml" \
     && ontarch_ok "local-toolkit.yml ($(grep -c '^  - ' "$AGENTS_HOME/tools/local-toolkit.yml") tools) -> .agents/tools/"
 fi
 
-# Manifest beside generated registry outputs.
 _sync_outputs=(units.json skills.json profiles.json policies.json)
-[ -f "$ONTARCH_REGISTRY/graph.json" ] && _sync_outputs+=(graph.json graph.dot)
+if [ "$_graph_ok" -eq 1 ]; then
+  _sync_outputs+=(graph.json graph.dot)
+fi
 ontarch_emit_manifest \
   --id "ontarch-sync-$(date -u +%Y%m%d-%H%M%S)" \
   --workflow "ontarch-sync" \

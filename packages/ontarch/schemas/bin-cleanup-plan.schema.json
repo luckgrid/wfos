@@ -25,7 +25,16 @@
       "type": "string",
       "enum": ["report-only", "dry-run", "archive", "delete-approved"]
     },
-    "scope": { "type": ["string", "null"] },
+    "scope": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9._-]+/bin(/[A-Za-z0-9._-]+)+$"
+        }
+      ]
+    },
     "inventory_generated_at": {
       "type": "string",
       "minLength": 1,
@@ -54,14 +63,39 @@
           "path": {
             "type": "string",
             "minLength": 1,
-            "pattern": "^[^/\\\\]+/bin(/[^/\\\\]+)+$"
+            "pattern": "^[A-Za-z0-9._-]+/bin(/[A-Za-z0-9._-]+)+$"
           },
           "disposition": {
             "type": "string",
             "enum": ["advisory", "would_archive", "would_delete", "blocked"]
           },
-          "reason": { "type": "string", "minLength": 1 },
-          "retention": { "type": ["string", "null"] },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "approved",
+              "approved-to-mismatch",
+              "approved-to-null",
+              "current",
+              "invalid-manifest",
+              "lib-or-src",
+              "multiple-manifests",
+              "no-manifest",
+              "outside-scope",
+              "retention-permanent",
+              "retention-review-required",
+              "scope-required",
+              "stale"
+            ]
+          },
+          "retention": {
+            "oneOf": [
+              { "type": "null" },
+              {
+                "type": "string",
+                "pattern": "^(review-before-delete|permanent|session-exports|auto-archive-after:[0-9]+d)$"
+              }
+            ]
+          },
           "approved_to_matches": { "type": ["boolean", "null"] }
         }
       }

@@ -622,13 +622,73 @@ _selfcheck_bin_cleanup_plan() {
     ontarch_err "cleanup plan selfcheck: positive fixture should pass"
     fail=1
   fi
-  bad="$(jq -c '.mutation_executed = true | .summary.total = 1 | .summary.blocked = 1 | .entries = [{path:"Build/bin/demo",disposition:"blocked",reason:"test",retention:null,approved_to_matches:null}]' <<<"$good")"
+  bad="$(jq -c '.mutation_executed = true | .summary.total = 1 | .summary.blocked = 1 | .entries = [{path:"Build/bin/demo",disposition:"blocked",reason:"no-manifest",retention:null,approved_to_matches:null}]' <<<"$good")"
   printf '%s\n' "$bad" > "$tmp"
   if ontarch_validate_bin_cleanup_plan_doc "$tmp" 2>/dev/null; then
     ontarch_err "cleanup plan selfcheck: mutation_executed true should fail"
     fail=1
   else
     printf '  %sok%s  mutation_executed true rejected\n' "$_C_GREEN" "$_C_RESET"
+  fi
+  bad="$(jq -c '.entries = {}' <<<"$good")"
+  printf '%s\n' "$bad" > "$tmp"
+  if ontarch_validate_bin_cleanup_plan_doc "$tmp" 2>/dev/null; then
+    ontarch_err "cleanup plan selfcheck: entries object should fail"
+    fail=1
+  else
+    printf '  %sok%s  entries object rejected\n' "$_C_GREEN" "$_C_RESET"
+  fi
+  bad="$(jq -c '.summary.total = 0.5' <<<"$good")"
+  printf '%s\n' "$bad" > "$tmp"
+  if ontarch_validate_bin_cleanup_plan_doc "$tmp" 2>/dev/null; then
+    ontarch_err "cleanup plan selfcheck: fractional summary should fail"
+    fail=1
+  else
+    printf '  %sok%s  fractional summary rejected\n' "$_C_GREEN" "$_C_RESET"
+  fi
+  bad="$(jq -c '.scope = "../etc"' <<<"$good")"
+  printf '%s\n' "$bad" > "$tmp"
+  if ontarch_validate_bin_cleanup_plan_doc "$tmp" 2>/dev/null; then
+    ontarch_err "cleanup plan selfcheck: unsafe scope should fail"
+    fail=1
+  else
+    printf '  %sok%s  unsafe scope rejected\n' "$_C_GREEN" "$_C_RESET"
+  fi
+  rm -f "$tmp"
+}
+
+_selfcheck_bin_inventory_negatives() {
+  ontarch_info "bin inventory negatives (selfcheck)"
+  local tmp good bad
+  tmp="$(mktemp "${TMPDIR:-/tmp}/ontarch-inv-selfcheck.XXXXXX")"
+  good="$(jq -nc --arg root "$WS_ROOT" '{
+    generated_at:"2026-07-25T00:00:00Z",
+    root:$root,
+    summary:{total:0,with_manifest:0},
+    workflows:[]
+  }')"
+  printf '%s\n' "$good" > "$tmp"
+  if ontarch_validate_bin_inventory_doc "$tmp" "$WS_ROOT"; then
+    printf '  %sok%s  positive empty inventory accepted\n' "$_C_GREEN" "$_C_RESET"
+  else
+    ontarch_err "inventory selfcheck: positive empty should pass"
+    fail=1
+  fi
+  bad="$(jq -c '.workflows = "scalar"' <<<"$good")"
+  printf '%s\n' "$bad" > "$tmp"
+  if ontarch_validate_bin_inventory_doc "$tmp" "$WS_ROOT" 2>/dev/null; then
+    ontarch_err "inventory selfcheck: scalar workflows should fail"
+    fail=1
+  else
+    printf '  %sok%s  scalar workflows rejected\n' "$_C_GREEN" "$_C_RESET"
+  fi
+  bad="$(jq -c '.summary.total = 1.5' <<<"$good")"
+  printf '%s\n' "$bad" > "$tmp"
+  if ontarch_validate_bin_inventory_doc "$tmp" "$WS_ROOT" 2>/dev/null; then
+    ontarch_err "inventory selfcheck: fractional summary should fail"
+    fail=1
+  else
+    printf '  %sok%s  fractional summary rejected\n' "$_C_GREEN" "$_C_RESET"
   fi
   rm -f "$tmp"
 }
@@ -923,6 +983,7 @@ main() {
   _selfcheck_registry_generation
   _validate_scan
   _validate_bin_inventory
+  _selfcheck_bin_inventory_negatives
   _selfcheck_bin_cleanup_plan
   _validate_manifest
   _selfcheck_manifest_retention

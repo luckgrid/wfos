@@ -6,7 +6,7 @@ mod support;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::fs;
-use support::{HermeticOntarch, snapshot_checkout_registry};
+use support::{HermeticOntarch, snapshot_checkout_registry, write_executable};
 
 fn stderr_of(out: &std::process::Output) -> String {
     format!(
@@ -329,4 +329,169 @@ fn graph_fingerprint_rejects_digest_mismatch() {
         g["registry_generation"]["source_fingerprints"][0]["digest"] = json!("ab".repeat(32));
     });
     assert_graph_diag(&combined, "graph:fingerprint_digest_mismatch");
+}
+
+#[test]
+fn graph_rejects_duplicate_node_id() {
+    let h = HermeticOntarch::new();
+    h.run_sync_and_require_success();
+    let combined = mutate_graph(&h, |g| {
+        let node = g["nodes"][0].clone();
+        g["nodes"].as_array_mut().unwrap().push(node);
+    });
+    assert_graph_diag(&combined, "graph:duplicate_node_id");
+}
+
+#[test]
+fn graph_rejects_duplicate_edge_tuple() {
+    let h = HermeticOntarch::new();
+    h.run_sync_and_require_success();
+    let combined = mutate_graph(&h, |g| {
+        let edge = g["edges"][0].clone();
+        g["edges"].as_array_mut().unwrap().push(edge);
+        // Keep sort order so uniqueness fires before unsorted check when possible.
+        let edges = g["edges"].as_array_mut().unwrap();
+        edges.sort_by(|a, b| {
+            (
+                a["from"].as_str().unwrap(),
+                a["rel"].as_str().unwrap(),
+                a["to"].as_str().unwrap(),
+            )
+                .cmp(&(
+                    b["from"].as_str().unwrap(),
+                    b["rel"].as_str().unwrap(),
+                    b["to"].as_str().unwrap(),
+                ))
+        });
+    });
+    assert_graph_diag(&combined, "graph:duplicate_edge_tuple");
+}
+
+#[test]
+fn graph_rejects_control_character_id() {
+    let h = HermeticOntarch::new();
+    h.run_sync_and_require_success();
+    let combined = mutate_graph(&h, |g| {
+        g["nodes"][0]["id"] = json!("bad\nid");
+    });
+    assert!(
+        combined.contains("graph:control_character_id")
+            || combined.contains("graph:invalid_node_or_edge_shape")
+            || combined.contains("graph:dangling_edge_endpoint"),
+        "{combined}"
+    );
+}
+
+#[test]
+fn graph_dot_escapes_printable_specials() {
+    let h = HermeticOntarch::new();
+    h.run_sync_and_require_success();
+    let g = h.load_generated_graph();
+    let sample = json!({
+        "generated_at": "2026-07-25T00:00:00Z",
+        "registry_generation": g["registry_generation"].clone(),
+        "nodes": [
+            {"id": "a\"b\\c", "kind": "package"},
+            {"id": "policy:x", "kind": "policy"}
+        ],
+        "edges": [
+            {"from": "a\"b\\c", "rel": "governed-by", "to": "policy:x"}
+        ]
+    });
+    let path = h.registry.join("_dot_sample.json");
+    fs::write(&path, serde_json::to_string(&sample).unwrap()).unwrap();
+    let script = format!(
+        r#"set -euo pipefail
+source {lib}/common.sh
+source {lib}/registry.sh
+ontarch_emit_graph_dot < {path}
+"#,
+        lib = support::shell_single_quote(&h.ontarch_pkg.join("lib").to_string_lossy()),
+        path = support::shell_single_quote(&path.to_string_lossy()),
+    );
+    let out = std::process::Command::new("bash")
+        .arg("-c")
+        .arg(script)
+        .current_dir(&h.ws_root)
+        .env("WS_ROOT", &h.ws_root)
+        .env_remove("ONTARCH_REGISTRY")
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let dot = String::from_utf8_lossy(&out.stdout);
+    // esc turns " -> \", \ -> \\ so the DOT token is a\"b\\c inside quotes.
+    assert!(
+        dot.contains(r#"a\"b\\c"#),
+        "expected escaped quote/backslash in DOT\n{dot}"
+    );
+}
+
+#[test]
+fn sync_retains_prior_graph_pair_on_install_failure() {
+    let h = HermeticOntarch::new();
+    h.run_sync_and_require_success();
+    let before_json = fs::read(h.registry.join("graph.json")).unwrap();
+    let before_dot = fs::read(h.registry.join("graph.dot")).unwrap();
+
+    let tools = h.tools_bsd_stat();
+    let real_mv = {
+        let mut found = None;
+        for prefix in ["/bin", "/usr/bin"] {
+            let p = std::path::PathBuf::from(prefix).join("mv");
+            if p.is_file() {
+                found = Some(p);
+                break;
+            }
+        }
+        found.expect("mv")
+    };
+    let marker = tools.join("MV_SHIM_RAN");
+    let _ = fs::remove_file(tools.join("mv"));
+    let _ = fs::remove_file(&marker);
+    write_executable(
+        &tools.join("mv"),
+        &format!(
+            r#"#!/bin/sh
+set -eu
+echo "$*" >> {marker}
+dest=""
+for a in "$@"; do dest="$a"; done
+case "$dest" in
+  *.dot|*/graph.dot) exit 1 ;;
+esac
+exec {real} "$@"
+"#,
+            marker = support::shell_single_quote(&marker.to_string_lossy()),
+            real = support::shell_single_quote(&real_mv.to_string_lossy()),
+        ),
+    );
+    let out = h.run_with_path(&h.sync, &[], &tools);
+    assert!(
+        marker.is_file(),
+        "mv shim must run under PATH=tool-root; stderr={}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        !out.status.success(),
+        "sync must fail when graph.dot install fails\nstdout:{}\nstderr:{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let after_json = fs::read(h.registry.join("graph.json")).unwrap();
+    let after_dot = fs::read(h.registry.join("graph.dot")).unwrap();
+    assert_eq!(before_json, after_json, "graph.json retained");
+    assert_eq!(before_dot, after_dot, "graph.dot retained");
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        !combined.contains("ok graph.json"),
+        "must not claim graph success after failure\n{combined}"
+    );
 }

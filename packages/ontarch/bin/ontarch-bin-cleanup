@@ -35,11 +35,17 @@ modes:
   delete-approved   require --scope; validate then refuse at draft gateway (human-only; deferred)
 
 Blocked always: rm -rf globs, git clean, lib/src deletes, retention=permanent,
-unmanifested deletes, scope mismatch / path traversal.
+unmanifested deletes, scope mismatch / path traversal, multiple manifests.
 
 --json emits one cleanup-plan JSON document (report-only/dry-run). Archive/delete
 refusal uses stderr JSON + nonzero exit (no mixed stdout success).
 EOF
+}
+
+_emit_refusal_json() {
+  local mode="$1" reason="$2"
+  jq -nc --arg mode "$mode" --arg reason "$reason" --arg ts "$(_ontarch_now)" \
+    '{error:"deferred_unavailable",mode:$mode,reason:$reason,generated_at:$ts,mutation_executed:false}' >&2
 }
 
 # Locked option policy:
@@ -97,20 +103,6 @@ if [ "$JSON_MODE" -eq 1 ]; then
   ontarch_ok()   { printf '%s\n' "${_C_GREEN}ok${_C_RESET} $*" >&2; }
 fi
 
-INV="$ONTARCH_REGISTRY/bin-inventory.json"
-INVENTORY_REFRESHED=false
-if [ ! -f "$INV" ]; then
-  ontarch_warn "bin-inventory.json absent — generating via bin-report"
-  # Keep JSON-mode stdout pure: child progress must not land on stdout.
-  if [ "$JSON_MODE" -eq 1 ]; then
-    "$_self/ontarch-bin-report" >&2 || ontarch_die "bin-report failed"
-  else
-    "$_self/ontarch-bin-report" || ontarch_die "bin-report failed"
-  fi
-  INVENTORY_REFRESHED=true
-  [ -f "$INV" ] || ontarch_die "bin-inventory.json missing after refresh"
-fi
-
 # Normalize and reject path traversal / absolute escapes outside WS_ROOT.
 _normalize_scope() {
   local s="$1"
@@ -126,8 +118,57 @@ _normalize_scope() {
   case "$s" in
     */lib|*/lib/*|*/src|*/src/*|lib/*|src/*) return 1 ;;
   esac
+  # Must match inventory path grammar: <ns>/bin/<seg>(/<seg>)*
+  case "$s" in
+    */bin/*) ;;
+    *) return 1 ;;
+  esac
   printf '%s\n' "$s"
 }
+
+# Validate mode/scope BEFORE any inventory locate/refresh (fail closed; no registry writes).
+if [ -n "$SCOPE" ]; then
+  if ! SCOPE="$(_normalize_scope "$SCOPE")"; then
+    if [ "$JSON_MODE" -eq 1 ]; then
+      _emit_refusal_json "$MODE" "invalid_scope"
+    else
+      ontarch_err "invalid --scope (must be a relative namespace bin path; no .. or absolute)"
+    fi
+    exit 1
+  fi
+fi
+if [ "$MODE" = "delete-approved" ] && [ -z "$SCOPE" ]; then
+  if [ "$JSON_MODE" -eq 1 ]; then
+    _emit_refusal_json "$MODE" "scope_required"
+  else
+    ontarch_err "mode=delete-approved requires --scope <path>"
+  fi
+  exit 1
+fi
+
+INV="$ONTARCH_REGISTRY/bin-inventory.json"
+INVENTORY_REFRESHED=false
+
+# Locate/validate/refresh inventory only after mode+scope preflight.
+if [ -f "$INV" ]; then
+  if ! ontarch_validate_bin_inventory_doc "$INV" "$WS_ROOT"; then
+    ontarch_err "existing bin-inventory.json is invalid — refuse planning (no overwrite)"
+    exit 1
+  fi
+else
+  ontarch_warn "bin-inventory.json absent — generating via bin-report"
+  if [ "$JSON_MODE" -eq 1 ]; then
+    "$_self/ontarch-bin-report" >&2 || ontarch_die "bin-report failed"
+  else
+    "$_self/ontarch-bin-report" || ontarch_die "bin-report failed"
+  fi
+  INVENTORY_REFRESHED=true
+  [ -f "$INV" ] || ontarch_die "bin-inventory.json missing after refresh"
+  if ! ontarch_validate_bin_inventory_doc "$INV" "$WS_ROOT"; then
+    ontarch_err "refreshed bin-inventory.json failed validation"
+    exit 1
+  fi
+fi
 
 _is_blocked_path() {
   local p="$1"
@@ -137,18 +178,22 @@ _is_blocked_path() {
   return 1
 }
 
-_find_manifest() {
+# Locate the single authoritative manifest under a workflow when inventory says count==1.
+# Args: <rel path>
+_find_single_manifest() {
   local rel="$1"
   local abs="$WS_ROOT/$rel"
-  if [ -f "$abs/manifest.json" ]; then
-    printf '%s\n' "$abs/manifest.json"
-    return 0
-  fi
+  local hits
   if command -v fd >/dev/null 2>&1; then
-    fd --type f --hidden --no-ignore '^manifest\.json$' "$abs" 2>/dev/null | head -1
+    hits="$(fd --type f --hidden --no-ignore '^manifest\.json$' "$abs" 2>/dev/null || true)"
   else
-    find "$abs" -type f -name 'manifest.json' 2>/dev/null | head -1
+    hits="$(find "$abs" -type f -name 'manifest.json' 2>/dev/null || true)"
   fi
+  [ -n "$hits" ] || return 1
+  local n
+  n="$(printf '%s\n' "$hits" | sed '/^$/d' | wc -l | tr -d ' ')"
+  [ "$n" = "1" ] || return 1
+  printf '%s\n' "$hits" | sed '/^$/d' | head -1
 }
 
 _print_inventory_summary() {
@@ -160,11 +205,28 @@ _print_inventory_summary() {
     "$(jq -r '.summary.with_manifest' "$INV")"
 }
 
+# Parse auto-archive-after:<N>d → N days, or empty if not that form.
+_auto_archive_days() {
+  local retention="$1"
+  case "$retention" in
+    auto-archive-after:*d)
+      local n="${retention#auto-archive-after:}"
+      n="${n%d}"
+      case "$n" in
+        ''|*[!0-9]*) printf '' ;;
+        *) printf '%s\n' "$n" ;;
+      esac
+      ;;
+    *) printf '' ;;
+  esac
+}
+
 # Classify one workflow path into a cleanup-plan entry JSON object (stdout).
 # Args: <path> <plan_kind: report|archive|delete>
+# Uses inventory manifest_count + newest_file_age_days as authority.
 _classify_entry_json() {
   local path="$1" plan_kind="$2"
-  local mf retention approved present age disposition reason approved_match="null"
+  local mf retention approved mc newest disposition reason approved_match="null" threshold
 
   if _is_blocked_path "$path"; then
     jq -nc --arg path "$path" \
@@ -172,33 +234,72 @@ _classify_entry_json() {
     return 0
   fi
 
-  present="$(jq -r --arg p "$path" '.workflows[] | select(.path == $p) | .manifest_present' "$INV")"
-  age="$(jq -r --arg p "$path" '.workflows[] | select(.path == $p) | .oldest_file_age_days // empty' "$INV")"
-  mf="$(_find_manifest "$path")"
+  mc="$(jq -r --arg p "$path" \
+    '.workflows[] | select(.path == $p) | .manifest_count' "$INV")"
+  newest="$(jq -r --arg p "$path" \
+    '.workflows[] | select(.path == $p) | .newest_file_age_days // empty' "$INV")"
+  [ -n "$mc" ] || mc=0
+
   retention=""
   approved=""
-  if [ -n "$mf" ] && [ -f "$mf" ]; then
-    retention="$(jq -r '.retention // empty' "$mf")"
-    approved="$(jq -r '.approved_to // empty' "$mf")"
+  mf=""
+  if [ "$mc" = "1" ]; then
+    mf="$(_find_single_manifest "$path" || true)"
+    if [ -n "$mf" ] && [ -f "$mf" ]; then
+      if ! jq -e . "$mf" >/dev/null 2>&1; then
+        jq -nc --arg path "$path" \
+          '{path:$path,disposition:"blocked",reason:"invalid-manifest",retention:null,approved_to_matches:null}'
+        return 0
+      fi
+      retention="$(jq -r '.retention // empty' "$mf")"
+      approved="$(jq -r '.approved_to // empty' "$mf")"
+    else
+      # Inventory claimed one manifest but filesystem disagrees → invalid.
+      jq -nc --arg path "$path" \
+        '{path:$path,disposition:"blocked",reason:"invalid-manifest",retention:null,approved_to_matches:null}'
+      return 0
+    fi
+  fi
+
+  if [ "$mc" -gt 1 ] 2>/dev/null; then
+    jq -nc --arg path "$path" \
+      '{path:$path,disposition:"blocked",reason:"multiple-manifests",retention:null,approved_to_matches:null}'
+    return 0
   fi
 
   if [ "$plan_kind" = "report" ]; then
-    if [ "$retention" = "permanent" ]; then
-      disposition="blocked"; reason="retention-permanent"
-    elif [ -z "$mf" ] || [ ! -f "$mf" ] || [ "$present" = "false" ]; then
+    if [ "$mc" -eq 0 ]; then
       disposition="advisory"; reason="no-manifest"
-    elif [ -n "$age" ] && [ "$age" -ge 30 ]; then
-      disposition="advisory"; reason="stale"
+    elif [ "$retention" = "permanent" ]; then
+      disposition="blocked"; reason="retention-permanent"
     else
-      disposition="advisory"; reason="current"
+      threshold="$(_auto_archive_days "$retention")"
+      if [ -n "$threshold" ] && [ -n "$newest" ] && [ "$newest" -ge "$threshold" ] 2>/dev/null; then
+        disposition="advisory"; reason="stale"
+      elif [ "$retention" = "review-before-delete" ] || [ "$retention" = "session-exports" ]; then
+        disposition="advisory"; reason="retention-review-required"
+      elif [ -n "$threshold" ]; then
+        disposition="advisory"; reason="current"
+      else
+        disposition="advisory"; reason="current"
+      fi
     fi
   elif [ "$plan_kind" = "archive" ]; then
-    if [ -z "$mf" ] || [ ! -f "$mf" ]; then
+    if [ "$mc" -eq 0 ]; then
       disposition="blocked"; reason="no-manifest"
     elif [ "$retention" = "permanent" ]; then
       disposition="blocked"; reason="retention-permanent"
     else
-      disposition="would_archive"; reason="stale"
+      threshold="$(_auto_archive_days "$retention")"
+      if [ -n "$threshold" ] && [ -n "$newest" ] && [ "$newest" -ge "$threshold" ] 2>/dev/null; then
+        disposition="would_archive"; reason="stale"
+      elif [ "$retention" = "review-before-delete" ] || [ "$retention" = "session-exports" ]; then
+        disposition="advisory"; reason="retention-review-required"
+      elif [ -n "$threshold" ]; then
+        disposition="advisory"; reason="current"
+      else
+        disposition="advisory"; reason="current"
+      fi
     fi
   else
     # delete
@@ -217,18 +318,18 @@ _classify_entry_json() {
           return 0
           ;;
       esac
-      if [ -z "$mf" ] || [ ! -f "$mf" ]; then
+      if [ "$mc" -eq 0 ]; then
         disposition="blocked"; reason="no-manifest"
       elif [ "$retention" = "permanent" ]; then
         disposition="blocked"; reason="retention-permanent"
       elif [ -z "$approved" ]; then
-        disposition="blocked"; reason="approved_to-null"
+        disposition="blocked"; reason="approved-to-null"
         approved_match="false"
       elif [ "$approved" != "$SCOPE" ]; then
-        disposition="blocked"; reason="approved_to-mismatch"
+        disposition="blocked"; reason="approved-to-mismatch"
         approved_match="false"
       else
-        disposition="would_delete"; reason="stale"
+        disposition="would_delete"; reason="approved"
         approved_match="true"
       fi
     fi
@@ -246,7 +347,7 @@ _classify_entry_json() {
 }
 
 # Build full cleanup-plan JSON for report-only or dry-run.
-# Args: <plan_kind: report|archive>  (dry-run uses archive classification; optional delete overlay)
+# Args: <plan_kind: report|archive>
 _emit_cleanup_plan_json() {
   local plan_kind="$1"
   local entries='[]' path entry
@@ -262,13 +363,9 @@ _emit_cleanup_plan_json() {
       esac
     fi
     entry="$(_classify_entry_json "$path" "$plan_kind")"
-    # dry-run with scope: prefer would_delete when delete classification wins
+    # dry-run with scope: delete classification is authoritative for in-scope paths
     if [ "$plan_kind" = "archive" ] && [ -n "$SCOPE" ]; then
-      local del
-      del="$(_classify_entry_json "$path" "delete")"
-      if [ "$(jq -r '.disposition' <<<"$del")" = "would_delete" ]; then
-        entry="$del"
-      fi
+      entry="$(_classify_entry_json "$path" "delete")"
     fi
     entries="$(jq -c --argjson e "$entry" '. + [$e]' <<<"$entries")"
   done < <(jq -r '.workflows[].path' "$INV")
@@ -305,64 +402,39 @@ _emit_cleanup_plan_json() {
 
 _emit_plan_lines() {
   local plan_kind="$1"
-  local path mf retention approved present
+  local path entry disp reason retention
   while IFS= read -r path; do
     [ -n "$path" ] || continue
-    if _is_blocked_path "$path"; then
-      printf 'BLOCKED  %s  reason=lib-or-src\n' "$path"
-      continue
-    fi
-    present="$(jq -r --arg p "$path" '.workflows[] | select(.path == $p) | .manifest_present' "$INV")"
-    mf="$(_find_manifest "$path")"
-    if [ -z "$mf" ] || [ ! -f "$mf" ]; then
-      printf 'BLOCKED  %s  reason=no-manifest\n' "$path"
-      continue
-    fi
-    retention="$(jq -r '.retention // empty' "$mf")"
-    approved="$(jq -r '.approved_to // empty' "$mf")"
-    if [ "$retention" = "permanent" ]; then
-      printf 'BLOCKED  %s  reason=retention-permanent\n' "$path"
-      continue
-    fi
-    if [ "$plan_kind" = "delete" ]; then
-      if [ -z "$SCOPE" ]; then
-        printf 'BLOCKED  %s  reason=scope-required\n' "$path"
-        continue
-      fi
+    if [ -n "$SCOPE" ] && [ "$plan_kind" != "delete" ]; then
       case "$path" in
         "$SCOPE"|"$SCOPE"/*) ;;
-        *)
-          printf 'BLOCKED  %s  reason=outside-scope (scope=%s)\n' "$path" "$SCOPE"
-          continue
-          ;;
+        *) continue ;;
       esac
-      if [ -n "$approved" ] && [ "$approved" != "$SCOPE" ]; then
-        printf 'BLOCKED  %s  reason=approved_to-mismatch (approved_to=%s scope=%s)\n' \
-          "$path" "$approved" "$SCOPE"
-        continue
-      fi
-      if [ -z "$approved" ]; then
-        printf 'BLOCKED  %s  reason=approved_to-null\n' "$path"
-        continue
-      fi
-      printf 'WOULD_DELETE  %s  retention=%s archive_reason=stale\n' "$path" "$retention"
-    else
-      printf 'WOULD_ARCHIVE %s  retention=%s archive_reason=stale promoted_to=%s/archives/\n' \
-        "$path" "$retention" "$(dirname "$path")"
     fi
+    entry="$(_classify_entry_json "$path" "$plan_kind")"
+    disp="$(jq -r '.disposition' <<<"$entry")"
+    reason="$(jq -r '.reason' <<<"$entry")"
+    retention="$(jq -r '.retention // empty' <<<"$entry")"
+    case "$disp" in
+      blocked) printf 'BLOCKED  %s  reason=%s\n' "$path" "$reason" ;;
+      would_archive)
+        printf 'WOULD_ARCHIVE %s  retention=%s archive_reason=%s promoted_to=%s/archives/\n' \
+          "$path" "$retention" "$reason" "$(dirname "$path")"
+        ;;
+      would_delete)
+        printf 'WOULD_DELETE  %s  retention=%s reason=%s\n' "$path" "$retention" "$reason"
+        ;;
+      advisory)
+        printf 'ADVISORY %s  reason=%s retention=%s\n' "$path" "$reason" "${retention:--}"
+        ;;
+    esac
   done < <(jq -r '.workflows[].path' "$INV")
-}
-
-_emit_refusal_json() {
-  local mode="$1" reason="$2"
-  jq -nc --arg mode "$mode" --arg reason "$reason" --arg ts "$(_ontarch_now)" \
-    '{error:"deferred_unavailable",mode:$mode,reason:$reason,generated_at:$ts,mutation_executed:false}' >&2
 }
 
 _report_only() {
   if [ "$JSON_MODE" -eq 1 ]; then
     local plan tmp
-    tmp="$(mktemp "${TMPDIR:-/tmp}/ontarch-bin-plan.XXXXXX")"
+    tmp="$(ontarch_mktemp_registry bin-plan)" || exit 1
     _emit_cleanup_plan_json report > "$tmp"
     if ! ontarch_validate_bin_cleanup_plan_doc "$tmp"; then
       rm -f "$tmp"
@@ -377,24 +449,24 @@ _report_only() {
   ontarch_info "ontarch bin-cleanup — report-only (no action)"
   _print_inventory_summary
   printf 'stale / review candidates:\n'
-  local path age present
+  local path entry reason
   while IFS= read -r path; do
-    present="$(jq -r --arg p "$path" '.workflows[] | select(.path == $p) | .manifest_present' "$INV")"
-    age="$(jq -r --arg p "$path" '.workflows[] | select(.path == $p) | .oldest_file_age_days // empty' "$INV")"
-    if [ "$present" = "false" ]; then
-      printf '  - %s  (no manifest; advisory review-before-delete)\n' "$path"
-    elif [ -n "$age" ] && [ "$age" -ge 30 ]; then
-      printf '  - %s  (oldest_file_age_days=%s)\n' "$path" "$age"
-    fi
+    entry="$(_classify_entry_json "$path" "report")"
+    reason="$(jq -r '.reason' <<<"$entry")"
+    case "$reason" in
+      stale|no-manifest|retention-review-required|multiple-manifests)
+        printf '  - %s  (reason=%s)\n' "$path" "$reason"
+        ;;
+    esac
   done < <(jq -r '.workflows[].path' "$INV")
-  printf '\nblocked by policy (all modes): rm -rf globs, git clean, lib/src, retention=permanent, unmanifested deletes\n'
+  printf '\nblocked by policy (all modes): rm -rf globs, git clean, lib/src, retention=permanent, unmanifested deletes, multiple manifests\n'
   ontarch_ok "report-only complete (no filesystem changes)"
 }
 
 _dry_run() {
   if [ "$JSON_MODE" -eq 1 ]; then
     local tmp
-    tmp="$(mktemp "${TMPDIR:-/tmp}/ontarch-bin-plan.XXXXXX")"
+    tmp="$(ontarch_mktemp_registry bin-plan)" || exit 1
     _emit_cleanup_plan_json archive > "$tmp"
     if ! ontarch_validate_bin_cleanup_plan_doc "$tmp"; then
       rm -f "$tmp"
@@ -431,26 +503,7 @@ _refuse_mutation() {
     fi
     exit 1
   fi
-  if [ "$mode" = "delete-approved" ]; then
-    if [ -z "$SCOPE" ]; then
-      if [ "$JSON_MODE" -eq 1 ]; then
-        _emit_refusal_json "$mode" "scope_required"
-      else
-        ontarch_err "mode=delete-approved requires --scope <path>"
-      fi
-      exit 1
-    fi
-    local norm
-    if ! norm="$(_normalize_scope "$SCOPE")"; then
-      if [ "$JSON_MODE" -eq 1 ]; then
-        _emit_refusal_json "$mode" "invalid_scope"
-      else
-        ontarch_err "invalid --scope '$SCOPE' (must be a relative namespace bin path; no .. or absolute)"
-      fi
-      exit 1
-    fi
-    SCOPE="$norm"
-  fi
+  # Scope already validated in preflight for delete-approved.
   if [ "$JSON_MODE" -eq 1 ]; then
     _emit_refusal_json "$mode" "draft_gateway_deferred"
     exit 1
@@ -468,18 +521,6 @@ _refuse_mutation() {
   ontarch_err "mode=$mode deferred at draft gateway — no archive/delete executed (see docs/bin-archive.md)"
   exit 1
 }
-
-# Normalize scope early for report-only/dry-run when provided.
-if [ -n "$SCOPE" ] && { [ "$MODE" = "report-only" ] || [ "$MODE" = "dry-run" ]; }; then
-  if ! SCOPE="$(_normalize_scope "$SCOPE")"; then
-    if [ "$JSON_MODE" -eq 1 ]; then
-      _emit_refusal_json "$MODE" "invalid_scope"
-    else
-      ontarch_err "invalid --scope '$SCOPE'"
-    fi
-    exit 1
-  fi
-fi
 
 case "$MODE" in
   report-only) _report_only ;;

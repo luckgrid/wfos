@@ -51,7 +51,7 @@ pub fn sample_cleanup_mutation_true() -> Value {
         "entries": [{
             "path": "Build/bin/demo",
             "disposition": "blocked",
-            "reason": "test",
+            "reason": "no-manifest",
             "retention": null,
             "approved_to_matches": null
         }],

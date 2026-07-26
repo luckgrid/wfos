@@ -4,34 +4,51 @@
     "generated_at": "2026-07-25T00:00:00Z",
     "source_fingerprints": [
       {
-        "path": "registry/units.json",
-        "algorithm": "sha256",
-        "digest": "0000000000000000000000000000000000000000000000000000000000000000"
-      },
-      {
         "path": "registry/policies.json",
         "algorithm": "sha256",
-        "digest": "0000000000000000000000000000000000000000000000000000000000000000"
+        "digest": "e47656c5d14e8147248b14a6a74a57c182a4eefad36d37b827f8fcc2b4921ad5"
       },
       {
         "path": "registry/profiles.json",
         "algorithm": "sha256",
-        "digest": "0000000000000000000000000000000000000000000000000000000000000000"
+        "digest": "097e4276891522bda60588d8b1c1f4b7bedfc775b86db005a7a082ee45218d67"
       },
       {
         "path": "registry/skills.json",
         "algorithm": "sha256",
-        "digest": "0000000000000000000000000000000000000000000000000000000000000000"
+        "digest": "0fabb65e876267b9f9f6368b7b0d915e9f3f17fb57349d91eb1977ba3e15e5af"
+      },
+      {
+        "path": "registry/units.json",
+        "algorithm": "sha256",
+        "digest": "076937e41826a2b668b2edb3ce1994c37557c8eaae0475684a538b1b0e483f2d"
       }
     ]
   },
   "nodes": [
-    {"id": "demo", "kind": "package"},
-    {"id": "policy:takogami.agent", "kind": "policy"},
-    {"id": "profile:workspace-dev", "kind": "profile"}
+    {
+      "id": "demo",
+      "kind": "package"
+    },
+    {
+      "id": "policy:takogami.agent",
+      "kind": "policy"
+    },
+    {
+      "id": "profile:workspace-dev",
+      "kind": "profile"
+    }
   ],
   "edges": [
-    {"from": "profile:workspace-dev", "rel": "selects", "to": "policy:takogami.agent"},
-    {"from": "demo", "rel": "governed-by", "to": "policy:takogami.agent"}
+    {
+      "from": "demo",
+      "rel": "governed-by",
+      "to": "policy:takogami.agent"
+    },
+    {
+      "from": "profile:workspace-dev",
+      "rel": "selects",
+      "to": "policy:takogami.agent"
+    }
   ]
 }

@@ -66,11 +66,49 @@ Cleanup never removes user-owned work silently. Modes (implemented by
 | `delete-approved` | Delete only items whose `approved_to` matches `--scope` and whose retention is not `permanent` (human-only; deferred at draft gateway) |
 
 Blocked in all modes: `rm -rf` globs, `git clean`, deleting untracked files without a
-manifest, deleting `lib/` or `src/` material, deleting anything with `retention: "permanent"`.
+manifest, deleting `lib/` or `src/` material, deleting anything with `retention: "permanent"`,
+and any workflow with more than one `manifest.json`.
+
+Operation order (locked): parse options → validate mode/scope → locate inventory →
+validate existing inventory (fail closed; no overwrite) or refresh when missing →
+build plan → validate plan → emit. Invalid/missing scope or options never write registry
+outputs. Missing inventory refreshes via validated `bin-report` and sets
+`inventory_refreshed=true`; a valid existing inventory sets `inventory_refreshed=false`.
 
 At the current draft gateway, `archive` and `delete-approved` validate arguments and then
 refuse (no filesystem mutation). Agents under `PANOPLY_AGENT=1` are refused those modes
 outright. Real archive/delete execution is deferred to later automation (runtime-controller (Takogami) / H12).
+
+## Cleanup classification (Phase 1)
+
+Inventory `manifest_count` is authoritative. Exactly one manifest under the workflow is
+accepted; more than one is `blocked` / `multiple-manifests`. Staleness uses
+`newest_file_age_days` (conservative: recently updated trees stay current).
+
+| Condition | report-only | dry-run (archive) |
+|-----------|-------------|-------------------|
+| `manifest_count == 0` | `advisory` / `no-manifest` | `blocked` / `no-manifest` |
+| `manifest_count > 1` | `blocked` / `multiple-manifests` | `blocked` / `multiple-manifests` |
+| `retention == permanent` | `blocked` / `retention-permanent` | `blocked` / `retention-permanent` |
+| `auto-archive-after:Nd` and newest age ≥ N | `advisory` / `stale` | `would_archive` / `stale` |
+| `auto-archive-after:Nd` and newest age < N (or null) | `advisory` / `current` | `advisory` / `current` |
+| `review-before-delete` / `session-exports` | `advisory` / `retention-review-required` | `advisory` / `retention-review-required` |
+
+Delete overlay (dry-run with `--scope`, or deferred `delete-approved` plan):
+
+| Condition | disposition / reason |
+|-----------|----------------------|
+| no `--scope` | `blocked` / `scope-required` |
+| path outside scope | `blocked` / `outside-scope` |
+| no / multiple / invalid manifest | `blocked` / matching reason |
+| `approved_to` null | `blocked` / `approved-to-null` |
+| `approved_to` ≠ scope | `blocked` / `approved-to-mismatch` |
+| exactly one manifest, not permanent, `approved_to` equals scope | `would_delete` / `approved` |
+
+Closed cleanup `reason` vocabulary: `approved`, `approved-to-mismatch`, `approved-to-null`,
+`current`, `invalid-manifest`, `lib-or-src`, `multiple-manifests`, `no-manifest`,
+`outside-scope`, `retention-permanent`, `retention-review-required`, `scope-required`,
+`stale`.
 
 ## Archive reasons and promotion
 

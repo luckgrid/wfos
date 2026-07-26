@@ -263,7 +263,6 @@ allowed_skill_ids = []
             "env",
             "true",
             "false",
-            "find",
             "sha256sum",
             "shasum",
             "sed",
@@ -274,15 +273,36 @@ allowed_skill_ids = []
             "test",
             "[",
             "sleep",
+            "readlink",
+            "pwd",
         ] {
             link_or_shim(root, name);
         }
+        // Always install a marked find wrapper (do not symlink host find into place first).
+        let find_marker = root.join("INVOKED_FIND");
+        let real_find = which_bin("find").expect("host find required for hermetic root");
+        let _ = fs::remove_file(root.join("find"));
+        write_executable(
+            &root.join("find"),
+            &format!(
+                r#"#!/bin/sh
+set -eu
+echo find >> {marker}
+exec {real} "$@"
+"#,
+                marker = shell_single_quote(&find_marker.to_string_lossy()),
+                real = shell_single_quote(&real_find.to_string_lossy()),
+            ),
+        );
         if with_fd {
+            let fd_marker = root.join("INVOKED_FD");
             // Deterministic fd shim: last non-flag arg may be a regex; final dir is the search root.
             write_executable(
                 &root.join("fd"),
-                r#"#!/bin/sh
+                &format!(
+                    r#"#!/bin/sh
 set -eu
+echo fd >> {marker}
 pattern="."
 dir=""
 while [ $# -gt 0 ]; do
@@ -309,19 +329,27 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$dir" ] || exit 0
 if [ "$pattern" = "." ]; then
-  find "$dir" -type f 2>/dev/null
+  {find_q} "$dir" -type f 2>/dev/null
 else
   # Treat pattern as a basename regex (Ontarch uses ^manifest\.json$).
-  find "$dir" -type f -name 'manifest.json' 2>/dev/null
+  {find_q} "$dir" -type f -name 'manifest.json' 2>/dev/null
 fi
 "#,
+                    marker = shell_single_quote(&fd_marker.to_string_lossy()),
+                    find_q = shell_single_quote(&real_find.to_string_lossy()),
+                ),
             );
         }
         match stat_dialect {
-            "bsd" => write_executable(
-                &root.join("stat"),
-                r#"#!/bin/sh
+            "bsd" => {
+                let marker = root.join("INVOKED_STAT_BSD");
+                let _ = fs::remove_file(root.join("stat"));
+                write_executable(
+                    &root.join("stat"),
+                    &format!(
+                        r#"#!/bin/sh
 set -eu
+echo bsd >> {marker}
 # BSD dialect only: stat -f %m <file>
 if [ "$1" = "-f" ] && [ "$2" = "%m" ]; then
   # Fixed epoch so ages are stable across runs.
@@ -331,11 +359,19 @@ fi
 echo "bsd-stat: unsupported args: $*" >&2
 exit 1
 "#,
-            ),
-            "gnu" => write_executable(
-                &root.join("stat"),
-                r#"#!/bin/sh
+                        marker = shell_single_quote(&marker.to_string_lossy()),
+                    ),
+                );
+            }
+            "gnu" => {
+                let marker = root.join("INVOKED_STAT_GNU");
+                let _ = fs::remove_file(root.join("stat"));
+                write_executable(
+                    &root.join("stat"),
+                    &format!(
+                        r#"#!/bin/sh
 set -eu
+echo gnu >> {marker}
 # GNU dialect only: stat -c %Y <file>
 if [ "$1" = "-c" ] && [ "$2" = "%Y" ]; then
   echo 1700000000
@@ -344,7 +380,10 @@ fi
 echo "gnu-stat: unsupported args: $*" >&2
 exit 1
 "#,
-            ),
+                        marker = shell_single_quote(&marker.to_string_lossy()),
+                    ),
+                );
+            }
             _ => panic!("unknown stat dialect {stat_dialect}"),
         }
         // Marker that forbidden mutation tools were invoked.
@@ -359,7 +398,8 @@ exit 1
     }
 
     pub fn run_with_path(&self, script: &Path, args: &[&str], path_root: &Path) -> Output {
-        let path = format!("{}:/usr/bin:/bin:/usr/sbin:/sbin", path_root.display());
+        // Controlled portability: PATH is tool-root only (no host /usr/bin suffix).
+        let path = path_root.display().to_string();
         Command::new(script)
             .args(args)
             .current_dir(&self.ws_root)
@@ -394,17 +434,40 @@ exit 1
     }
 }
 
+fn which_bin(name: &str) -> Option<PathBuf> {
+    // Prefer modern bash: macOS /bin/bash is 3.2 and rejects `local -A` used by registry emitters.
+    if name == "bash" {
+        for prefix in ["/opt/homebrew/bin", "/usr/local/bin", "/bin", "/usr/bin"] {
+            let src = PathBuf::from(prefix).join(name);
+            if src.is_file() {
+                return Some(src);
+            }
+        }
+        return None;
+    }
+    for prefix in [
+        "/bin",
+        "/usr/bin",
+        "/usr/sbin",
+        "/sbin",
+        "/opt/homebrew/bin",
+        "/usr/local/bin",
+    ] {
+        let src = PathBuf::from(prefix).join(name);
+        if src.is_file() {
+            return Some(src);
+        }
+    }
+    None
+}
+
 fn link_or_shim(root: &Path, name: &str) {
     let dest = root.join(name);
     if dest.exists() {
         return;
     }
-    for prefix in ["/bin", "/usr/bin", "/usr/sbin", "/sbin"] {
-        let src = PathBuf::from(prefix).join(name);
-        if src.is_file() {
-            let _ = std::os::unix::fs::symlink(&src, &dest);
-            return;
-        }
+    if let Some(src) = which_bin(name) {
+        let _ = std::os::unix::fs::symlink(&src, &dest);
     }
     // Missing optional tools (sha256sum on macOS): leave absent.
 }

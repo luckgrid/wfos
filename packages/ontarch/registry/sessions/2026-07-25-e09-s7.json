@@ -22,7 +22,7 @@
     "baseline_test_count": 280,
     "baseline_gate": {
       "takogami_build": "PASS",
-      "takogami_test": "PASS on re-run (280); first parallel run flaked once on signal_forwarding_reaches_descendant_in_the_same_process_group (grandchild PID marker timeout) — classified as timing flake, passed 3/3 alone and on full re-run",
+      "takogami_test": "PASS on re-run (280); first parallel run flaked once on signal_forwarding_reaches_descendant_in_the_same_process_group (grandchild PID marker timeout) \u2014 classified as timing flake, passed 3/3 alone and on full re-run",
       "takogami_lint": "PASS",
       "takogami_format_check": "PASS",
       "ontarch_sync": "PASS",
@@ -32,7 +32,7 @@
       "panoply_validate_substrate": "PASS",
       "git_diff_check": "PASS"
     },
-    "historical_secrets_scan": "ontarch:secrets-scan still reports pre-existing age-secret-key in git history (commit a3a4978, 2026-06-24; redacted in HEAD) — external/non-gating for E09"
+    "historical_secrets_scan": "ontarch:secrets-scan still reports pre-existing age-secret-key in git history (commit a3a4978, 2026-06-24; redacted in HEAD) \u2014 external/non-gating for E09"
   },
   "locked_decisions": [
     "Ontarch owns graph/bin generation; Takogami owns projection and routing only.",
@@ -66,9 +66,79 @@
     "packages/takogami/tests/support/mod.rs",
     "packages/takogami/tests/support/ontarch_fixture.rs",
     "packages/takogami/tests/support/payloads.rs",
-    "packages/takogami/tests/support/schemas.rs"
+    "packages/takogami/tests/support/schemas.rs",
+    "docs/bin-archive.md",
+    "packages/takogami/tests/fixtures/e2e/ontarch/registry/units.json",
+    "packages/takogami/tests/fixtures/e2e/ontarch/registry/policies.json",
+    "packages/takogami/tests/fixtures/e2e/ontarch/registry/profiles.json",
+    "packages/takogami/tests/fixtures/e2e/ontarch/registry/skills.json"
   ],
   "progress": [
+    {
+      "phase": "1-closure",
+      "title": "Phase 1 closure corrections (implementation-review addendum)",
+      "status": "done",
+      "addendum": "Build/bin/wfos/2026-07-26-wfos-e09-s7-phase-1-implementation-review-closure-corrections-addendum.md",
+      "based_on_implementation_commit": "6b30400b98186eae4b4382079158ef050a8f57d6",
+      "summary": "Closed S7-P1-C01..C10: guarded jq validators with class diagnostics; integer/range/reason/uniqueness schema+shell parity + Rust/shell one-mutation corpus; cleanup preflight before inventory refresh with fail-closed invalid inventory; newest_file_age_days auto-archive staleness + multiple-manifests block + closed reason enum; target-local pair install for bin-report and graph/DOT with sync fail-closed on graph error; DOT printable specials escaped; hermetic PATH=tool-root only with fd/find/stat invocation markers; E2E registry upstream bytes + non-zero fingerprints. docs/bin-archive.md classification table locked.",
+      "production_changed_paths": [
+        "packages/ontarch/lib/registry.sh",
+        "packages/ontarch/bin/ontarch-bin-report",
+        "packages/ontarch/bin/ontarch-bin-cleanup",
+        "packages/ontarch/bin/ontarch-sync",
+        "packages/ontarch/bin/ontarch-validate",
+        "packages/ontarch/graphs/edges.schema.json",
+        "packages/ontarch/schemas/bin-cleanup-plan.schema.json",
+        "packages/ontarch/schemas/bin-inventory.schema.json",
+        "docs/bin-archive.md"
+      ],
+      "test_changed_paths": [
+        "packages/takogami/tests/ontarch_bin_contract.rs",
+        "packages/takogami/tests/ontarch_graph_contract.rs",
+        "packages/takogami/tests/support/ontarch_fixture.rs",
+        "packages/takogami/tests/support/schemas.rs",
+        "packages/takogami/tests/support/payloads.rs",
+        "packages/takogami/tests/fixtures/e2e/ontarch/registry/"
+      ],
+      "gate": {
+        "toolchain": {
+          "rustc": "1.96.0",
+          "moon": "2.3.2"
+        },
+        "platform_macos": {
+          "arch": "aarch64-apple-darwin",
+          "ontarch_graph_contract": "24 passed",
+          "ontarch_bin_contract": "21 passed",
+          "ontarch_sync": "PASS",
+          "ontarch_scan": "PASS",
+          "ontarch_validate": "PASS",
+          "bin_report_json": "PASS",
+          "bin_cleanup_report_only_json": "PASS",
+          "bin_cleanup_dry_run_json": "PASS",
+          "takogami_build": "PASS",
+          "takogami_lint": "PASS",
+          "takogami_format_check": "PASS",
+          "git_diff_check": "PASS",
+          "refusal_non_mutation": "PASS (ontarch_archive_and_delete_refuse_with_stderr_json + ontarch_report_and_dry_run_do_not_mutate_bin_tree)"
+        },
+        "platform_linux": {
+          "vm": "lima wfos-s61-alpine",
+          "arch": "aarch64",
+          "script_non_mutation": "PASS",
+          "script_archive_delete_refusal": "PASS",
+          "script_preflight_invalid_scope_no_registry_write": "PASS",
+          "cargo_archive_delete_refuse": "PASS",
+          "cargo_report_dry_run_non_mutation": "PASS"
+        },
+        "expected_red": [
+          "graph_cli",
+          "bin_cli",
+          "e2e_mvp"
+        ],
+        "phase_1_done": true,
+        "takogami_graph_bin_handlers": false
+      }
+    },
     {
       "phase": 1,
       "title": "Ontarch graph/bin machine contracts",
@@ -133,11 +203,11 @@
     },
     {
       "phase": "0-review-follow-up",
-      "title": "Phase 0 acceptance-map corrections (pre–Phase 1)",
+      "title": "Phase 0 acceptance-map corrections (pre\u2013Phase 1)",
       "status": "done",
       "addendum": "Build/bin/wfos/2026-07-25-wfos-e09-s7-phase-0-review-phase-1-corrections-addendum.md",
       "reviewed_commit_note": "Reviewed acceptance-map commit 4b64b64 was mislabeled 'phase 1' in the commit message; session numbering remains Phase 0. No history rewrite.",
-      "summary": "Resolved P0 S7-R01..R04 and §8 correction criteria without production schema/emitter/--json work. Hermetic Ontarch fixture copies scripts into a temp Workstreams layout. Direct Ontarch tests moved to ontarch_*_contract.rs. Bin/E2E harnesses use packages/ontarch/bin/ontarch (PATH decoy ignored). Payloads match plan inventory/cleanup shapes. Graph DOT printable escape vs control-char rejection split; global JSON locks structured data.graph. Scope/deferred/record/UTF-8/stderr fixtures tightened. Expected outputs marked pending. Baseline 280 green. Checkout registry proven untouched.",
+      "summary": "Resolved P0 S7-R01..R04 and \u00a78 correction criteria without production schema/emitter/--json work. Hermetic Ontarch fixture copies scripts into a temp Workstreams layout. Direct Ontarch tests moved to ontarch_*_contract.rs. Bin/E2E harnesses use packages/ontarch/bin/ontarch (PATH decoy ignored). Payloads match plan inventory/cleanup shapes. Graph DOT printable escape vs control-char rejection split; global JSON locks structured data.graph. Scope/deferred/record/UTF-8/stderr fixtures tightened. Expected outputs marked pending. Baseline 280 green. Checkout registry proven untouched.",
       "corrections": [
         "S7-R01 hermetic copied Ontarch package",
         "S7-R02 canonical package Ontarch not PATH authority",
@@ -173,10 +243,10 @@
       "phase": 0,
       "title": "Baseline, contract inventory, and failing acceptance map",
       "status": "done",
-      "summary": "Froze advanced HEADs under pinned rustc 1.96 / Moon 2.3.2. Baseline 280 green after classifying one process-group signal flake. Inventory confirms graph/bin exit 10 not_implemented; graph.json lacks registry_generation; Ontarch bin scripts ignore --json and emit prose/files. Landed 52 named acceptance tests (20 graph + 26 bin + 6 e2e) with e2e fixture skeleton; no production behavior changed. Stop for §§14–15 review before Phase 1.",
+      "summary": "Froze advanced HEADs under pinned rustc 1.96 / Moon 2.3.2. Baseline 280 green after classifying one process-group signal flake. Inventory confirms graph/bin exit 10 not_implemented; graph.json lacks registry_generation; Ontarch bin scripts ignore --json and emit prose/files. Landed 52 named acceptance tests (20 graph + 26 bin + 6 e2e) with e2e fixture skeleton; no production behavior changed. Stop for \u00a7\u00a714\u201315 review before Phase 1.",
       "inventory": {
-        "takogami_graph": "is_implemented=false → exit 10 not_implemented (human + --json envelope)",
-        "takogami_bin_report": "is_implemented=false → exit 10",
+        "takogami_graph": "is_implemented=false \u2192 exit 10 not_implemented (human + --json envelope)",
+        "takogami_bin_report": "is_implemented=false \u2192 exit 10",
         "takogami_bin_cleanup_modes": "dry-run/archive/delete-approved all exit 10 (CLI parses; handlers absent)",
         "graph_json_keys": [
           "generated_at",
@@ -210,9 +280,10 @@
     "docs/bin-archive.md",
     "packages/ontarch/registry/sessions/2026-07-25-e09-s6.1.json",
     "packages/ontarch/registry/sessions/2026-07-24-e09-s6.json",
-    "Build/bin/wfos/2026-07-26-wfos-e09-s7-phase-0-follow-up-review-phase-1-completion-addendum.md"
+    "Build/bin/wfos/2026-07-26-wfos-e09-s7-phase-0-follow-up-review-phase-1-completion-addendum.md",
+    "Build/bin/wfos/2026-07-26-wfos-e09-s7-phase-1-implementation-review-closure-corrections-addendum.md"
   ],
-  "next": "STOP — Phase 1 Ontarch graph/bin machine contracts green. Phase 2 Takogami graph/bin handlers only after explicit go-ahead",
+  "next": "E09.S7 Phase 2 Takogami graph adapter \u2014 only after explicit go-ahead; Phase 1 DONE",
   "blockers": [],
-  "token_note": "S7 plan + Phase 0 follow-up addendum + Phase 1 gate evidence; stop before Phase 2"
+  "token_note": "Phase 1 closure corrections green (24 graph + 21 bin contract tests; dual-platform refusal/non-mutation). Phase 2 blocked until go-ahead."
 }
