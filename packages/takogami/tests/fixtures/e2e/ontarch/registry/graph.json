@@ -1,5 +1,30 @@
 {
   "generated_at": "2026-07-25T00:00:00Z",
+  "registry_generation": {
+    "generated_at": "2026-07-25T00:00:00Z",
+    "source_fingerprints": [
+      {
+        "path": "registry/units.json",
+        "algorithm": "sha256",
+        "digest": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      {
+        "path": "registry/policies.json",
+        "algorithm": "sha256",
+        "digest": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      {
+        "path": "registry/profiles.json",
+        "algorithm": "sha256",
+        "digest": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      {
+        "path": "registry/skills.json",
+        "algorithm": "sha256",
+        "digest": "0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    ]
+  },
   "nodes": [
     {"id": "demo", "kind": "package"},
     {"id": "policy:takogami.agent", "kind": "policy"},

@@ -1,1 +1,2 @@
+# PENDING — replace with complete canonical DOT projection when Phase 2 lands (S7-R13).
 digraph {}

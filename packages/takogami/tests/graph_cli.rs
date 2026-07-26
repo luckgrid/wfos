@@ -245,12 +245,38 @@ fn assert_not_still_unimplemented(out: &Output) {
 #[test]
 fn valid_current_graph_text_is_deterministic_hit() {
     let h = GraphHarness::new();
-    let out = h.run(&["graph"]);
-    assert_not_still_unimplemented(&out);
-    assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
-    let text = stdout(&out);
-    assert!(text.contains("demo"), "text projection must list nodes");
-    assert!(text.contains("governed-by") || text.contains("selects"));
+    // Shuffle input order; output must be byte-identical across runs.
+    let mut doc: Value =
+        serde_json::from_str(&fs::read_to_string(h.registry.join("graph.json")).unwrap()).unwrap();
+    if let Some(nodes) = doc["nodes"].as_array_mut() {
+        nodes.reverse();
+    }
+    if let Some(edges) = doc["edges"].as_array_mut() {
+        edges.reverse();
+    }
+    fs::write(
+        h.registry.join("graph.json"),
+        serde_json::to_string_pretty(&doc).unwrap(),
+    )
+    .unwrap();
+    let out1 = h.run(&["graph"]);
+    assert_not_still_unimplemented(&out1);
+    assert_eq!(
+        out1.status.code(),
+        Some(SUCCESS as i32),
+        "{}",
+        stderr(&out1)
+    );
+    let text1 = stdout(&out1).to_string();
+    let out2 = h.run(&["graph"]);
+    assert_eq!(
+        stdout(&out2),
+        text1,
+        "text projection must be deterministic"
+    );
+    assert!(text1.contains("Graph freshness: hit") || text1.contains("freshness: hit"));
+    assert!(text1.contains("Nodes:") || text1.contains("nodes"));
+    assert!(text1.contains("Edges:") || text1.contains("edges"));
     h.assert_no_child_and_no_record();
 }
 
@@ -266,12 +292,34 @@ fn valid_current_graph_format_text_explicit() {
 #[test]
 fn valid_current_graph_dot_is_escaped_and_deterministic() {
     let h = GraphHarness::new();
-    let out = h.run(&["graph", "--format", "dot"]);
-    assert_not_still_unimplemented(&out);
-    assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
-    let dot = stdout(&out);
-    assert!(dot.contains("digraph") || dot.contains("strict digraph"));
-    assert!(dot.contains("demo"));
+    let mut doc: Value =
+        serde_json::from_str(&fs::read_to_string(h.registry.join("graph.json")).unwrap()).unwrap();
+    if let Some(nodes) = doc["nodes"].as_array_mut() {
+        nodes.reverse();
+    }
+    fs::write(
+        h.registry.join("graph.json"),
+        serde_json::to_string_pretty(&doc).unwrap(),
+    )
+    .unwrap();
+    // Sibling graph.dot must not be trusted as the projection source.
+    fs::write(h.registry.join("graph.dot"), "digraph { \"WRONG\"; }\n").unwrap();
+    let out1 = h.run(&["graph", "--format", "dot"]);
+    assert_not_still_unimplemented(&out1);
+    assert_eq!(
+        out1.status.code(),
+        Some(SUCCESS as i32),
+        "{}",
+        stderr(&out1)
+    );
+    let dot1 = stdout(&out1).to_string();
+    assert!(dot1.contains("digraph") || dot1.contains("strict digraph"));
+    assert!(
+        !dot1.contains("WRONG"),
+        "must not use unchecked sibling graph.dot"
+    );
+    let out2 = h.run(&["graph", "--format", "dot"]);
+    assert_eq!(stdout(&out2), dot1, "DOT projection must be deterministic");
     h.assert_no_child_and_no_record();
 }
 
@@ -307,9 +355,20 @@ fn global_json_wraps_each_graph_format_in_one_envelope() {
         assert_eq!(v["command"], "graph");
         assert_eq!(v["status"], "ok");
         assert_eq!(v["data"]["format"], format);
-        assert!(v["data"]["graph"].is_object() || v["data"]["graph"].is_string());
+        assert!(
+            v["data"]["graph"].is_object(),
+            "data.graph must always be structured, not a string"
+        );
+        assert!(v["data"]["graph"].get("nodes").is_some());
+        assert!(v["data"]["graph"].get("edges").is_some());
         assert_eq!(v["data"]["freshness"], "hit");
-        // Never emit raw DOT/text outside the envelope in global JSON mode.
+        assert_eq!(v["metrics"]["registry_cache"], "hit");
+        if format == "text" || format == "dot" {
+            assert!(
+                v["data"]["rendered"].is_string(),
+                "text/dot envelope must include data.rendered"
+            );
+        }
         assert!(!stdout(&out).contains("\ndigraph "));
     }
     h.assert_no_child_and_no_record();
@@ -592,18 +651,18 @@ fn oversized_graph_hits_bounded_error() {
 }
 
 #[test]
-fn dot_special_characters_are_safely_escaped() {
+fn printable_dot_special_characters_are_escaped() {
     let h = GraphHarness::new();
     let mut doc: Value =
         serde_json::from_str(&fs::read_to_string(h.registry.join("graph.json")).unwrap()).unwrap();
     doc["nodes"].as_array_mut().unwrap().push(json!({
-        "id": "weird\"node\\with\nchars",
+        "id": "weird\"node\\with-chars",
         "kind": "package"
     }));
     doc["edges"].as_array_mut().unwrap().push(json!({
         "from": "demo",
         "rel": "uses",
-        "to": "weird\"node\\with\nchars"
+        "to": "weird\"node\\with-chars"
     }));
     fs::write(
         h.registry.join("graph.json"),
@@ -615,10 +674,39 @@ fn dot_special_characters_are_safely_escaped() {
     assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
     let dot = stdout(&out);
     assert!(
-        !dot.contains("weird\"node\\with\nchars") || dot.contains("\\\""),
-        "DOT specials must be escaped: {dot}"
+        dot.contains("\\\"") || !dot.contains("weird\"node"),
+        "printable DOT specials must be escaped: {dot}"
     );
     h.assert_no_child_and_no_record();
+}
+
+#[test]
+fn graph_ids_with_control_characters_are_rejected() {
+    let h = GraphHarness::new();
+    for bad_id in ["has\nnewline", "has\rcarriage", "has\u{0000}nul"] {
+        h.write_valid_graph();
+        let mut doc: Value =
+            serde_json::from_str(&fs::read_to_string(h.registry.join("graph.json")).unwrap())
+                .unwrap();
+        doc["nodes"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({"id": bad_id, "kind": "package"}));
+        fs::write(
+            h.registry.join("graph.json"),
+            serde_json::to_string_pretty(&doc).unwrap(),
+        )
+        .unwrap();
+        let out = h.run(&["--json", "graph"]);
+        assert_not_still_unimplemented(&out);
+        assert_eq!(
+            out.status.code(),
+            Some(CONTRACT as i32),
+            "control-char id must fail closed: {}",
+            stderr(&out)
+        );
+        h.assert_no_child_and_no_record();
+    }
 }
 
 #[test]

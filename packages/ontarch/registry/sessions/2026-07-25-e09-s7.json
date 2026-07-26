@@ -22,7 +22,7 @@
     "baseline_test_count": 280,
     "baseline_gate": {
       "takogami_build": "PASS",
-      "takogami_test": "PASS on re-run (280); first parallel run flaked once on signal_forwarding_reaches_descendant_in_the_same_process_group (grandchild PID marker timeout) — classified as timing flake, passed 3/3 alone and on full re-run",
+      "takogami_test": "PASS on re-run (280); first parallel run flaked once on signal_forwarding_reaches_descendant_in_the_same_process_group (grandchild PID marker timeout) \u2014 classified as timing flake, passed 3/3 alone and on full re-run",
       "takogami_lint": "PASS",
       "takogami_format_check": "PASS",
       "ontarch_sync": "PASS",
@@ -32,7 +32,7 @@
       "panoply_validate_substrate": "PASS",
       "git_diff_check": "PASS"
     },
-    "historical_secrets_scan": "ontarch:secrets-scan still reports pre-existing age-secret-key in git history (commit a3a4978, 2026-06-24; redacted in HEAD) — external/non-gating for E09"
+    "historical_secrets_scan": "ontarch:secrets-scan still reports pre-existing age-secret-key in git history (commit a3a4978, 2026-06-24; redacted in HEAD) \u2014 external/non-gating for E09"
   },
   "locked_decisions": [
     "Ontarch owns graph/bin generation; Takogami owns projection and routing only.",
@@ -47,143 +47,97 @@
   ],
   "changed_paths": [
     "packages/ontarch/registry/sessions/2026-07-25-e09-s7.json",
+    "packages/takogami/Cargo.toml",
+    "packages/takogami/tests/support/",
     "packages/takogami/tests/graph_cli.rs",
     "packages/takogami/tests/bin_cli.rs",
     "packages/takogami/tests/e2e_mvp.rs",
+    "packages/takogami/tests/ontarch_bin_contract.rs",
+    "packages/takogami/tests/ontarch_graph_contract.rs",
     "packages/takogami/tests/fixtures/e2e/"
   ],
   "progress": [
     {
+      "phase": "0-review-follow-up",
+      "title": "Phase 0 acceptance-map corrections (pre\u2013Phase 1)",
+      "status": "done",
+      "addendum": "Build/bin/wfos/2026-07-25-wfos-e09-s7-phase-0-review-phase-1-corrections-addendum.md",
+      "reviewed_commit_note": "Reviewed acceptance-map commit 4b64b64 was mislabeled 'phase 1' in the commit message; session numbering remains Phase 0. No history rewrite.",
+      "summary": "Resolved P0 S7-R01..R04 and \u00a78 correction criteria without production schema/emitter/--json work. Hermetic Ontarch fixture copies scripts into a temp Workstreams layout. Direct Ontarch tests moved to ontarch_*_contract.rs. Bin/E2E harnesses use packages/ontarch/bin/ontarch (PATH decoy ignored). Payloads match plan inventory/cleanup shapes. Graph DOT printable escape vs control-char rejection split; global JSON locks structured data.graph. Scope/deferred/record/UTF-8/stderr fixtures tightened. Expected outputs marked pending. Baseline 280 green. Checkout registry proven untouched.",
+      "corrections": [
+        "S7-R01 hermetic copied Ontarch package",
+        "S7-R02 canonical package Ontarch not PATH authority",
+        "S7-R03 plan-aligned inventory/cleanup payloads",
+        "S7-R04 printable DOT escape vs control-char ID rejection",
+        "S7-R05 ontarch_graph_contract.rs + ontarch_bin_contract.rs named Phase 1 matrix",
+        "S7-R06/R07 determinism + locked global JSON envelope",
+        "S7-R08 split invalid-syntax scope vs policy-blocked scope",
+        "S7-R09 rename missing_canonical_*; Phase 3 drift stubs named honestly",
+        "S7-R10 portable UTF-8 bytes + shell oversized stderr (no python3)",
+        "S7-R11 stronger Allow/Gate/Deny/payload record assertions + deferred_unavailable required",
+        "S7-R12 E2E canonical Ontarch + registry_generation + fixture hash immutability",
+        "S7-R13 expected/* marked pending"
+      ],
+      "renamed_or_split_tests": [
+        "dot_special_characters_are_safely_escaped -> printable_dot_special_characters_are_escaped + graph_ids_with_control_characters_are_rejected",
+        "child_executable_drift_* -> missing_canonical_ontarch_fails_before_spawn_even_when_path_replacement_exists",
+        "added projection_executable_identity_drift_after_seal_fails_preflight",
+        "added projection_cwd_identity_drift_after_seal_fails_preflight",
+        "invalid_scope_* split into invalid_scope_syntax_* + valid_but_policy_blocked_scope_*",
+        "valid_report_only_cleanup_json_mutation_false -> valid_report_only_cleanup_json_mutation_executed_false"
+      ],
+      "validation": {
+        "cargo_check_tests": "PASS",
+        "baseline_280": "PASS",
+        "hermetic_checkout_registry": "PASS ontarch_direct_tests_do_not_write_checkout_registry",
+        "ontarch_archive_delete_refuse": "PASS",
+        "production_behavior_changed": false,
+        "phase_1_production_started": false
+      }
+    },
+    {
       "phase": 0,
       "title": "Baseline, contract inventory, and failing acceptance map",
       "status": "done",
-      "summary": "Froze advanced HEADs under pinned rustc 1.96 / Moon 2.3.2. Baseline 280 green after classifying one process-group signal flake. Inventory confirms graph/bin exit 10 not_implemented; graph.json lacks registry_generation; Ontarch bin scripts ignore --json and emit prose/files. Landed 52 named acceptance tests (20 graph + 26 bin + 6 e2e) with e2e fixture skeleton; no production behavior changed. Stop for §§14–15 review before Phase 1.",
+      "summary": "Froze advanced HEADs under pinned rustc 1.96 / Moon 2.3.2. Baseline 280 green after classifying one process-group signal flake. Inventory confirms graph/bin exit 10 not_implemented; graph.json lacks registry_generation; Ontarch bin scripts ignore --json and emit prose/files. Landed 52 named acceptance tests (20 graph + 26 bin + 6 e2e) with e2e fixture skeleton; no production behavior changed. Stop for \u00a7\u00a714\u201315 review before Phase 1.",
       "inventory": {
-        "takogami_graph": "is_implemented=false → exit 10 not_implemented (human + --json envelope)",
-        "takogami_bin_report": "is_implemented=false → exit 10",
+        "takogami_graph": "is_implemented=false \u2192 exit 10 not_implemented (human + --json envelope)",
+        "takogami_bin_report": "is_implemented=false \u2192 exit 10",
         "takogami_bin_cleanup_modes": "dry-run/archive/delete-approved all exit 10 (CLI parses; handlers absent)",
-        "graph_json_keys": ["generated_at", "nodes", "edges"],
+        "graph_json_keys": [
+          "generated_at",
+          "nodes",
+          "edges"
+        ],
         "graph_registry_generation": false,
-        "edges_schema_required": ["nodes", "edges"],
+        "edges_schema_required": [
+          "nodes",
+          "edges"
+        ],
         "edges_schema_additionalProperties": true,
         "ontarch_bin_report_json": "flag ignored; writes bin-inventory.json + BIN-INVENTORY.md; no pure JSON stdout contract",
         "ontarch_bin_cleanup_json": "no --json mode; human prose planner only"
       },
-      "regressions_added": [
-        {
-          "file": "packages/takogami/tests/graph_cli.rs",
-          "count": 20,
-          "matrix": "§14.1",
-          "result": "0 passed / 20 failed",
-          "fail_reason": "assert_not_still_unimplemented: exit 10 not_implemented",
-          "tests": [
-            "valid_current_graph_text_is_deterministic_hit",
-            "valid_current_graph_format_text_explicit",
-            "valid_current_graph_dot_is_escaped_and_deterministic",
-            "valid_current_graph_json_payload",
-            "global_json_wraps_each_graph_format_in_one_envelope",
-            "missing_graph_is_typed_miss_without_sync_or_record",
-            "stale_graph_input_fingerprint_is_typed_stale_without_sync",
-            "authored_unit_fingerprint_stale_is_typed_stale",
-            "malformed_graph_json_is_invalid_registry",
-            "unknown_node_kind_is_contract_error",
-            "unknown_relation_is_contract_error",
-            "duplicate_node_is_contract_error",
-            "missing_edge_source_is_endpoint_error",
-            "missing_edge_target_is_endpoint_error",
-            "duplicate_edge_is_deterministic_rejection",
-            "symlink_graph_file_fails_closed",
-            "non_regular_graph_file_fails_closed",
-            "oversized_graph_hits_bounded_error",
-            "dot_special_characters_are_safely_escaped",
-            "schema_and_rust_enums_win_over_stale_readme_vocabulary"
-          ]
-        },
-        {
-          "file": "packages/takogami/tests/bin_cli.rs",
-          "count": 26,
-          "matrix": "§14.2–14.3 + §14.5 Ontarch direct",
-          "result": "1 passed / 25 failed",
-          "pass": ["malformed_cleanup_mode_is_usage_or_contract_with_zero_spawns"],
-          "fail_reason": "exit 10 not_implemented for Takogami bin paths; Ontarch --json lacks pure JSON stdout",
-          "tests": [
-            "bin_report_allow_allow_spawns_once_and_records",
-            "bin_cleanup_report_only_allow_allow_spawns_once",
-            "bin_cleanup_dry_run_is_gate_with_zero_spawns",
-            "bin_cleanup_archive_is_deny_deferred_with_zero_spawns",
-            "bin_cleanup_delete_approved_is_deny_deferred_with_zero_spawns",
-            "malformed_cleanup_mode_is_usage_or_contract_with_zero_spawns",
-            "invalid_scope_is_usage_or_policy_with_zero_spawns",
-            "child_executable_drift_does_not_spawn_and_surfaces_projection_contract",
-            "pending_write_failure_prevents_spawn",
-            "malformed_policy_registry_fails_closed_with_zero_spawns",
-            "valid_report_json_completes_with_validated_payload",
-            "valid_report_only_cleanup_json_mutation_false",
-            "child_nonzero_exit_preserved_with_terminal_record",
-            "child_zero_with_malformed_json_is_controller_error_started_true",
-            "trailing_prose_after_json_is_payload_invalid",
-            "two_json_documents_are_payload_invalid",
-            "invalid_utf8_child_stdout_is_payload_invalid",
-            "stdout_truncation_never_parses_partial_json",
-            "oversized_stderr_stays_bounded",
-            "cleanup_result_mutation_true_fails_closed",
-            "panoply_agent_absent_in_caller_still_fixed_to_one",
-            "panoply_agent_caller_zero_overridden_to_one",
-            "human_mode_machine_output_purity_not_required_but_json_mode_is_pure",
-            "prose_child_stdout_is_rejected_not_scraped",
-            "ontarch_bin_report_json_emits_one_pure_document",
-            "ontarch_bin_cleanup_report_only_json_emits_one_pure_document"
-          ]
-        },
-        {
-          "file": "packages/takogami/tests/e2e_mvp.rs",
-          "count": 6,
-          "matrix": "§13 skeleton + §15 path",
-          "result": "4 passed / 2 failed",
-          "pass": [
-            "e2e_fixture_skeleton_is_tracked_and_copyable",
-            "e2e_discovery_and_lifecycle_still_work_on_overlay",
-            "e2e_session_queries_remain_available_after_lifecycle",
-            "e2e_optional_rtk_and_herdr_absence_does_not_block_mvp_skeleton"
-          ],
-          "fail_reason": "graph/bin MVP path still exit 10 not_implemented",
-          "tests": [
-            "e2e_fixture_skeleton_is_tracked_and_copyable",
-            "e2e_discovery_and_lifecycle_still_work_on_overlay",
-            "e2e_mvp_path_includes_graph_projection",
-            "e2e_mvp_path_includes_bin_report_and_gated_cleanup",
-            "e2e_session_queries_remain_available_after_lifecycle",
-            "e2e_optional_rtk_and_herdr_absence_does_not_block_mvp_skeleton"
-          ]
-        }
-      ],
       "validation": {
         "cargo_check_tests": "PASS (clean)",
         "cargo_fmt": "PASS",
         "baseline_excluding_new_modules": "PASS 280 (lib+cli_smoke+contracts_roundtrip+execution_cli+policy_cli+resolution_cli+session_cli+session_store)",
         "new_modules_command": "cargo test -p takogami --test graph_cli --test bin_cli --test e2e_mvp",
         "production_behavior_changed": false
-      },
-      "matrix_coverage_notes": [
-        "§14.1 graph rows covered by graph_cli (20).",
-        "§14.2 policy reachability + §14.3 payload/env covered by bin_cli (24 Takogami + 2 Ontarch direct).",
-        "§14.4 S6.1 record regressions remain in existing suites (baseline green); bin record shape asserted in bin_cli Allow/Gate/Deny cases.",
-        "§14.5 Ontarch --json purity covered by ontarch_bin_* tests (fail until Phase 1).",
-        "§15 behavior matrix rows mapped via graph miss/stale/hit and bin report/dry-run/archive/delete paths; signal/broken-pipe reuse S6.1 execution_cli (not duplicated in Phase 0).",
-        "Phase 0 stop: review §§14–15 map before Phase 1 Ontarch fingerprints/--json/schemas."
-      ]
+      }
     }
   ],
   "loaded_context": [
     "Build/bin/wfos/STATE.md",
     "Build/bin/wfos/2026-07-25-wfos-e09-s7-graph-bin-projections-mvp-hardening-implementation-plan.md",
+    "Build/bin/wfos/2026-07-25-wfos-e09-s7-phase-0-review-phase-1-corrections-addendum.md",
     "Build/bin/wfos/E09_runtime_controller.md#E09.S7",
     "packages/ontarch/graphs/edges.schema.json",
     "docs/bin-archive.md",
     "packages/ontarch/registry/sessions/2026-07-25-e09-s6.1.json",
     "packages/ontarch/registry/sessions/2026-07-24-e09-s6.json"
   ],
-  "next": "STOP — §§14–15 review. Phase 1 (Ontarch graph fingerprints + bin --json schemas) only after explicit go-ahead",
+  "next": "STOP \u2014 Phase 0 correction gate complete. Phase 1 Ontarch graph fingerprints + bin --json schemas only after explicit go-ahead",
   "blockers": [],
-  "token_note": "STATE + S7 plan + E09.S7 block + edges.schema + bin-archive + last 2 E09 session records; Phase 0 only"
+  "token_note": "S7 plan + Phase 0 review addendum + last 2 E09 session records; correction iteration only"
 }

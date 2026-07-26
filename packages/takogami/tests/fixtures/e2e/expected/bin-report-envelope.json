@@ -1,1 +1,6 @@
-{"schema_version":"0.1.0","command":"bin","status":"ok"}
+{
+  "_pending": "S7-R13: replace with complete bin report envelope when Phase 3 lands",
+  "schema_version": "0.1.0",
+  "command": "bin",
+  "status": "ok"
+}

@@ -1,14 +1,19 @@
-//! E09.S7 Phase 0 — bin projection acceptance map (§14.2–14.5 / §15).
+//! E09.S7 Phase 0 — bin projection acceptance map (review-corrected).
 //!
-//! Asserts final S7 contracts. At baseline these fail because `bin` is still
-//! `not_implemented` (exit 10) and Ontarch has no `--json` machine stdout.
-//! Do not `#[ignore]`.
+//! Canonical Ontarch package layout (not PATH authority). Plan-aligned payloads.
+//! Failures today: `bin` still `not_implemented` (exit 10). Do not `#[ignore]`.
 
-use serde_json::{Value, json};
+#[path = "support/mod.rs"]
+mod support;
+
+use serde_json::Value;
 use std::fs;
-use std::os::unix::fs::PermissionsExt;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::{Command, Output};
+use support::{
+    copy_dir, sample_cleanup_mutation_true, sample_cleanup_plan, sample_inventory,
+    shell_single_quote, write_canonical_fake_ontarch, write_executable, write_marker_exe,
+};
 use takogami::exit_codes::{
     CONTRACT, EXECUTION_IO, NOT_IMPLEMENTED, POLICY_DENY, POLICY_GATE, STATE_IO, SUCCESS, USAGE,
 };
@@ -32,38 +37,50 @@ fn stderr(o: &Output) -> &str {
 struct BinHarness {
     #[allow(dead_code)]
     temp: tempfile::TempDir,
+    /// WfOS-like workspace root containing `packages/ontarch/`.
     workspace: PathBuf,
     registry: PathBuf,
     state_home: PathBuf,
+    /// Approved tools PATH (decoy ontarch may live here; must be ignored).
     path_dir: PathBuf,
     marker: PathBuf,
-    ontarch_script: PathBuf,
+    path_decoy_marker: PathBuf,
+    panoply_side: PathBuf,
+    canonical_ontarch: PathBuf,
 }
 
 impl BinHarness {
     fn new() -> Self {
         let temp = tempfile::tempdir().unwrap();
         let workspace = temp.path().join("ws");
-        let registry = workspace.join("registry");
+        let ontarch_pkg = workspace.join("packages/ontarch");
+        let registry = ontarch_pkg.join("registry");
         let state_home = temp.path().join("state-home");
-        let path_dir = workspace.join("bin");
-        fs::create_dir_all(&workspace).unwrap();
+        let path_dir = temp.path().join("path-tools");
+        fs::create_dir_all(ontarch_pkg.join("bin")).unwrap();
+        fs::create_dir_all(&registry).unwrap();
         fs::create_dir_all(&path_dir).unwrap();
-        copy_dir(&fixture_root(), &workspace);
 
-        let marker = workspace.join("MARKER_RAN");
-        let ontarch_script = path_dir.join("ontarch");
-        // Default: marker-only Ontarch that writes one valid JSON object to stdout.
-        write_json_ontarch(
-            &ontarch_script,
-            &marker,
-            &json!({
-                "schema_version": "0.1.0",
-                "kind": "bin_inventory",
-                "mutation": false,
-                "workflows": []
-            }),
-        );
+        // Resolution policies/profiles/units under the Ontarch registry path.
+        copy_dir(&fixture_root().join("registry"), &registry);
+        if fixture_root().join("demo").is_dir() {
+            copy_dir(&fixture_root().join("demo"), &workspace.join("demo"));
+        }
+        // Descriptor sources expected by some resolution helpers.
+        let sources = fixture_root().join("registry/sources");
+        if sources.is_dir() {
+            copy_dir(&sources, &registry.join("sources"));
+        }
+
+        let marker = workspace.join("MARKER_CANONICAL");
+        let path_decoy_marker = workspace.join("MARKER_PATH_DECOY");
+        let panoply_side = workspace.join("PANOPLY_SEEN");
+        let canonical_ontarch = ontarch_pkg.join("bin/ontarch");
+        let inv = sample_inventory(workspace.to_str().unwrap());
+        let clean = sample_cleanup_plan("report-only");
+        write_canonical_fake_ontarch(&canonical_ontarch, &marker, &panoply_side, &inv, &clean);
+        // PATH decoy — must never run when canonical package Ontarch is authoritative.
+        write_marker_exe(&path_dir.join("ontarch"), &path_decoy_marker);
 
         Self {
             temp,
@@ -72,32 +89,83 @@ impl BinHarness {
             state_home,
             path_dir,
             marker,
-            ontarch_script,
+            path_decoy_marker,
+            panoply_side,
+            canonical_ontarch,
         }
     }
 
-    fn install_ontarch_json(&self, payload: &Value) {
-        write_json_ontarch(&self.ontarch_script, &self.marker, payload);
+    fn install_ontarch_json(&self, inventory: &Value, cleanup: &Value) {
+        write_canonical_fake_ontarch(
+            &self.canonical_ontarch,
+            &self.marker,
+            &self.panoply_side,
+            inventory,
+            cleanup,
+        );
+    }
+
+    fn install_ontarch_stdout(&self, body: &str, exit: i32) {
+        let out_file = self.workspace.join("child_stdout.bin");
+        fs::write(&out_file, body.as_bytes()).unwrap();
+        write_executable(
+            &self.canonical_ontarch,
+            &format!(
+                "#!/bin/sh\necho ran >> {m}\nprintf '%s' \"${{PANOPLY_AGENT-}}\" > {p}\ncat {out}\nexit {e}\n",
+                m = shell_single_quote(&self.marker.to_string_lossy()),
+                p = shell_single_quote(&self.panoply_side.to_string_lossy()),
+                out = shell_single_quote(&out_file.to_string_lossy()),
+                e = exit
+            ),
+        );
+    }
+
+    fn install_ontarch_bytes(&self, bytes: &[u8], exit: i32) {
+        let out_file = self.workspace.join("child_stdout.bin");
+        fs::write(&out_file, bytes).unwrap();
+        write_executable(
+            &self.canonical_ontarch,
+            &format!(
+                "#!/bin/sh\necho ran >> {m}\nprintf '%s' \"${{PANOPLY_AGENT-}}\" > {p}\ncat {out}\nexit {e}\n",
+                m = shell_single_quote(&self.marker.to_string_lossy()),
+                p = shell_single_quote(&self.panoply_side.to_string_lossy()),
+                out = shell_single_quote(&out_file.to_string_lossy()),
+                e = exit
+            ),
+        );
     }
 
     fn install_ontarch_prose(&self) {
-        let script = format!(
-            "#!/bin/sh\necho ran >> {}\necho 'human prose inventory'\nexit 0\n",
-            self.marker.display()
+        write_executable(
+            &self.canonical_ontarch,
+            &format!(
+                "#!/bin/sh\necho ran >> {m}\necho 'human prose inventory'\nexit 0\n",
+                m = shell_single_quote(&self.marker.to_string_lossy())
+            ),
         );
-        fs::write(&self.ontarch_script, script).unwrap();
-        fs::set_permissions(&self.ontarch_script, fs::Permissions::from_mode(0o755)).unwrap();
     }
 
-    fn install_ontarch_exit(&self, code: i32, stdout_body: &str) {
-        let script = format!(
-            "#!/bin/sh\necho ran >> {}\nprintf '%s' {stdout}\nexit {code}\n",
-            self.marker.display(),
-            stdout = shell_single_quote(stdout_body),
-            code = code
+    fn install_ontarch_oversized_stderr(&self) {
+        let good = sample_inventory(self.workspace.to_str().unwrap()).to_string();
+        let out_file = self.workspace.join("child_stdout.bin");
+        fs::write(&out_file, good.as_bytes()).unwrap();
+        // Shell builtin loop — no python3 dependency on isolated PATH.
+        write_executable(
+            &self.canonical_ontarch,
+            &format!(
+                "#!/bin/sh\n\
+                 echo ran >> {m}\n\
+                 i=0\n\
+                 while [ \"$i\" -lt 300000 ]; do\n\
+                   printf 'E' >&2\n\
+                   i=$((i+1))\n\
+                 done\n\
+                 cat {out}\n\
+                 exit 0\n",
+                m = shell_single_quote(&self.marker.to_string_lossy()),
+                out = shell_single_quote(&out_file.to_string_lossy()),
+            ),
         );
-        fs::write(&self.ontarch_script, script).unwrap();
-        fs::set_permissions(&self.ontarch_script, fs::Permissions::from_mode(0o755)).unwrap();
     }
 
     fn run(&self, args: &[&str]) -> Output {
@@ -134,11 +202,23 @@ impl BinHarness {
     }
 
     fn assert_marker_untouched(&self) {
-        assert_eq!(self.marker_count(), 0, "Ontarch/child must not spawn");
+        assert_eq!(self.marker_count(), 0, "canonical Ontarch must not spawn");
+        assert!(
+            !self.path_decoy_marker.exists(),
+            "PATH decoy ontarch must never run"
+        );
     }
 
     fn assert_marker_once(&self) {
-        assert_eq!(self.marker_count(), 1, "expected exactly one Ontarch spawn");
+        assert_eq!(
+            self.marker_count(),
+            1,
+            "expected exactly one canonical spawn"
+        );
+        assert!(
+            !self.path_decoy_marker.exists(),
+            "PATH decoy ontarch must never run"
+        );
     }
 
     fn load_records(&self) -> Vec<Value> {
@@ -155,41 +235,6 @@ impl BinHarness {
             out.push(serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap());
         }
         out
-    }
-}
-
-fn write_json_ontarch(path: &Path, marker: &Path, payload: &Value) {
-    // Capture caller PANOPLY_AGENT into a side file so tests can prove controller override.
-    let script = format!(
-        "#!/bin/sh\n\
-         echo ran >> {marker}\n\
-         printf '%s' \"${{PANOPLY_AGENT-}}\" > {marker}.panoply\n\
-         printf '%s\\n' {json}\n\
-         exit 0\n",
-        marker = marker.display(),
-        json = shell_single_quote(&payload.to_string()),
-    );
-    fs::write(path, script).unwrap();
-    fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
-}
-
-fn shell_single_quote(s: &str) -> String {
-    format!("'{}'", s.replace('\'', "'\\''"))
-}
-
-fn copy_dir(src: &Path, dst: &Path) {
-    for entry in fs::read_dir(src).unwrap() {
-        let entry = entry.unwrap();
-        let to = dst.join(entry.file_name());
-        if entry.file_type().unwrap().is_dir() {
-            fs::create_dir_all(&to).unwrap();
-            copy_dir(&entry.path(), &to);
-        } else {
-            if let Some(parent) = to.parent() {
-                fs::create_dir_all(parent).unwrap();
-            }
-            fs::copy(entry.path(), &to).unwrap();
-        }
     }
 }
 
@@ -216,25 +261,51 @@ fn assert_not_still_unimplemented(out: &Output) {
     );
 }
 
-fn record_request_safe(rec: &Value) {
-    let flags = rec["request"]["flags"]
-        .as_array()
-        .cloned()
-        .unwrap_or_default();
-    let joined = flags
-        .iter()
-        .filter_map(|v| v.as_str())
-        .collect::<Vec<_>>()
-        .join(" ");
+fn assert_allow_record(rec: &Value) {
+    assert_eq!(rec["schema_version"], "0.1.0");
+    assert_eq!(rec["record_kind"], "command_execution");
+    assert!(rec.get("resolution").is_none());
+    assert_eq!(rec["policy_decision"]["outcome"], "allow");
+    let digest = rec["plan_digest"].as_str().unwrap_or("");
     assert!(
-        !joined.contains('/'),
-        "absolute scope must not appear in record flags: {joined}"
+        digest.starts_with("sha256:"),
+        "plan_digest must be sha256:… got {digest}"
     );
+    assert_eq!(rec["execution"]["started"], true);
+    assert!(rec["execution"]["pid"].as_u64().unwrap_or(0) > 0);
+    assert!(rec["execution"].get("ended_at").is_some());
     let raw = serde_json::to_string(rec).unwrap();
     assert!(!raw.contains("SECRET_SENTINEL"));
+    assert!(!raw.contains("/packages/ontarch/bin/"));
 }
 
-// --- §14.2 request/policy reachability ---
+fn assert_gate_or_deny_record(rec: &Value, outcome: &str) {
+    assert_eq!(rec["policy_decision"]["outcome"], outcome);
+    assert_eq!(rec["execution"]["started"], false);
+    assert!(rec["execution"]["pid"].is_null());
+    assert!(rec.get("resolution").is_none());
+    assert!(
+        rec["execution"]
+            .get("exit_code")
+            .map(|v| v.is_null())
+            .unwrap_or(true)
+            || rec["execution"]["exit_code"].is_null()
+    );
+}
+
+fn assert_no_absolute_leak(out: &Output, records: &[Value], needle: &str) {
+    let body = format!("{}{}", stdout(out), stderr(out));
+    assert!(
+        !body.contains(needle),
+        "absolute operand must not leak to output"
+    );
+    for rec in records {
+        let raw = serde_json::to_string(rec).unwrap();
+        assert!(!raw.contains(needle), "absolute operand must not persist");
+    }
+}
+
+// --- §14.2 request/policy ---
 
 #[test]
 fn bin_report_allow_allow_spawns_once_and_records() {
@@ -245,30 +316,22 @@ fn bin_report_allow_allow_spawns_once_and_records() {
     h.assert_marker_once();
     let records = h.load_records();
     assert_eq!(records.len(), 1);
-    assert_eq!(records[0]["schema_version"], "0.1.0");
-    assert_eq!(records[0]["record_kind"], "command_execution");
     assert_eq!(records[0]["request"]["command"], "bin report");
-    assert!(records[0].get("resolution").is_none());
-    record_request_safe(&records[0]);
+    assert_allow_record(&records[0]);
 }
 
 #[test]
 fn bin_cleanup_report_only_allow_allow_spawns_once() {
     let h = BinHarness::new();
-    h.install_ontarch_json(&json!({
-        "schema_version": "0.1.0",
-        "kind": "bin_cleanup_plan",
-        "mode": "report-only",
-        "mutation": false,
-        "actions": []
-    }));
+    h.install_ontarch_json(
+        &sample_inventory(h.workspace.to_str().unwrap()),
+        &sample_cleanup_plan("report-only"),
+    );
     let out = h.run(&["--json", "bin", "cleanup", "--mode", "report-only"]);
     assert_not_still_unimplemented(&out);
     assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
     h.assert_marker_once();
-    let rec = &h.load_records()[0];
-    assert_eq!(rec["request"]["command"], "bin cleanup");
-    record_request_safe(rec);
+    assert_allow_record(&h.load_records()[0]);
 }
 
 #[test]
@@ -285,8 +348,7 @@ fn bin_cleanup_dry_run_is_gate_with_zero_spawns() {
     h.assert_marker_untouched();
     let records = h.load_records();
     assert_eq!(records.len(), 1);
-    assert_eq!(records[0]["policy_decision"]["outcome"], "gate");
-    assert!(records[0].get("resolution").is_none());
+    assert_gate_or_deny_record(&records[0], "gate");
 }
 
 #[test]
@@ -304,12 +366,13 @@ fn bin_cleanup_archive_is_deny_deferred_with_zero_spawns() {
     let v = parse_json(&out);
     let body = serde_json::to_string(&v).unwrap();
     assert!(
-        body.contains("deferred_unavailable") || body.contains("\"deny\""),
-        "expected deferred/deny detail: {body}"
+        body.contains("deferred_unavailable"),
+        "archive must include deferred_unavailable detail: {body}"
     );
+    assert_eq!(v["data"]["policy_decision"]["outcome"], "deny");
     let records = h.load_records();
     assert_eq!(records.len(), 1);
-    assert_eq!(records[0]["policy_decision"]["outcome"], "deny");
+    assert_gate_or_deny_record(&records[0], "deny");
 }
 
 #[test]
@@ -332,16 +395,15 @@ fn bin_cleanup_delete_approved_is_deny_deferred_with_zero_spawns() {
         stderr(&out)
     );
     h.assert_marker_untouched();
-    let records = h.load_records();
-    assert_eq!(records.len(), 1);
-    record_request_safe(&records[0]);
+    let body = serde_json::to_string(&parse_json(&out)).unwrap();
+    assert!(body.contains("deferred_unavailable"));
+    assert_gate_or_deny_record(&h.load_records()[0], "deny");
 }
 
 #[test]
 fn malformed_cleanup_mode_is_usage_or_contract_with_zero_spawns() {
     let h = BinHarness::new();
     let out = h.run(&["--json", "bin", "cleanup", "--mode", "explode"]);
-    // Clap rejects unknown enum values before dispatch today; keep that or typed contract.
     assert!(
         matches!(out.status.code(), Some(code) if code == USAGE as i32 || code == CONTRACT as i32 || code == 2),
         "unexpected exit {:?}: {}",
@@ -352,8 +414,9 @@ fn malformed_cleanup_mode_is_usage_or_contract_with_zero_spawns() {
 }
 
 #[test]
-fn invalid_scope_is_usage_or_policy_with_zero_spawns() {
+fn invalid_scope_syntax_is_usage_or_contract_with_no_policy_record() {
     let h = BinHarness::new();
+    let abs = "/etc/passwd";
     let out = h.run(&[
         "--json",
         "bin",
@@ -361,23 +424,54 @@ fn invalid_scope_is_usage_or_policy_with_zero_spawns() {
         "--mode",
         "report-only",
         "--scope",
-        "/etc/passwd",
+        abs,
     ]);
     assert_not_still_unimplemented(&out);
     assert!(
-        matches!(out.status.code(), Some(code) if code == USAGE as i32 || code == POLICY_DENY as i32 || code == CONTRACT as i32),
-        "unexpected exit {:?}: {}",
+        matches!(out.status.code(), Some(code) if code == USAGE as i32 || code == CONTRACT as i32),
+        "invalid absolute scope must not reach policy Deny; got {:?}: {}",
         out.status.code(),
         stderr(&out)
     );
     h.assert_marker_untouched();
+    let records = h.load_records();
+    assert!(
+        records.is_empty(),
+        "pre-policy invalid scope must not create a policy decision record"
+    );
+    assert_no_absolute_leak(&out, &records, abs);
 }
 
 #[test]
-fn child_executable_drift_does_not_spawn_and_surfaces_projection_contract() {
+fn valid_but_policy_blocked_scope_is_deny_with_safe_record() {
     let h = BinHarness::new();
-    // Remove the sealed Ontarch identity so preflight drift fails closed.
-    fs::remove_file(&h.ontarch_script).unwrap();
+    // Syntactically relative scope that is outside allowed bin policy paths.
+    let out = h.run(&[
+        "--json",
+        "bin",
+        "cleanup",
+        "--mode",
+        "report-only",
+        "--scope",
+        "lib/secret",
+    ]);
+    assert_not_still_unimplemented(&out);
+    assert_eq!(
+        out.status.code(),
+        Some(POLICY_DENY as i32),
+        "{}",
+        stderr(&out)
+    );
+    h.assert_marker_untouched();
+    let records = h.load_records();
+    assert_eq!(records.len(), 1);
+    assert_gate_or_deny_record(&records[0], "deny");
+}
+
+#[test]
+fn missing_canonical_ontarch_fails_before_spawn_even_when_path_replacement_exists() {
+    let h = BinHarness::new();
+    fs::remove_file(&h.canonical_ontarch).unwrap();
     let out = h.run(&["--json", "bin", "report"]);
     assert_not_still_unimplemented(&out);
     assert!(
@@ -390,14 +484,47 @@ fn child_executable_drift_does_not_spawn_and_surfaces_projection_contract() {
 }
 
 #[test]
+fn projection_executable_identity_drift_after_seal_fails_preflight() {
+    // Honest stub: true post-seal drift requires a Phase 3 injectable seam.
+    // Until that seam exists, this documents the required contract and fails closed
+    // the same way as missing-canonical (no PATH fallback).
+    let h = BinHarness::new();
+    // Replace canonical with a non-executable after "seal" would have bound identity:
+    // Phase 3 must inject between authorize and spawn; for now assert no PATH rescue.
+    fs::remove_file(&h.canonical_ontarch).unwrap();
+    write_executable(
+        &h.path_dir.join("ontarch"),
+        "#!/bin/sh\necho path-rescue\nexit 0\n",
+    );
+    let out = h.run(&["--json", "bin", "report"]);
+    assert_not_still_unimplemented(&out);
+    assert_ne!(out.status.code(), Some(SUCCESS as i32));
+    assert!(
+        !h.path_decoy_marker.exists(),
+        "must not rescue via PATH after identity loss"
+    );
+}
+
+#[test]
+fn projection_cwd_identity_drift_after_seal_fails_preflight() {
+    // Named Phase 3 seam stub — same honest posture as executable drift.
+    let h = BinHarness::new();
+    let out = h.run(&["--json", "bin", "report"]);
+    assert_not_still_unimplemented(&out);
+    // When Phase 3 lands, replace this with post-seal cwd mutation via injectable hook.
+    assert!(
+        false,
+        "Phase 3 seam required: inject cwd identity drift after seal, before spawn"
+    );
+}
+
+#[test]
 fn pending_write_failure_prevents_spawn() {
     let h = BinHarness::new();
-    // Make state home a file so pending install cannot create a session record.
     fs::write(&h.state_home, b"not-a-directory").unwrap();
     let out = h.run(&["--json", "bin", "report"]);
     assert_not_still_unimplemented(&out);
     assert_eq!(out.status.code(), Some(STATE_IO as i32), "{}", stderr(&out));
-    // Marker lives beside workspace; state failure must happen before spawn.
     h.assert_marker_untouched();
 }
 
@@ -411,7 +538,7 @@ fn malformed_policy_registry_fails_closed_with_zero_spawns() {
     h.assert_marker_untouched();
 }
 
-// --- §14.3 child/payload ---
+// --- payload ---
 
 #[test]
 fn valid_report_json_completes_with_validated_payload() {
@@ -426,29 +553,24 @@ fn valid_report_json_completes_with_validated_payload() {
 }
 
 #[test]
-fn valid_report_only_cleanup_json_mutation_false() {
+fn valid_report_only_cleanup_json_mutation_executed_false() {
     let h = BinHarness::new();
-    h.install_ontarch_json(&json!({
-        "schema_version": "0.1.0",
-        "kind": "bin_cleanup_plan",
-        "mode": "report-only",
-        "mutation": false,
-        "actions": []
-    }));
+    h.install_ontarch_json(
+        &sample_inventory(h.workspace.to_str().unwrap()),
+        &sample_cleanup_plan("report-only"),
+    );
     let out = h.run(&["--json", "bin", "cleanup", "--mode", "report-only"]);
     assert_not_still_unimplemented(&out);
     assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
     let v = parse_json(&out);
-    assert_eq!(v["data"]["payload"]["mutation"], false);
+    assert_eq!(v["data"]["payload"]["mutation_executed"], false);
 }
 
 #[test]
 fn child_nonzero_exit_preserved_with_terminal_record() {
     let h = BinHarness::new();
-    h.install_ontarch_exit(
-        7,
-        r#"{"schema_version":"0.1.0","kind":"bin_inventory","mutation":false}"#,
-    );
+    let payload = sample_inventory(h.workspace.to_str().unwrap()).to_string();
+    h.install_ontarch_stdout(&payload, 7);
     let out = h.run(&["--json", "bin", "report"]);
     assert_not_still_unimplemented(&out);
     assert_eq!(out.status.code(), Some(7), "{}", stderr(&out));
@@ -461,35 +583,35 @@ fn child_nonzero_exit_preserved_with_terminal_record() {
 #[test]
 fn child_zero_with_malformed_json_is_controller_error_started_true() {
     let h = BinHarness::new();
-    h.install_ontarch_exit(0, "{not-json");
+    h.install_ontarch_stdout("{not-json", 0);
     let out = h.run(&["--json", "bin", "report"]);
     assert_not_still_unimplemented(&out);
     assert_ne!(out.status.code(), Some(SUCCESS as i32));
     let rec = &h.load_records()[0];
     assert_eq!(rec["execution"]["started"], true);
+    assert!(rec["execution"]["pid"].as_u64().unwrap_or(0) > 0);
     assert_eq!(rec["execution"]["outcome"], "controller_error");
+    let body = format!("{}{}", stdout(&out), stderr(&out));
+    assert!(body.contains("bin_payload_invalid") || body.contains("payload"));
 }
 
 #[test]
 fn trailing_prose_after_json_is_payload_invalid() {
     let h = BinHarness::new();
-    h.install_ontarch_exit(
-        0,
-        "{\"schema_version\":\"0.1.0\",\"kind\":\"bin_inventory\",\"mutation\":false}\nEXTRA PROSE\n",
+    let payload = format!(
+        "{}\nEXTRA PROSE\n",
+        sample_inventory(h.workspace.to_str().unwrap())
     );
+    h.install_ontarch_stdout(&payload, 0);
     let out = h.run(&["--json", "bin", "report"]);
     assert_not_still_unimplemented(&out);
-    let body = format!("{}{}", stdout(&out), stderr(&out));
-    assert!(
-        body.contains("bin_payload_invalid") || body.contains("payload"),
-        "expected payload invalid: {body}"
-    );
+    assert_ne!(out.status.code(), Some(SUCCESS as i32));
 }
 
 #[test]
 fn two_json_documents_are_payload_invalid() {
     let h = BinHarness::new();
-    h.install_ontarch_exit(0, "{\"a\":1}\n{\"b\":2}\n");
+    h.install_ontarch_stdout("{\"a\":1}\n{\"b\":2}\n", 0);
     let out = h.run(&["--json", "bin", "report"]);
     assert_not_still_unimplemented(&out);
     assert_ne!(out.status.code(), Some(SUCCESS as i32));
@@ -498,12 +620,7 @@ fn two_json_documents_are_payload_invalid() {
 #[test]
 fn invalid_utf8_child_stdout_is_payload_invalid() {
     let h = BinHarness::new();
-    let script = format!(
-        "#!/bin/sh\necho ran >> {}\nprintf '\\xff\\xfe'\nexit 0\n",
-        h.marker.display()
-    );
-    fs::write(&h.ontarch_script, script).unwrap();
-    fs::set_permissions(&h.ontarch_script, fs::Permissions::from_mode(0o755)).unwrap();
+    h.install_ontarch_bytes(&[0xff, 0xfe], 0);
     let out = h.run(&["--json", "bin", "report"]);
     assert_not_still_unimplemented(&out);
     assert_ne!(out.status.code(), Some(SUCCESS as i32));
@@ -512,44 +629,34 @@ fn invalid_utf8_child_stdout_is_payload_invalid() {
 #[test]
 fn stdout_truncation_never_parses_partial_json() {
     let h = BinHarness::new();
-    // Emit a huge incomplete JSON object that would exceed capture limits once enforced.
     let huge = format!(
-        "{{\"kind\":\"bin_inventory\",\"pad\":\"{}\"",
+        "{{\"generated_at\":\"2026-07-25T00:00:00Z\",\"root\":\"x\",\"summary\":{{\"total\":0,\"with_manifest\":0}},\"workflows\":[],\"pad\":\"{}\"",
         "x".repeat(2_000_000)
     );
-    h.install_ontarch_exit(0, &huge);
+    h.install_ontarch_stdout(&huge, 0);
     let out = h.run(&["--json", "bin", "report"]);
     assert_not_still_unimplemented(&out);
     assert_ne!(out.status.code(), Some(SUCCESS as i32));
-    let body = format!("{}{}", stdout(&out), stderr(&out));
-    assert!(!body.contains("\"status\":\"ok\"") || body.contains("invalid"));
 }
 
 #[test]
 fn oversized_stderr_stays_bounded() {
     let h = BinHarness::new();
-    let script = format!(
-        "#!/bin/sh\necho ran >> {}\npython3 -c 'import sys; sys.stderr.write(\"E\"*3000000)'\nprintf '%s\\n' '{{\"schema_version\":\"0.1.0\",\"kind\":\"bin_inventory\",\"mutation\":false}}'\nexit 0\n",
-        h.marker.display()
-    );
-    fs::write(&h.ontarch_script, script).unwrap();
-    fs::set_permissions(&h.ontarch_script, fs::Permissions::from_mode(0o755)).unwrap();
+    h.install_ontarch_oversized_stderr();
     let out = h.run(&["--json", "bin", "report"]);
     assert_not_still_unimplemented(&out);
-    // Controller must not hang or dump unbounded stderr into the envelope.
     assert!(stdout(&out).len() < 500_000, "envelope must stay bounded");
+    let rec = &h.load_records()[0];
+    assert_eq!(rec["execution"]["started"], true);
 }
 
 #[test]
-fn cleanup_result_mutation_true_fails_closed() {
+fn cleanup_result_mutation_executed_true_fails_closed() {
     let h = BinHarness::new();
-    h.install_ontarch_json(&json!({
-        "schema_version": "0.1.0",
-        "kind": "bin_cleanup_plan",
-        "mode": "report-only",
-        "mutation": true,
-        "actions": [{"op": "rm", "path": "Build/bin/demo"}]
-    }));
+    h.install_ontarch_json(
+        &sample_inventory(h.workspace.to_str().unwrap()),
+        &sample_cleanup_mutation_true(),
+    );
     let out = h.run(&["--json", "bin", "cleanup", "--mode", "report-only"]);
     assert_not_still_unimplemented(&out);
     assert_ne!(out.status.code(), Some(SUCCESS as i32));
@@ -562,7 +669,7 @@ fn panoply_agent_absent_in_caller_still_fixed_to_one() {
     let out = h.run_env(&["--json", "bin", "report"], &[]);
     assert_not_still_unimplemented(&out);
     assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
-    let seen = fs::read_to_string(format!("{}.panoply", h.marker.display())).unwrap();
+    let seen = fs::read_to_string(&h.panoply_side).unwrap();
     assert_eq!(seen.trim(), "1");
 }
 
@@ -572,12 +679,12 @@ fn panoply_agent_caller_zero_overridden_to_one() {
     let out = h.run_env(&["--json", "bin", "report"], &[("PANOPLY_AGENT", "0")]);
     assert_not_still_unimplemented(&out);
     assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
-    let seen = fs::read_to_string(format!("{}.panoply", h.marker.display())).unwrap();
+    let seen = fs::read_to_string(&h.panoply_side).unwrap();
     assert_eq!(seen.trim(), "1");
 }
 
 #[test]
-fn human_mode_machine_output_purity_not_required_but_json_mode_is_pure() {
+fn json_mode_machine_output_is_pure() {
     let h = BinHarness::new();
     let out = h.run(&["--json", "bin", "report"]);
     assert_not_still_unimplemented(&out);
@@ -592,64 +699,4 @@ fn prose_child_stdout_is_rejected_not_scraped() {
     let out = h.run(&["--json", "bin", "report"]);
     assert_not_still_unimplemented(&out);
     assert_ne!(out.status.code(), Some(SUCCESS as i32));
-}
-
-// --- §14.5 Ontarch direct machine contracts (fail until Phase 1) ---
-
-#[test]
-fn ontarch_bin_report_json_emits_one_pure_document() {
-    let ontarch =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../ontarch/bin/ontarch-bin-report");
-    let temp = tempfile::tempdir().unwrap();
-    let registry = temp.path().join("registry");
-    fs::create_dir_all(&registry).unwrap();
-    // Provide a fake WS_ROOT with no bin dirs so the script can still run.
-    let ws = temp.path().join("Workstreams");
-    fs::create_dir_all(ws.join("Build/bin")).unwrap();
-    let out = Command::new(&ontarch)
-        .arg("--json")
-        .env("ONTARCH_REGISTRY", &registry)
-        .env("WS_ROOT", &ws)
-        .output()
-        .expect("spawn ontarch-bin-report");
-    assert!(
-        out.status.success(),
-        "ontarch bin-report --json must succeed: {}",
-        String::from_utf8_lossy(&out.stderr)
-    );
-    let raw = std::str::from_utf8(&out.stdout).unwrap();
-    assert_one_json_document(raw);
-    assert!(!raw.contains(":: ontarch"));
-}
-
-#[test]
-fn ontarch_bin_cleanup_report_only_json_emits_one_pure_document() {
-    let ontarch =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../ontarch/bin/ontarch-bin-cleanup");
-    let temp = tempfile::tempdir().unwrap();
-    let registry = temp.path().join("registry");
-    fs::create_dir_all(&registry).unwrap();
-    // Minimal inventory so cleanup does not need to refresh.
-    fs::write(
-        registry.join("bin-inventory.json"),
-        r#"{"generated_at":"2026-07-25T00:00:00Z","summary":{"total":0,"with_manifest":0},"workflows":[]}"#,
-    )
-    .unwrap();
-    let ws = temp.path().join("Workstreams");
-    fs::create_dir_all(&ws).unwrap();
-    let out = Command::new(&ontarch)
-        .args(["--mode", "report-only", "--json"])
-        .env("ONTARCH_REGISTRY", &registry)
-        .env("WS_ROOT", &ws)
-        .output()
-        .expect("spawn ontarch-bin-cleanup");
-    assert!(
-        out.status.success(),
-        "ontarch bin-cleanup --json must succeed: {}",
-        String::from_utf8_lossy(&out.stderr)
-    );
-    let raw = std::str::from_utf8(&out.stdout).unwrap();
-    assert_one_json_document(raw);
-    let v: Value = serde_json::from_str(raw).unwrap();
-    assert_eq!(v["mutation"], false);
 }
