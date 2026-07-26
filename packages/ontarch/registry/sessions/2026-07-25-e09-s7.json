@@ -167,7 +167,8 @@
           "e2e_mvp"
         ]
       },
-      "completed_at": "2026-07-26T23:18:33Z"
+      "completed_at": "2026-07-26T23:18:33Z",
+      "implementation_commit": "48c1ff98e8173f7bd21ea796a580214459098a1e"
     },
     {
       "phase": "1-final-closure",
