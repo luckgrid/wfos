@@ -608,32 +608,105 @@ ontarch_mktemp_registry() {
   mktemp "$ONTARCH_REGISTRY/.${hint}.XXXXXX"
 }
 
-# Install two generated files with prior retention/rollback.
+# Locked bin path grammar (schema + shell + scope):
+#   namespace/bin/segment(/segment)*
+#   namespace|segment := [A-Za-z0-9][A-Za-z0-9._-]*
+_ONTARCH_BIN_PATH_RE='^[A-Za-z0-9][A-Za-z0-9._-]*/bin(/[A-Za-z0-9][A-Za-z0-9._-]*)+$'
+
+# Checked restore: mv backup onto dest; diagnose on failure.
+_ontarch_checked_restore() {
+  local bak="$1" dest="$2"
+  if ! mv -f "$bak" "$dest"; then
+    _ontarch_diag "generated_pair:rollback_failed"
+    return 1
+  fi
+  return 0
+}
+
+# Checked remove of a newly installed final that had no prior file.
+_ontarch_checked_remove() {
+  local dest="$1"
+  if [ -e "$dest" ] || [ -L "$dest" ]; then
+    if ! rm -f "$dest"; then
+      _ontarch_diag "generated_pair:rollback_failed"
+      return 1
+    fi
+  fi
+  return 0
+}
+
+# Install two generated files with prior-state retention/rollback.
+# Tracks whether each dest existed so an absent A is removed (not left) if B fails.
 # Args: <src_a> <dest_a> <src_b> <dest_b>
 ontarch_install_generated_pair() {
   local src_a="$1" dest_a="$2" src_b="$3" dest_b="$4"
-  local bak_a="" bak_b=""
+  local bak_a="" bak_b="" had_a=0 had_b=0
   [ -f "$src_a" ] && [ -f "$src_b" ] || return 1
-  if [ -f "$dest_a" ]; then
+  [ -e "$dest_a" ] && had_a=1
+  [ -e "$dest_b" ] && had_b=1
+  if [ "$had_a" -eq 1 ]; then
     bak_a="$(ontarch_mktemp_registry bak-a)" || return 1
     cp -f "$dest_a" "$bak_a" || { rm -f "$bak_a"; return 1; }
   fi
-  if [ -f "$dest_b" ]; then
+  if [ "$had_b" -eq 1 ]; then
     bak_b="$(ontarch_mktemp_registry bak-b)" || { rm -f "$bak_a"; return 1; }
     cp -f "$dest_b" "$bak_b" || { rm -f "$bak_a" "$bak_b"; return 1; }
   fi
   if ! mv -f "$src_a" "$dest_a"; then
-    [ -n "$bak_a" ] && mv -f "$bak_a" "$dest_a"
     rm -f "$bak_a" "$bak_b"
     return 1
   fi
   if ! mv -f "$src_b" "$dest_b"; then
-    [ -n "$bak_a" ] && mv -f "$bak_a" "$dest_a"
-    [ -n "$bak_b" ] && mv -f "$bak_b" "$dest_b"
+    if [ "$had_a" -eq 1 ]; then
+      if _ontarch_checked_restore "$bak_a" "$dest_a"; then
+        bak_a=""
+      fi
+    else
+      _ontarch_checked_remove "$dest_a" || true
+    fi
+    if [ "$had_b" -eq 1 ]; then
+      if _ontarch_checked_restore "$bak_b" "$dest_b"; then
+        bak_b=""
+      fi
+    else
+      _ontarch_checked_remove "$dest_b" || true
+    fi
     rm -f "$bak_a" "$bak_b"
     return 1
   fi
   rm -f "$bak_a" "$bak_b"
+  return 0
+}
+
+# Validate a workflow manifest.json against the Phase 1 provenance contract.
+# Args: <manifest.json path>
+ontarch_validate_manifest_doc() {
+  local mf="$1"
+  [ -f "$mf" ] || { _ontarch_diag "manifest:missing_file"; return 1; }
+  local err
+  if ! err="$(jq -r '
+    def retentionok:
+      type == "string"
+      and test("^(review-before-delete|permanent|session-exports|auto-archive-after:[0-9]+d)$");
+    if type != "object" then "manifest:not_object"
+    elif (.id | type) != "string" or (.id | length) < 1 then "manifest:missing_id"
+    elif (.workflow | type) != "string" or (.workflow | length) < 1 then "manifest:missing_workflow"
+    elif (.source | type) != "string" then "manifest:missing_source"
+    elif (.created_at | type) != "string" or (.created_at | length) < 1 then "manifest:missing_created_at"
+    elif (.tool | type) != "string" or (.tool | length) < 1 then "manifest:missing_tool"
+    elif (.outputs | type) != "array" or (.outputs | length) < 1
+      or any(.outputs[]; type != "string") then "manifest:invalid_outputs"
+    elif (.retention | retentionok | not) then "manifest:invalid_retention"
+    elif (.approved_to != null) and ((.approved_to | type) != "string") then "manifest:invalid_approved_to"
+    elif (.archive_reason != null) and (
+      (.archive_reason | IN("superseded","imported","retired","reference","duplicate","stale") | not)
+    ) then "manifest:invalid_archive_reason"
+    else empty end
+  ' "$mf")"; then
+    _ontarch_diag "manifest:jq_validation_error"
+    return 1
+  fi
+  [ -z "$err" ] || { _ontarch_diag "$err"; return 1; }
   return 0
 }
 
@@ -668,7 +741,7 @@ ontarch_validate_graph_doc() {
   local err
   if ! err="$(jq -r '
     def utc: type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$");
-    def no_ctrl: type == "string" and all(explode[]; . >= 32);
+    def no_ctrl: type == "string" and all(explode[]; . >= 32 and . != 127);
     if type != "object" then "graph:not_object"
     elif (keys | sort) != ["edges","generated_at","nodes","registry_generation"] then "graph:unknown_or_missing_root_field"
     elif (.generated_at | utc | not) then "graph:invalid_generated_at"
@@ -691,9 +764,12 @@ ontarch_validate_graph_doc() {
         "registry/policies.json","registry/profiles.json","registry/skills.json","registry/units.json"
       ] then "graph:fingerprint_path_set"
       elif (.nodes | type) != "array" or (.edges | type) != "array" then "graph:invalid_node_or_edge_shape"
-      elif any(.nodes[]; ((keys | sort) != ["id","kind"]) or (.id | no_ctrl | not) or (.id | length) < 1) then "graph:invalid_node_or_edge_shape"
+      elif any(.nodes[]; ((keys | sort) != ["id","kind"])
+        or (.id | type) != "string" or (.id | length) < 1) then "graph:invalid_node_or_edge_shape"
       elif any(.edges[]; ((keys | sort) != ["from","rel","to"])
-        or (.from | no_ctrl | not) or (.to | no_ctrl | not) or (.rel | no_ctrl | not)) then "graph:invalid_node_or_edge_shape"
+        or (.from | type) != "string" or (.to | type) != "string" or (.rel | type) != "string"
+        or (.from | length) < 1 or (.to | length) < 1 or (.rel | length) < 1
+        or (.rel | no_ctrl | not)) then "graph:invalid_node_or_edge_shape"
       elif any(.nodes[]; (.id | no_ctrl | not)) then "graph:control_character_id"
       elif any(.edges[]; (.from | no_ctrl | not) or (.to | no_ctrl | not)) then "graph:control_character_id"
       elif (.nodes | map(.id) | unique | length) != (.nodes | length) then "graph:duplicate_node_id"
@@ -780,8 +856,8 @@ ontarch_validate_bin_inventory_doc() {
       elif any($w[];
         (.path | type) != "string"
         or (.path | test("^/") )
-        or (.path | test("\\\\|\\.\\.|\\n|\\r|\\t"))
-        or (.path | test("^[^/]+/bin(/[^/]+)+$") | not)
+        or (.path | test("\\\\|\\n|\\r|\\t|\\u000c|\\u000b"))
+        or (.path | test("^[A-Za-z0-9][A-Za-z0-9._-]*/bin(/[A-Za-z0-9][A-Za-z0-9._-]*)+$") | not)
         or (.path | test("(^|/)(lib|src)(/|$)"))
       ) then "bin_inventory:unsafe_path"
       elif any($w[];
@@ -827,14 +903,48 @@ ontarch_validate_bin_cleanup_plan_doc() {
     def pathok:
       type == "string" and length > 0
       and (test("^/") | not)
-      and (test("\\\\|\\.\\.|\\n|\\r|\\t") | not)
-      and test("^[^/]+/bin(/[^/]+)+$");
+      and (test("\\\\|\\n|\\r|\\t|\\u000c|\\u000b") | not)
+      and test("^[A-Za-z0-9][A-Za-z0-9._-]*/bin(/[A-Za-z0-9][A-Za-z0-9._-]*)+$");
     def retentionok:
       . == null
       or . == "review-before-delete"
       or . == "permanent"
       or . == "session-exports"
       or (type == "string" and test("^auto-archive-after:[0-9]+d$"));
+    def auto_archive: type == "string" and test("^auto-archive-after:[0-9]+d$");
+    def combo_ok:
+      (.disposition == "would_delete"
+        and .reason == "approved"
+        and .approved_to_matches == true
+        and (.retention | type) == "string"
+        and (.retention | retentionok)
+        and .retention != "permanent"
+        and .retention != null)
+      or (.disposition == "would_archive"
+        and .reason == "stale"
+        and .approved_to_matches == null
+        and (.retention | auto_archive))
+      or (.disposition == "blocked" and .reason == "approved-to-null"
+        and .approved_to_matches == false)
+      or (.disposition == "blocked" and .reason == "approved-to-mismatch"
+        and .approved_to_matches == false)
+      or (.disposition == "blocked" and .reason == "retention-permanent"
+        and .retention == "permanent")
+      or (.disposition == "blocked"
+        and (.reason | IN("no-manifest","multiple-manifests","invalid-manifest","lib-or-src",
+                          "outside-scope","scope-required"))
+        and .approved_to_matches == null)
+      or (.disposition == "advisory" and .reason == "retention-review-required"
+        and (.retention == "review-before-delete" or .retention == "session-exports")
+        and .approved_to_matches == null)
+      or (.disposition == "advisory" and .reason == "stale"
+        and (.retention | auto_archive)
+        and .approved_to_matches == null)
+      or (.disposition == "advisory" and .reason == "current"
+        and .approved_to_matches == null
+        and (.retention == null or (.retention | retentionok)))
+      or (.disposition == "advisory" and .reason == "no-manifest"
+        and .retention == null and .approved_to_matches == null);
     if type != "object" then "bin_cleanup:schema"
     elif (keys | sort) != [
       "entries","generated_at","inventory_generated_at","inventory_refreshed",
@@ -875,6 +985,7 @@ ontarch_validate_bin_cleanup_plan_doc() {
         or (.retention | retentionok | not)
         or ((.approved_to_matches != null) and (.approved_to_matches | type) != "boolean")
       ) then "bin_cleanup:invalid_entry"
+      elif any($e[]; combo_ok | not) then "bin_cleanup:invalid_combination"
       elif .scope != null and (
         (.scope) as $scope | any($e[]; (.path != $scope) and (.path | startswith($scope + "/") | not))
       ) then "bin_cleanup:scope_violation"

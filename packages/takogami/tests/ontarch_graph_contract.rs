@@ -6,6 +6,7 @@ mod support;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::fs;
+use std::path::PathBuf;
 use support::{HermeticOntarch, snapshot_checkout_registry, write_executable};
 
 fn stderr_of(out: &std::process::Output) -> String {
@@ -371,15 +372,132 @@ fn graph_rejects_duplicate_edge_tuple() {
 fn graph_rejects_control_character_id() {
     let h = HermeticOntarch::new();
     h.run_sync_and_require_success();
+    for (label, bad) in [
+        ("newline", "bad\nid"),
+        ("carriage return", "bad\rid"),
+        ("tab", "bad\tid"),
+        ("NUL", "bad\0id"),
+        ("DEL", "bad\u{007f}id"),
+    ] {
+        let combined = mutate_graph(&h, |g| {
+            // Keep edge endpoints consistent so the control check is authoritative.
+            let old = g["nodes"][0]["id"].as_str().unwrap().to_string();
+            g["nodes"][0]["id"] = json!(bad);
+            if let Some(edges) = g["edges"].as_array_mut() {
+                for e in edges {
+                    if e["from"] == old {
+                        e["from"] = json!(bad);
+                    }
+                    if e["to"] == old {
+                        e["to"] = json!(bad);
+                    }
+                }
+            }
+        });
+        assert_graph_diag(&combined, "graph:control_character_id");
+        let _ = label;
+    }
+}
+
+#[test]
+fn graph_rejects_same_id_different_kind() {
+    let h = HermeticOntarch::new();
+    h.run_sync_and_require_success();
     let combined = mutate_graph(&h, |g| {
-        g["nodes"][0]["id"] = json!("bad\nid");
+        let id = g["nodes"][0]["id"].clone();
+        g["nodes"].as_array_mut().unwrap().push(json!({
+            "id": id,
+            "kind": "policy"
+        }));
+        let nodes = g["nodes"].as_array_mut().unwrap();
+        nodes.sort_by(|a, b| {
+            (a["kind"].as_str().unwrap(), a["id"].as_str().unwrap())
+                .cmp(&(b["kind"].as_str().unwrap(), b["id"].as_str().unwrap()))
+        });
     });
-    assert!(
-        combined.contains("graph:control_character_id")
-            || combined.contains("graph:invalid_node_or_edge_shape")
-            || combined.contains("graph:dangling_edge_endpoint"),
-        "{combined}"
+    assert_graph_diag(&combined, "graph:duplicate_node_id");
+}
+
+#[test]
+fn sync_first_install_rolls_back_absent_pair_on_dot_failure() {
+    let h = HermeticOntarch::new();
+    assert!(!h.registry.join("graph.json").exists());
+    assert!(!h.registry.join("graph.dot").exists());
+    let tools = h.tools_bsd_stat();
+    let real_mv = {
+        let mut found = None;
+        for prefix in ["/bin", "/usr/bin"] {
+            let p = std::path::PathBuf::from(prefix).join("mv");
+            if p.is_file() {
+                found = Some(p);
+                break;
+            }
+        }
+        found.expect("mv")
+    };
+    let _ = fs::remove_file(tools.join("mv"));
+    write_executable(
+        &tools.join("mv"),
+        &format!(
+            r#"#!/bin/sh
+set -eu
+dest=""
+for a in "$@"; do dest="$a"; done
+case "$dest" in
+  *.dot|*/graph.dot) exit 1 ;;
+esac
+exec {real} "$@"
+"#,
+            real = support::shell_single_quote(&real_mv.to_string_lossy()),
+        ),
     );
+    let out = h.run_with_path(&h.sync, &[], &tools);
+    assert!(
+        !out.status.success(),
+        "first-install DOT failure must fail sync"
+    );
+    assert!(
+        !h.registry.join("graph.json").exists(),
+        "absent A must be removed after B failure"
+    );
+    assert!(!h.registry.join("graph.dot").exists());
+    for entry in fs::read_dir(&h.registry).unwrap() {
+        let name = entry.unwrap().file_name().to_string_lossy().to_string();
+        for prefix in [".graph-json.", ".graph-dot.", ".bak-a.", ".bak-b."] {
+            assert!(!name.starts_with(prefix), "temp leak: {name}");
+        }
+    }
+}
+
+#[test]
+fn e2e_registry_fixture_digests_match_tracked_bytes() {
+    let fixture =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/e2e/ontarch/registry");
+    let graph: Value =
+        serde_json::from_str(&fs::read_to_string(fixture.join("graph.json")).unwrap()).unwrap();
+    let fps = graph["registry_generation"]["source_fingerprints"]
+        .as_array()
+        .expect("fingerprints");
+    assert_eq!(fps.len(), 4);
+    for name in [
+        "policies.json",
+        "profiles.json",
+        "skills.json",
+        "units.json",
+    ] {
+        let bytes = fs::read(fixture.join(name)).unwrap();
+        let digest = format!("{:x}", Sha256::digest(&bytes));
+        let entry = fps
+            .iter()
+            .find(|f| f["path"] == format!("registry/{name}"))
+            .unwrap_or_else(|| panic!("missing fingerprint for {name}"));
+        assert_eq!(entry["algorithm"], "sha256");
+        assert_eq!(
+            entry["digest"].as_str().unwrap(),
+            digest,
+            "E2E digest drift for {name}"
+        );
+    }
 }
 
 #[test]

@@ -31,7 +31,7 @@
         {
           "type": "string",
           "minLength": 1,
-          "pattern": "^[A-Za-z0-9._-]+/bin(/[A-Za-z0-9._-]+)+$"
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*/bin(/[A-Za-z0-9][A-Za-z0-9._-]*)+$"
         }
       ]
     },
@@ -63,7 +63,7 @@
           "path": {
             "type": "string",
             "minLength": 1,
-            "pattern": "^[A-Za-z0-9._-]+/bin(/[A-Za-z0-9._-]+)+$"
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*/bin(/[A-Za-z0-9][A-Za-z0-9._-]*)+$"
           },
           "disposition": {
             "type": "string",
@@ -97,7 +97,35 @@
             ]
           },
           "approved_to_matches": { "type": ["boolean", "null"] }
-        }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "disposition": { "const": "would_delete" } } },
+            "then": {
+              "properties": {
+                "reason": { "const": "approved" },
+                "approved_to_matches": { "const": true },
+                "retention": {
+                  "type": "string",
+                  "pattern": "^(review-before-delete|session-exports|auto-archive-after:[0-9]+d)$"
+                }
+              }
+            }
+          },
+          {
+            "if": { "properties": { "disposition": { "const": "would_archive" } } },
+            "then": {
+              "properties": {
+                "reason": { "const": "stale" },
+                "approved_to_matches": { "type": "null" },
+                "retention": {
+                  "type": "string",
+                  "pattern": "^auto-archive-after:[0-9]+d$"
+                }
+              }
+            }
+          }
+        ]
       }
     },
     "mutation_executed": { "type": "boolean", "const": false }

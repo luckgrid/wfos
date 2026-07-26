@@ -75,6 +75,81 @@
   ],
   "progress": [
     {
+      "phase": "1-final-closure",
+      "title": "Phase 1 final closure corrections (follow-up review F01\u2013F08)",
+      "status": "done",
+      "addendum": "Build/bin/wfos/2026-07-26-wfos-e09-s7-phase-1-closure-follow-up-review-final-corrections.md",
+      "based_on_closure_commit": "fc99ae20230d1c5d1a48ea6edccecd7506c3ce55",
+      "implementation_commits": {
+        "phase_1": "6b30400b98186eae4b4382079158ef050a8f57d6",
+        "phase_1_closure_iteration": "fc99ae20230d1c5d1a48ea6edccecd7506c3ce55",
+        "phase_1_final_correction": "pending_user_commit (gate green on working tree over fc99ae2)"
+      },
+      "summary": "Closed F01\u2013F08: pair-install tracks had_a/had_b with checked restore/remove and generated_pair:rollback_failed; locked path grammar across schema/shell/scope/Rust; ontarch_validate_manifest_doc before archive/delete classification; cleanup combo_ok matrix + schema if/then; agent archive/delete refuse after option/scope parse before inventory; human report-only honors scope; graph no_ctrl rejects DEL with stable control_character_id; first-install DOT rollback; invalid-workflow report retains prior pair; E2E digest recomputation test; ontarch-validate cleanup negatives complete.",
+      "production_changed_paths": [
+        "packages/ontarch/lib/registry.sh",
+        "packages/ontarch/bin/ontarch-bin-cleanup",
+        "packages/ontarch/bin/ontarch-validate",
+        "packages/ontarch/schemas/bin-inventory.schema.json",
+        "packages/ontarch/schemas/bin-cleanup-plan.schema.json"
+      ],
+      "test_changed_paths": [
+        "packages/takogami/tests/ontarch_bin_contract.rs",
+        "packages/takogami/tests/ontarch_graph_contract.rs",
+        "packages/takogami/tests/support/schemas.rs",
+        "packages/takogami/tests/support/ontarch_fixture.rs"
+      ],
+      "gate": {
+        "toolchain": {
+          "rustc": "1.96.0",
+          "moon": "2.3.2"
+        },
+        "platform_macos": {
+          "arch": "aarch64-apple-darwin",
+          "ontarch_graph_contract": "27 passed",
+          "ontarch_bin_contract": "26 passed",
+          "ontarch_sync": "PASS",
+          "ontarch_scan": "PASS",
+          "ontarch_validate": "PASS",
+          "bin_report_json": "PASS",
+          "bin_cleanup_report_only_json": "PASS",
+          "bin_cleanup_dry_run_json": "PASS",
+          "takogami_build": "PASS",
+          "takogami_lint": "PASS",
+          "takogami_format_check": "PASS",
+          "git_diff_check": "PASS",
+          "refusal_non_mutation": "PASS (agent_rail before inventory + draft gateway + scoped refusals)"
+        },
+        "platform_linux": {
+          "vm": "lima wfos-s61-alpine",
+          "arch": "aarch64",
+          "kernel": "Alpine Linux virt",
+          "ontarch_graph_contract": "27 passed",
+          "ontarch_bin_contract": "26 passed",
+          "script_non_mutation": "PASS",
+          "script_agent_refusal_before_inventory": "PASS",
+          "script_archive_delete_draft_refusal": "PASS",
+          "script_invalid_scope_no_write": "PASS",
+          "script_invalid_inventory_no_overwrite": "PASS",
+          "script_initial_pair_rollback": "PASS",
+          "script_existing_pair_rollback": "PASS"
+        },
+        "ci_evidence": {
+          "macos_local_gate": "PASS",
+          "lima_linux_local_gate": "PASS",
+          "github_actions_status_checks": "not present for reviewed working tree"
+        },
+        "expected_red": [
+          "graph_cli",
+          "bin_cli",
+          "e2e_mvp"
+        ],
+        "phase_1_done": true,
+        "takogami_graph_bin_handlers": false
+      },
+      "completed_at": "2026-07-26T21:04:06Z"
+    },
+    {
       "phase": "1-closure",
       "title": "Phase 1 closure corrections (implementation-review addendum)",
       "status": "done",
@@ -281,9 +356,10 @@
     "packages/ontarch/registry/sessions/2026-07-25-e09-s6.1.json",
     "packages/ontarch/registry/sessions/2026-07-24-e09-s6.json",
     "Build/bin/wfos/2026-07-26-wfos-e09-s7-phase-0-follow-up-review-phase-1-completion-addendum.md",
-    "Build/bin/wfos/2026-07-26-wfos-e09-s7-phase-1-implementation-review-closure-corrections-addendum.md"
+    "Build/bin/wfos/2026-07-26-wfos-e09-s7-phase-1-implementation-review-closure-corrections-addendum.md",
+    "Build/bin/wfos/2026-07-26-wfos-e09-s7-phase-1-closure-follow-up-review-final-corrections.md"
   ],
   "next": "E09.S7 Phase 2 Takogami graph adapter \u2014 only after explicit go-ahead; Phase 1 DONE",
   "blockers": [],
-  "token_note": "Phase 1 closure corrections green (24 graph + 21 bin contract tests; dual-platform refusal/non-mutation). Phase 2 blocked until go-ahead."
+  "token_note": "Phase 1 final closure corrections green (27 graph + 26 bin; dual-platform). Phase 2 blocked until go-ahead. Final correction commit pending user commit."
 }

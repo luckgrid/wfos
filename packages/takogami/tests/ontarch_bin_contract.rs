@@ -88,32 +88,30 @@ fn ontarch_bin_report_human_mode_preserves_table() {
 }
 
 #[test]
-fn ontarch_bin_report_validation_failure_retains_previous_inventory() {
+fn ontarch_bin_report_invalid_workflow_name_retains_previous_inventory() {
     let h = HermeticOntarch::new();
     h.seed_bin_workflow("Build", "demo", true);
     require_success(&h.run_bin_report(&["--json"]), "seed inventory");
-    let before = fs::read_to_string(h.registry.join("bin-inventory.json")).unwrap();
-    // Corrupt emit by replacing inventory root mid-flight is hard; instead write an
-    // invalid inventory and prove validate rejects without claiming success via cleanup.
-    h.write_inventory_fixture(&json!({
-        "generated_at": "not-a-timestamp",
-        "root": h.ws_root.to_str().unwrap(),
-        "summary": {"total": 0, "with_manifest": 0},
-        "workflows": []
-    }));
-    // Re-run report — should regenerate valid and replace bad; for retention proof,
-    // break the emitter by pointing WS to empty... simpler: assert invalid fixture fails validate helper.
-    let bad: Value =
-        serde_json::from_str(&fs::read_to_string(h.registry.join("bin-inventory.json")).unwrap())
-            .unwrap();
-    let result = std::panic::catch_unwind(|| validate_inventory_schema(&bad));
-    assert!(result.is_err(), "invalid generated_at must fail schema");
-    // Restore via successful report
-    require_success(&h.run_bin_report(&["--json"]), "repair");
-    let after = fs::read_to_string(h.registry.join("bin-inventory.json")).unwrap();
-    let restored: Value = serde_json::from_str(&after).unwrap();
-    validate_inventory_schema(&restored);
-    assert_ne!(before.is_empty(), true);
+    let before_json = fs::read(h.registry.join("bin-inventory.json")).unwrap();
+    let before_md = fs::read(h.registry.join("BIN-INVENTORY.md")).unwrap();
+    // Invalid workflow dirname (space) makes emit produce a schema-illegal path.
+    let bad = h.ws_root.join("Build/bin/demo space");
+    fs::create_dir_all(&bad).unwrap();
+    fs::write(bad.join("x.txt"), b"x\n").unwrap();
+    let out = h.run_bin_report(&["--json"]);
+    assert!(
+        !out.status.success(),
+        "invalid workflow path must fail report"
+    );
+    assert_eq!(
+        before_json,
+        fs::read(h.registry.join("bin-inventory.json")).unwrap()
+    );
+    assert_eq!(
+        before_md,
+        fs::read(h.registry.join("BIN-INVENTORY.md")).unwrap()
+    );
+    assert_no_registry_temp_leaks(&h);
 }
 
 #[test]
@@ -298,75 +296,78 @@ fn ontarch_option_matrix_mode_scope_json() {
 #[test]
 fn ontarch_cleanup_semantic_matrix_dispositions() {
     let h = HermeticOntarch::new();
-    // permanent
-    h.seed_bin_workflow_manifest("Build", "perm", r#"{"id":"perm","retention":"permanent"}"#);
-    // review-before-delete (advisory; not auto-stale)
+    h.seed_bin_workflow_manifest(
+        "Build",
+        "perm",
+        &HermeticOntarch::complete_manifest("perm", "permanent", None),
+    );
     h.seed_bin_workflow_manifest(
         "Build",
         "review",
-        r#"{"id":"review","retention":"review-before-delete"}"#,
+        &HermeticOntarch::complete_manifest("review", "review-before-delete", None),
     );
-    // session-exports
     h.seed_bin_workflow_manifest(
         "Build",
         "sess",
-        r#"{"id":"sess","retention":"session-exports"}"#,
+        &HermeticOntarch::complete_manifest("sess", "session-exports", None),
     );
-    // auto-archive threshold not reached (newest age under shim is large; use huge N)
     h.seed_bin_workflow_manifest(
         "Build",
         "fresh-auto",
-        r#"{"id":"fa","retention":"auto-archive-after:99999d"}"#,
+        &HermeticOntarch::complete_manifest("fa", "auto-archive-after:99999d", None),
     );
-    // auto-archive threshold reached (N=1; shim ages are >> 1 day)
     h.seed_bin_workflow_manifest(
         "Build",
         "stale-auto",
-        r#"{"id":"sa","retention":"auto-archive-after:1d"}"#,
+        &HermeticOntarch::complete_manifest("sa", "auto-archive-after:1d", None),
     );
-    // no manifest
     h.seed_bin_workflow("Build", "bare", false);
-    // approved_to match / mismatch / null
     h.seed_bin_workflow_manifest(
         "Build",
         "approved",
-        r#"{"id":"a","retention":"review-before-delete","approved_to":"Build/bin/approved"}"#,
+        &HermeticOntarch::complete_manifest(
+            "a",
+            "review-before-delete",
+            Some("Build/bin/approved"),
+        ),
     );
     h.seed_bin_workflow_manifest(
         "Build",
         "mismatch",
-        r#"{"id":"m","retention":"review-before-delete","approved_to":"Build/bin/other"}"#,
+        &HermeticOntarch::complete_manifest("m", "review-before-delete", Some("Build/bin/other")),
     );
     h.seed_bin_workflow_manifest(
         "Build",
         "nullapp",
-        r#"{"id":"n","retention":"review-before-delete"}"#,
+        &HermeticOntarch::complete_manifest("n", "review-before-delete", None),
     );
-    // nested single manifest (accepted)
+    h.seed_bin_workflow_manifest(
+        "Build",
+        "incomplete",
+        r#"{"id":"inc","approved_to":"Build/bin/incomplete"}"#,
+    );
     let nested = h.ws_root.join("Build/bin/nested/deep");
     fs::create_dir_all(&nested).unwrap();
     fs::write(nested.join("artifact.txt"), b"x\n").unwrap();
     fs::write(
         nested.join("manifest.json"),
-        r#"{"id":"nested","retention":"review-before-delete"}"#,
+        HermeticOntarch::complete_manifest("nested", "review-before-delete", None),
     )
     .unwrap();
-    // multiple manifests → blocked
     let multi = h.ws_root.join("Build/bin/multi");
     fs::create_dir_all(multi.join("a")).unwrap();
     fs::create_dir_all(multi.join("b")).unwrap();
     fs::write(
         multi.join("a/manifest.json"),
-        r#"{"id":"a","retention":"review-before-delete"}"#,
+        HermeticOntarch::complete_manifest("a", "review-before-delete", None),
     )
     .unwrap();
     fs::write(
         multi.join("b/manifest.json"),
-        r#"{"id":"b","retention":"review-before-delete"}"#,
+        HermeticOntarch::complete_manifest("b", "review-before-delete", None),
     )
     .unwrap();
 
-    // Use controlled ages so auto-archive predicates are deterministic.
     let tools = h.tools_bsd_stat();
     let out = h.run_with_path(&h.bin_report, &["--json"], &tools);
     require_success(&out, "inv");
@@ -391,6 +392,11 @@ fn ontarch_cleanup_semantic_matrix_dispositions() {
     assert_eq!(
         by_path["Build/bin/review"]["reason"],
         "retention-review-required"
+    );
+    assert_eq!(by_path["Build/bin/incomplete"]["disposition"], "blocked");
+    assert_eq!(
+        by_path["Build/bin/incomplete"]["reason"],
+        "invalid-manifest"
     );
     assert_eq!(by_path["Build/bin/sess"]["disposition"], "advisory");
     assert_eq!(
@@ -442,6 +448,28 @@ fn ontarch_cleanup_semantic_matrix_dispositions() {
             "--mode",
             "dry-run",
             "--scope",
+            "Build/bin/incomplete",
+            "--json",
+        ],
+        &tools,
+    );
+    require_success(&out, "incomplete scoped");
+    let plan = assert_one_json_document(std::str::from_utf8(&out.stdout).unwrap());
+    let entry = plan["entries"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|e| e["path"] == "Build/bin/incomplete")
+        .unwrap();
+    assert_eq!(entry["disposition"], "blocked");
+    assert_eq!(entry["reason"], "invalid-manifest");
+
+    let out = h.run_with_path(
+        &h.bin_cleanup,
+        &[
+            "--mode",
+            "dry-run",
+            "--scope",
             "Build/bin/mismatch",
             "--json",
         ],
@@ -480,127 +508,12 @@ fn ontarch_cleanup_semantic_matrix_dispositions() {
     assert_eq!(entry["disposition"], "blocked");
     assert_eq!(entry["reason"], "approved-to-null");
 
-    // empty inventory
     h.write_inventory_fixture(&sample_inventory(h.ws_root.to_str().unwrap()));
     let out = h.run_bin_cleanup(&["--mode", "report-only", "--json"]);
     require_success(&out, "empty");
     let plan = assert_one_json_document(std::str::from_utf8(&out.stdout).unwrap());
     assert_eq!(plan["summary"]["total"], 0);
     assert_cleanup_semantics(&plan);
-}
-
-#[test]
-fn ontarch_cleanup_preflight_does_not_write_registry_on_bad_args() {
-    let h = HermeticOntarch::new();
-    h.seed_bin_workflow("Build", "demo", true);
-    // Ensure inventory absent so a buggy preflight would refresh.
-    let _ = fs::remove_file(h.registry.join("bin-inventory.json"));
-    let _ = fs::remove_file(h.registry.join("BIN-INVENTORY.md"));
-
-    for args in [
-        vec!["--mode", "report-only", "--scope", "/etc/passwd", "--json"],
-        vec![
-            "--mode",
-            "report-only",
-            "--scope",
-            "Build/bin/demo",
-            "--scope",
-            "Build/bin/x",
-            "--json",
-        ],
-        vec!["--mode", "report-only", "--scope", "--json"],
-        vec!["--bogus", "--json"],
-    ] {
-        let before_inv = h.registry.join("bin-inventory.json").exists();
-        let before_md = h.registry.join("BIN-INVENTORY.md").exists();
-        let out = h.run_bin_cleanup(&args);
-        assert!(!out.status.success(), "args {args:?} must fail");
-        assert_eq!(
-            before_inv,
-            h.registry.join("bin-inventory.json").exists(),
-            "inventory must stay absent for {args:?}"
-        );
-        assert_eq!(
-            before_md,
-            h.registry.join("BIN-INVENTORY.md").exists(),
-            "markdown must stay absent for {args:?}"
-        );
-    }
-}
-
-#[test]
-fn ontarch_cleanup_invalid_inventory_fail_closed_byte_identical() {
-    let h = HermeticOntarch::new();
-    h.seed_bin_workflow("Build", "demo", true);
-    let bad = json!({
-        "generated_at": "not-a-timestamp",
-        "root": h.ws_root.to_str().unwrap(),
-        "summary": {"total": 0, "with_manifest": 0},
-        "workflows": []
-    });
-    h.write_inventory_fixture(&bad);
-    let before = fs::read(h.registry.join("bin-inventory.json")).unwrap();
-    let out = h.run_bin_cleanup(&["--mode", "report-only", "--json"]);
-    assert!(!out.status.success());
-    assert!(
-        out.stdout.is_empty()
-            || !std::str::from_utf8(&out.stdout)
-                .unwrap()
-                .contains("entries")
-    );
-    let after = fs::read(h.registry.join("bin-inventory.json")).unwrap();
-    assert_eq!(
-        before, after,
-        "invalid inventory must remain byte-identical"
-    );
-}
-
-#[test]
-fn ontarch_bin_report_retains_prior_on_install_helper_failure() {
-    let h = HermeticOntarch::new();
-    h.seed_bin_workflow("Build", "demo", true);
-    require_success(&h.run_bin_report(&["--json"]), "seed");
-    let before = fs::read(h.registry.join("bin-inventory.json")).unwrap();
-    let before_md = fs::read(h.registry.join("BIN-INVENTORY.md")).unwrap();
-
-    // Break install by making the registry directory non-writable for new temps after seed.
-    // Safer approach: replace install helper via a shimmed mv that fails on BIN-INVENTORY.md.
-    let tools = h.tools_bsd_stat();
-    let real_mv = which_host("mv").expect("mv");
-    let marker = tools.join("MV_FAIL");
-    let _ = fs::remove_file(tools.join("mv"));
-    write_executable(
-        &tools.join("mv"),
-        &format!(
-            r#"#!/bin/sh
-set -eu
-for a in "$@"; do
-  case "$a" in
-    *BIN-INVENTORY.md) echo fail-md >> {marker}; exit 1 ;;
-  esac
-done
-exec {real} "$@"
-"#,
-            marker = support::shell_single_quote(&marker.to_string_lossy()),
-            real = support::shell_single_quote(&real_mv.to_string_lossy()),
-        ),
-    );
-    let out = h.run_with_path(&h.bin_report, &["--json"], &tools);
-    assert!(!out.status.success(), "install failure must be nonzero");
-    let after = fs::read(h.registry.join("bin-inventory.json")).unwrap();
-    let after_md = fs::read(h.registry.join("BIN-INVENTORY.md")).unwrap();
-    assert_eq!(before, after, "json retained");
-    assert_eq!(before_md, after_md, "md retained");
-}
-
-fn which_host(name: &str) -> Option<std::path::PathBuf> {
-    for prefix in ["/bin", "/usr/bin", "/usr/sbin", "/sbin"] {
-        let p = std::path::PathBuf::from(prefix).join(name);
-        if p.is_file() {
-            return Some(p);
-        }
-    }
-    None
 }
 
 #[test]
@@ -795,4 +708,503 @@ ontarch_validate_bin_cleanup_plan_doc {path}
         .env_remove("ONTARCH_REGISTRY")
         .output()
         .unwrap()
+}
+
+fn assert_no_registry_temp_leaks(h: &HermeticOntarch) {
+    for entry in fs::read_dir(&h.registry).unwrap() {
+        let name = entry.unwrap().file_name().to_string_lossy().to_string();
+        for prefix in [
+            ".bin-inv.",
+            ".bin-md.",
+            ".graph-json.",
+            ".graph-dot.",
+            ".bak-a.",
+            ".bak-b.",
+            ".bin-plan.",
+        ] {
+            assert!(!name.starts_with(prefix), "temp leak remains: {name}");
+        }
+    }
+}
+
+fn which_host(name: &str) -> Option<std::path::PathBuf> {
+    for prefix in ["/bin", "/usr/bin", "/usr/sbin", "/sbin"] {
+        let p = std::path::PathBuf::from(prefix).join(name);
+        if p.is_file() {
+            return Some(p);
+        }
+    }
+    None
+}
+
+fn install_mv_shim(tools: &std::path::Path, body: &str) {
+    let real_mv = which_host("mv").expect("mv");
+    let _ = fs::remove_file(tools.join("mv"));
+    write_executable(
+        &tools.join("mv"),
+        &body.replace(
+            "__REAL_MV__",
+            &support::shell_single_quote(&real_mv.to_string_lossy()),
+        ),
+    );
+}
+
+fn assert_inv_pair_state(h: &HermeticOntarch, json: Option<&[u8]>, md: Option<&[u8]>) {
+    let jp = h.registry.join("bin-inventory.json");
+    let mp = h.registry.join("BIN-INVENTORY.md");
+    match json {
+        Some(b) => {
+            assert!(jp.is_file(), "expected inventory json");
+            assert_eq!(fs::read(&jp).unwrap(), b);
+        }
+        None => assert!(!jp.exists(), "inventory json must be absent"),
+    }
+    match md {
+        Some(b) => {
+            assert!(mp.is_file(), "expected inventory md");
+            assert_eq!(fs::read(&mp).unwrap(), b);
+        }
+        None => assert!(!mp.exists(), "inventory md must be absent"),
+    }
+}
+
+#[test]
+fn ontarch_pair_install_prior_state_matrix_on_b_failure() {
+    // Four prior-state combos × B (Markdown) install failure.
+    for (label, seed_json, seed_md) in [
+        ("neither", false, false),
+        ("only_a", true, false),
+        ("only_b", false, true),
+        ("both", true, true),
+    ] {
+        let h = HermeticOntarch::new();
+        h.seed_bin_workflow("Build", "demo", true);
+        require_success(&h.run_bin_report(&["--json"]), "seed");
+        let prior_json = fs::read(h.registry.join("bin-inventory.json")).unwrap();
+        let prior_md = fs::read(h.registry.join("BIN-INVENTORY.md")).unwrap();
+        if !seed_json {
+            let _ = fs::remove_file(h.registry.join("bin-inventory.json"));
+        }
+        if !seed_md {
+            let _ = fs::remove_file(h.registry.join("BIN-INVENTORY.md"));
+        } else if !seed_json {
+            // only_b: keep md bytes, drop json
+            fs::write(h.registry.join("BIN-INVENTORY.md"), &prior_md).unwrap();
+        }
+        let expect_json = if seed_json {
+            Some(prior_json.as_slice())
+        } else {
+            None
+        };
+        let expect_md = if seed_md {
+            Some(prior_md.as_slice())
+        } else {
+            None
+        };
+
+        let tools = h.tools_bsd_stat();
+        install_mv_shim(
+            &tools,
+            r#"#!/bin/sh
+set -eu
+dest=""
+for a in "$@"; do dest="$a"; done
+case "$dest" in
+  *BIN-INVENTORY.md) exit 1 ;;
+esac
+exec __REAL_MV__ "$@"
+"#,
+        );
+        let out = h.run_with_path(&h.bin_report, &["--json"], &tools);
+        assert!(
+            !out.status.success(),
+            "{label}: report must fail on B install\n{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let combined = format!(
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert!(
+            !combined.contains("ok BIN-INVENTORY") && !combined.contains("ok bin-inventory"),
+            "{label}: must not claim success\n{combined}"
+        );
+        assert_inv_pair_state(&h, expect_json, expect_md);
+        assert_no_registry_temp_leaks(&h);
+    }
+}
+
+#[test]
+fn ontarch_pair_install_a_failure_retains_prior() {
+    let h = HermeticOntarch::new();
+    h.seed_bin_workflow("Build", "demo", true);
+    require_success(&h.run_bin_report(&["--json"]), "seed");
+    let prior_json = fs::read(h.registry.join("bin-inventory.json")).unwrap();
+    let prior_md = fs::read(h.registry.join("BIN-INVENTORY.md")).unwrap();
+    let tools = h.tools_bsd_stat();
+    install_mv_shim(
+        &tools,
+        r#"#!/bin/sh
+set -eu
+dest=""
+for a in "$@"; do dest="$a"; done
+case "$dest" in
+  *bin-inventory.json) exit 1 ;;
+esac
+exec __REAL_MV__ "$@"
+"#,
+    );
+    let out = h.run_with_path(&h.bin_report, &["--json"], &tools);
+    assert!(!out.status.success());
+    assert_inv_pair_state(&h, Some(&prior_json), Some(&prior_md));
+    assert_no_registry_temp_leaks(&h);
+}
+
+#[test]
+fn ontarch_pair_install_rollback_restore_failure_diagnoses() {
+    let h = HermeticOntarch::new();
+    h.seed_bin_workflow("Build", "demo", true);
+    require_success(&h.run_bin_report(&["--json"]), "seed");
+    let tools = h.tools_bsd_stat();
+    install_mv_shim(
+        &tools,
+        r#"#!/bin/sh
+set -eu
+src=""
+dest=""
+# mv [-f] src dest — collect last two non-option args
+for a in "$@"; do
+  case "$a" in
+    -*) ;;
+    *) src="$dest"; dest="$a" ;;
+  esac
+done
+case "$dest" in
+  *BIN-INVENTORY.md) exit 1 ;;
+esac
+case "$src" in
+  */.bak-a.*) exit 1 ;;
+esac
+exec __REAL_MV__ "$@"
+"#,
+    );
+    let out = h.run_with_path(&h.bin_report, &["--json"], &tools);
+    assert!(!out.status.success());
+    let err = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        err.contains("generated_pair:rollback_failed"),
+        "expected rollback_failed\n{err}"
+    );
+    assert_no_registry_temp_leaks(&h);
+}
+
+#[test]
+fn ontarch_agent_mutation_refuses_before_inventory_work() {
+    let h = HermeticOntarch::new();
+    h.seed_bin_workflow("Build", "demo", true);
+    let _ = fs::remove_file(h.registry.join("bin-inventory.json"));
+    let _ = fs::remove_file(h.registry.join("BIN-INVENTORY.md"));
+
+    for (mode, extra) in [
+        ("archive", None),
+        ("delete-approved", Some("Build/bin/demo")),
+    ] {
+        let mut args = vec!["--mode", mode, "--json"];
+        if let Some(scope) = extra {
+            args.extend_from_slice(&["--scope", scope]);
+        }
+        let out = std::process::Command::new(&h.bin_cleanup)
+            .args(&args)
+            .current_dir(&h.ws_root)
+            .env("WS_ROOT", &h.ws_root)
+            .env("PANOPLY_AGENT", "1")
+            .env_remove("ONTARCH_REGISTRY")
+            .env_remove("AGENTS_HOME")
+            .output()
+            .unwrap();
+        assert!(!out.status.success(), "{mode}");
+        assert!(out.stdout.is_empty(), "{mode} stdout must be empty");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(err.contains("agent_rail"), "{mode}: {err}");
+        assert!(!h.registry.join("bin-inventory.json").exists());
+        assert!(!h.registry.join("BIN-INVENTORY.md").exists());
+    }
+
+    // Invalid existing inventory must not change the agent_rail authority.
+    let mut bad = sample_inventory(h.ws_root.to_str().unwrap());
+    bad["extra"] = json!(1);
+    h.write_inventory_fixture(&bad);
+    let before = fs::read(h.registry.join("bin-inventory.json")).unwrap();
+    let out = std::process::Command::new(&h.bin_cleanup)
+        .args(["--mode", "archive", "--json"])
+        .current_dir(&h.ws_root)
+        .env("WS_ROOT", &h.ws_root)
+        .env("PANOPLY_AGENT", "1")
+        .env_remove("ONTARCH_REGISTRY")
+        .output()
+        .unwrap();
+    assert!(!out.status.success());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("agent_rail"));
+    assert_eq!(
+        before,
+        fs::read(h.registry.join("bin-inventory.json")).unwrap()
+    );
+}
+
+#[test]
+fn ontarch_parser_and_scoped_human_matrix() {
+    let h = HermeticOntarch::new();
+    h.seed_bin_workflow("Build", "demo", true);
+    h.seed_bin_workflow("Build", "other", true);
+    require_success(&h.run_bin_report(&["--json"]), "inv");
+
+    // duplicate --json is idempotent
+    let out = h.run_bin_cleanup(&["--json", "--json", "--mode", "report-only"]);
+    require_success(&out, "duplicate json");
+    assert_cleanup_semantics(&assert_one_json_document(
+        std::str::from_utf8(&out.stdout).unwrap(),
+    ));
+
+    // help
+    let out = h.run_bin_cleanup(&["--help"]);
+    require_success(&out, "help");
+    let help = String::from_utf8_lossy(&out.stdout);
+    assert!(help.contains("report-only"));
+
+    // --scope=value
+    let out = h.run_bin_cleanup(&["--mode", "report-only", "--scope=Build/bin/demo", "--json"]);
+    require_success(&out, "scope=value");
+    let v = assert_one_json_document(std::str::from_utf8(&out.stdout).unwrap());
+    assert_eq!(v["scope"], "Build/bin/demo");
+    assert_eq!(v["summary"]["total"], 1);
+
+    // report-only without scope
+    let out = h.run_bin_cleanup(&["--mode", "report-only", "--json"]);
+    require_success(&out, "report-only no scope");
+    let v = assert_one_json_document(std::str::from_utf8(&out.stdout).unwrap());
+    assert!(v["summary"]["total"].as_u64().unwrap() >= 2);
+
+    // dry-run without scope
+    let out = h.run_bin_cleanup(&["--mode", "dry-run", "--json"]);
+    require_success(&out, "dry-run no scope");
+    assert_cleanup_semantics(&assert_one_json_document(
+        std::str::from_utf8(&out.stdout).unwrap(),
+    ));
+
+    // human report-only with scope excludes outside entries
+    let out = h.run_bin_cleanup(&["--mode", "report-only", "--scope", "Build/bin/demo"]);
+    require_success(&out, "human scoped");
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(text.contains("scope: Build/bin/demo"));
+    assert!(
+        !text.contains("Build/bin/other"),
+        "scoped human must exclude outside paths\n{text}"
+    );
+
+    // human dry-run retains expected sections
+    let out = h.run_bin_cleanup(&["--mode", "dry-run"]);
+    require_success(&out, "human dry-run");
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(text.contains("plan (archive candidates)"));
+    assert!(text.contains("plan (delete-approved candidates"));
+
+    // human archive / delete refusals
+    let out = h.run_bin_cleanup(&["--mode", "archive"]);
+    assert!(!out.status.success());
+    let out = h.run_bin_cleanup(&["--mode", "delete-approved", "--scope", "Build/bin/demo"]);
+    assert!(!out.status.success());
+
+    // JSON refusal stdout empty
+    let out = h.run_bin_cleanup(&["--mode", "archive", "--json"]);
+    assert!(!out.status.success());
+    assert!(out.stdout.is_empty());
+}
+
+#[test]
+fn path_grammar_schema_shell_parity_corpus() {
+    let h = HermeticOntarch::new();
+    for (label, path, ok) in support::path_grammar_corpus() {
+        let mut doc = sample_inventory(h.ws_root.to_str().unwrap());
+        doc["workflows"] = json!([{
+            "path": path,
+            "size_bytes": 1,
+            "file_count": 1,
+            "oldest_file_age_days": 1,
+            "newest_file_age_days": 1,
+            "manifest_present": false,
+            "manifest_count": 0
+        }]);
+        doc["summary"] = json!({"total": 1, "with_manifest": 0});
+        let schema_ok = support::inventory_schema_ok(&doc);
+        let shell = shell_validate_inventory(&h, &doc);
+        assert_eq!(
+            schema_ok, ok,
+            "{label}: schema ok={schema_ok} expected {ok} for {path}"
+        );
+        assert_eq!(
+            shell.status.success(),
+            ok,
+            "{label}: shell success={} expected {ok} for {path}\n{}",
+            shell.status.success(),
+            String::from_utf8_lossy(&shell.stderr)
+        );
+        // Scope preflight uses the same grammar.
+        if !ok && !path.contains('\n') {
+            let out = h.run_bin_cleanup(&["--mode", "report-only", "--scope", path, "--json"]);
+            assert!(
+                !out.status.success(),
+                "{label}: scope preflight must reject {path:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn cleanup_shell_rejects_semantic_combinations_schema_may_miss() {
+    let h = HermeticOntarch::new();
+    for (label, disp, reason, retention, am) in [
+        (
+            "blocked approved-to-null needs am=false",
+            "blocked",
+            "approved-to-null",
+            json!(null),
+            json!(null),
+        ),
+        (
+            "advisory review-required needs review retention",
+            "advisory",
+            "retention-review-required",
+            json!("permanent"),
+            json!(null),
+        ),
+        (
+            "would_delete + current + permanent",
+            "would_delete",
+            "current",
+            json!("permanent"),
+            json!(null),
+        ),
+    ] {
+        let mut bad = sample_cleanup_plan("dry-run");
+        bad["entries"] = json!([{
+            "path": "Build/bin/demo",
+            "disposition": disp,
+            "reason": reason,
+            "retention": retention,
+            "approved_to_matches": am
+        }]);
+        let mut summary = json!({
+            "total": 1, "advisory": 0, "would_archive": 0, "would_delete": 0, "blocked": 0
+        });
+        summary[disp] = json!(1);
+        bad["summary"] = summary;
+        let shell = shell_validate_cleanup(&h, &bad);
+        assert!(!shell.status.success(), "{label}: shell must reject");
+        let err = format!(
+            "{}{}",
+            String::from_utf8_lossy(&shell.stdout),
+            String::from_utf8_lossy(&shell.stderr)
+        );
+        assert!(
+            err.contains("bin_cleanup:invalid_combination") || err.contains("bin_cleanup:"),
+            "{label}: {err}"
+        );
+    }
+}
+
+#[test]
+fn ontarch_incomplete_manifest_cases_are_invalid_manifest() {
+    let cases: Vec<(&str, String)> = vec![
+        ("malformed", "{not-json".into()),
+        (
+            "missing retention",
+            r#"{"id":"x","workflow":"x","source":"s","created_at":"t","tool":"t","outputs":["o"]}"#
+                .into(),
+        ),
+        (
+            "invalid retention",
+            HermeticOntarch::complete_manifest("x", "yeeted", None),
+        ),
+        (
+            "missing outputs",
+            r#"{"id":"x","workflow":"x","source":"s","created_at":"t","tool":"t","retention":"review-before-delete"}"#
+                .into(),
+        ),
+        (
+            "empty outputs",
+            r#"{"id":"x","workflow":"x","source":"s","created_at":"t","tool":"t","outputs":[],"retention":"review-before-delete"}"#
+                .into(),
+        ),
+        (
+            "missing provenance key",
+            r#"{"id":"x","source":"s","created_at":"t","tool":"t","outputs":["o"],"retention":"review-before-delete"}"#
+                .into(),
+        ),
+        (
+            "approved_to wrong type",
+            r#"{"id":"x","workflow":"x","source":"s","created_at":"t","tool":"t","outputs":["o"],"retention":"review-before-delete","approved_to":12}"#
+                .into(),
+        ),
+    ];
+    for (label, body) in cases {
+        let h = HermeticOntarch::new();
+        h.seed_bin_workflow_manifest("Build", "bad", &body);
+        require_success(&h.run_bin_report(&["--json"]), "inv");
+        let out = h.run_bin_cleanup(&["--mode", "dry-run", "--scope", "Build/bin/bad", "--json"]);
+        require_success(&out, label);
+        let plan = assert_one_json_document(std::str::from_utf8(&out.stdout).unwrap());
+        let entry = plan["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|e| e["path"] == "Build/bin/bad")
+            .unwrap_or_else(|| panic!("{label}: missing entry"));
+        assert_eq!(entry["disposition"], "blocked", "{label}");
+        assert_eq!(entry["reason"], "invalid-manifest", "{label}");
+        assert!(entry["approved_to_matches"].is_null(), "{label}");
+        assert!(entry["retention"].is_null(), "{label}");
+    }
+
+    // Valid complete root + nested single manifests classify without invalid-manifest.
+    let h = HermeticOntarch::new();
+    h.seed_bin_workflow_manifest(
+        "Build",
+        "rootok",
+        &HermeticOntarch::complete_manifest("rootok", "review-before-delete", None),
+    );
+    let nested = h.ws_root.join("Build/bin/nestok/deep");
+    fs::create_dir_all(&nested).unwrap();
+    fs::write(nested.join("artifact.txt"), b"x\n").unwrap();
+    fs::write(
+        nested.join("manifest.json"),
+        HermeticOntarch::complete_manifest("nestok", "review-before-delete", None),
+    )
+    .unwrap();
+    require_success(&h.run_bin_report(&["--json"]), "inv");
+    let out = h.run_bin_cleanup(&["--mode", "report-only", "--json"]);
+    require_success(&out, "valid manifests");
+    let plan = assert_one_json_document(std::str::from_utf8(&out.stdout).unwrap());
+    for path in ["Build/bin/rootok", "Build/bin/nestok"] {
+        let entry = plan["entries"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|e| e["path"] == path)
+            .unwrap();
+        assert_ne!(entry["reason"], "invalid-manifest");
+        assert_eq!(entry["disposition"], "advisory");
+    }
 }

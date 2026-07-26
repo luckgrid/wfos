@@ -186,7 +186,7 @@ allowed_skill_ids = []
         if with_manifest {
             fs::write(
                 dir.join("manifest.json"),
-                r#"{"id":"demo","kind":"workflow","retention":"review-before-delete"}"#,
+                r#"{"id":"demo","workflow":"demo","source":"fixture","created_at":"2026-07-25T00:00:00Z","tool":"test","outputs":["artifact.txt"],"retention":"review-before-delete"}"#,
             )
             .unwrap();
         }
@@ -197,6 +197,17 @@ allowed_skill_ids = []
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join("artifact.txt"), b"demo\n").unwrap();
         fs::write(dir.join("manifest.json"), manifest).unwrap();
+    }
+
+    /// Complete Phase 1 provenance manifest with overrides for retention/approved_to.
+    pub fn complete_manifest(id: &str, retention: &str, approved_to: Option<&str>) -> String {
+        let approved = match approved_to {
+            Some(a) => format!(r#","approved_to":"{a}""#),
+            None => String::new(),
+        };
+        format!(
+            r#"{{"id":"{id}","workflow":"{id}","source":"fixture","created_at":"2026-07-25T00:00:00Z","tool":"test","outputs":["artifact.txt"],"retention":"{retention}"{approved}}}"#
+        )
     }
 
     pub fn write_inventory_fixture(&self, doc: &Value) {

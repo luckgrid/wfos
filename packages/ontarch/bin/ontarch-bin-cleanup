@@ -104,25 +104,17 @@ if [ "$JSON_MODE" -eq 1 ]; then
 fi
 
 # Normalize and reject path traversal / absolute escapes outside WS_ROOT.
+# Locked grammar: [A-Za-z0-9][A-Za-z0-9._-]*/bin(/[A-Za-z0-9][A-Za-z0-9._-]*)+
 _normalize_scope() {
   local s="$1"
   [ -n "$s" ] || return 1
   case "$s" in
-    *..*|~*|/*|*\\*|*[$'\n\r\t']*) return 1 ;;
+    *..*|~*|/*|*\\*|*[$'\n\r\t\f\v']*|*[[:space:]]*|*:*|*\**) return 1 ;;
   esac
-  case "$s" in
-    */bin|*/bin/*|bin/*) ;;
-    *) return 1 ;;
-  esac
-  # lib/src never valid as cleanup scope
   case "$s" in
     */lib|*/lib/*|*/src|*/src/*|lib/*|src/*) return 1 ;;
   esac
-  # Must match inventory path grammar: <ns>/bin/<seg>(/<seg>)*
-  case "$s" in
-    */bin/*) ;;
-    *) return 1 ;;
-  esac
+  printf '%s' "$s" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]*/bin(/[A-Za-z0-9][A-Za-z0-9._-]*)+$' || return 1
   printf '%s\n' "$s"
 }
 
@@ -146,10 +138,20 @@ if [ "$MODE" = "delete-approved" ] && [ -z "$SCOPE" ]; then
   exit 1
 fi
 
+# Agent mutation modes refuse before any inventory locate/refresh.
+if [ "${PANOPLY_AGENT:-}" = "1" ] && { [ "$MODE" = "archive" ] || [ "$MODE" = "delete-approved" ]; }; then
+  if [ "$JSON_MODE" -eq 1 ]; then
+    _emit_refusal_json "$MODE" "agent_rail"
+  else
+    ontarch_err "mode=$MODE refused under PANOPLY_AGENT=1 (agent rail)"
+  fi
+  exit 1
+fi
+
 INV="$ONTARCH_REGISTRY/bin-inventory.json"
 INVENTORY_REFRESHED=false
 
-# Locate/validate/refresh inventory only after mode+scope preflight.
+# Locate/validate/refresh inventory only after mode+scope+agent preflight.
 if [ -f "$INV" ]; then
   if ! ontarch_validate_bin_inventory_doc "$INV" "$WS_ROOT"; then
     ontarch_err "existing bin-inventory.json is invalid — refuse planning (no overwrite)"
@@ -246,7 +248,7 @@ _classify_entry_json() {
   if [ "$mc" = "1" ]; then
     mf="$(_find_single_manifest "$path" || true)"
     if [ -n "$mf" ] && [ -f "$mf" ]; then
-      if ! jq -e . "$mf" >/dev/null 2>&1; then
+      if ! ontarch_validate_manifest_doc "$mf" 2>/dev/null; then
         jq -nc --arg path "$path" \
           '{path:$path,disposition:"blocked",reason:"invalid-manifest",retention:null,approved_to_matches:null}'
         return 0
@@ -448,13 +450,23 @@ _report_only() {
   fi
   ontarch_info "ontarch bin-cleanup — report-only (no action)"
   _print_inventory_summary
+  if [ -n "$SCOPE" ]; then
+    printf 'scope: %s\n' "$SCOPE"
+  fi
   printf 'stale / review candidates:\n'
   local path entry reason
   while IFS= read -r path; do
+    [ -n "$path" ] || continue
+    if [ -n "$SCOPE" ]; then
+      case "$path" in
+        "$SCOPE"|"$SCOPE"/*) ;;
+        *) continue ;;
+      esac
+    fi
     entry="$(_classify_entry_json "$path" "report")"
     reason="$(jq -r '.reason' <<<"$entry")"
     case "$reason" in
-      stale|no-manifest|retention-review-required|multiple-manifests)
+      stale|no-manifest|retention-review-required|multiple-manifests|invalid-manifest)
         printf '  - %s  (reason=%s)\n' "$path" "$reason"
         ;;
     esac

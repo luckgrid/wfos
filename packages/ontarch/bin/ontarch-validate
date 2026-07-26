@@ -654,6 +654,92 @@ _selfcheck_bin_cleanup_plan() {
   else
     printf '  %sok%s  unsafe scope rejected\n' "$_C_GREEN" "$_C_RESET"
   fi
+  # F08 negatives: unknown root field, missing required, unknown entry field,
+  # invalid disposition, unsafe path, duplicate/unsorted path, summary mismatch,
+  # invalid retention/approval types, invalid combination, mutation true (above).
+  bad="$(jq -c '.extra = 1' <<<"$good")"
+  printf '%s\n' "$bad" > "$tmp"
+  if ontarch_validate_bin_cleanup_plan_doc "$tmp" 2>/dev/null; then
+    ontarch_err "cleanup plan selfcheck: unknown root field should fail"; fail=1
+  else
+    printf '  %sok%s  unknown root field rejected\n' "$_C_GREEN" "$_C_RESET"
+  fi
+  bad="$(jq -c 'del(.mode)' <<<"$good")"
+  printf '%s\n' "$bad" > "$tmp"
+  if ontarch_validate_bin_cleanup_plan_doc "$tmp" 2>/dev/null; then
+    ontarch_err "cleanup plan selfcheck: missing required field should fail"; fail=1
+  else
+    printf '  %sok%s  missing required field rejected\n' "$_C_GREEN" "$_C_RESET"
+  fi
+  bad="$(jq -c '.summary.total = 1 | .summary.advisory = 1 | .entries = [{path:"Build/bin/demo",disposition:"advisory",reason:"current",retention:null,approved_to_matches:null,extra:1}]' <<<"$good")"
+  printf '%s\n' "$bad" > "$tmp"
+  if ontarch_validate_bin_cleanup_plan_doc "$tmp" 2>/dev/null; then
+    ontarch_err "cleanup plan selfcheck: unknown entry field should fail"; fail=1
+  else
+    printf '  %sok%s  unknown entry field rejected\n' "$_C_GREEN" "$_C_RESET"
+  fi
+  bad="$(jq -c '.summary.total = 1 | .summary.advisory = 1 | .entries = [{path:"Build/bin/demo",disposition:"yeeted",reason:"current",retention:null,approved_to_matches:null}]' <<<"$good")"
+  printf '%s\n' "$bad" > "$tmp"
+  if ontarch_validate_bin_cleanup_plan_doc "$tmp" 2>/dev/null; then
+    ontarch_err "cleanup plan selfcheck: invalid disposition should fail"; fail=1
+  else
+    printf '  %sok%s  invalid disposition rejected\n' "$_C_GREEN" "$_C_RESET"
+  fi
+  bad="$(jq -c '.summary.total = 1 | .summary.advisory = 1 | .entries = [{path:"Build/bin/demo space",disposition:"advisory",reason:"current",retention:null,approved_to_matches:null}]' <<<"$good")"
+  printf '%s\n' "$bad" > "$tmp"
+  if ontarch_validate_bin_cleanup_plan_doc "$tmp" 2>/dev/null; then
+    ontarch_err "cleanup plan selfcheck: unsafe entry path should fail"; fail=1
+  else
+    printf '  %sok%s  unsafe entry path rejected\n' "$_C_GREEN" "$_C_RESET"
+  fi
+  bad="$(jq -c '.summary.total = 2 | .summary.advisory = 2 | .entries = [
+    {path:"Build/bin/demo",disposition:"advisory",reason:"current",retention:null,approved_to_matches:null},
+    {path:"Build/bin/demo",disposition:"advisory",reason:"current",retention:null,approved_to_matches:null}
+  ]' <<<"$good")"
+  printf '%s\n' "$bad" > "$tmp"
+  if ontarch_validate_bin_cleanup_plan_doc "$tmp" 2>/dev/null; then
+    ontarch_err "cleanup plan selfcheck: duplicate path should fail"; fail=1
+  else
+    printf '  %sok%s  duplicate path rejected\n' "$_C_GREEN" "$_C_RESET"
+  fi
+  bad="$(jq -c '.summary.total = 2 | .summary.advisory = 2 | .entries = [
+    {path:"Build/bin/z",disposition:"advisory",reason:"current",retention:null,approved_to_matches:null},
+    {path:"Build/bin/a",disposition:"advisory",reason:"current",retention:null,approved_to_matches:null}
+  ]' <<<"$good")"
+  printf '%s\n' "$bad" > "$tmp"
+  if ontarch_validate_bin_cleanup_plan_doc "$tmp" 2>/dev/null; then
+    ontarch_err "cleanup plan selfcheck: unsorted path should fail"; fail=1
+  else
+    printf '  %sok%s  unsorted path rejected\n' "$_C_GREEN" "$_C_RESET"
+  fi
+  bad="$(jq -c '.summary.total = 1 | .summary.advisory = 0 | .summary.blocked = 0 | .entries = [{path:"Build/bin/demo",disposition:"advisory",reason:"current",retention:null,approved_to_matches:null}]' <<<"$good")"
+  printf '%s\n' "$bad" > "$tmp"
+  if ontarch_validate_bin_cleanup_plan_doc "$tmp" 2>/dev/null; then
+    ontarch_err "cleanup plan selfcheck: summary mismatch should fail"; fail=1
+  else
+    printf '  %sok%s  summary mismatch rejected\n' "$_C_GREEN" "$_C_RESET"
+  fi
+  bad="$(jq -c '.summary.total = 1 | .summary.advisory = 1 | .entries = [{path:"Build/bin/demo",disposition:"advisory",reason:"current",retention:12,approved_to_matches:null}]' <<<"$good")"
+  printf '%s\n' "$bad" > "$tmp"
+  if ontarch_validate_bin_cleanup_plan_doc "$tmp" 2>/dev/null; then
+    ontarch_err "cleanup plan selfcheck: invalid retention type should fail"; fail=1
+  else
+    printf '  %sok%s  invalid retention type rejected\n' "$_C_GREEN" "$_C_RESET"
+  fi
+  bad="$(jq -c '.summary.total = 1 | .summary.advisory = 1 | .entries = [{path:"Build/bin/demo",disposition:"advisory",reason:"current",retention:null,approved_to_matches:"yes"}]' <<<"$good")"
+  printf '%s\n' "$bad" > "$tmp"
+  if ontarch_validate_bin_cleanup_plan_doc "$tmp" 2>/dev/null; then
+    ontarch_err "cleanup plan selfcheck: invalid approval type should fail"; fail=1
+  else
+    printf '  %sok%s  invalid approval type rejected\n' "$_C_GREEN" "$_C_RESET"
+  fi
+  bad="$(jq -c '.summary.total = 1 | .summary.would_delete = 1 | .entries = [{path:"Build/bin/demo",disposition:"would_delete",reason:"current",retention:"permanent",approved_to_matches:null}]' <<<"$good")"
+  printf '%s\n' "$bad" > "$tmp"
+  if ontarch_validate_bin_cleanup_plan_doc "$tmp" 2>/dev/null; then
+    ontarch_err "cleanup plan selfcheck: invalid field combination should fail"; fail=1
+  else
+    printf '  %sok%s  invalid field combination rejected\n' "$_C_GREEN" "$_C_RESET"
+  fi
   rm -f "$tmp"
 }
 
@@ -708,22 +794,20 @@ _manifest_archive_reason_ok() {
   esac
 }
 
-# Validate one manifest JSON document against required keys + retention/archive enums.
+# Validate one manifest JSON document via shared ontarch_validate_manifest_doc.
 # Args: <label> <json>
 _check_manifest_doc() {
-  local label="$1" full="$2" schema="$ONTARCH_SCHEMAS/manifest.schema.json"
-  local mfail=0 req
-  for req in $(jq -r '.required[]' "$schema"); do
-    jq -e --arg k "$req" 'has($k)' <<<"$full" >/dev/null \
-      || { ontarch_err "$label: missing required '$req'"; mfail=1; }
-  done
-  jq -e '(.outputs // []) | type == "array" and length > 0' <<<"$full" >/dev/null \
-    || { ontarch_err "$label: outputs must be a non-empty array"; mfail=1; }
-  _manifest_retention_ok "$full" \
-    || { ontarch_err "$label: retention='$(jq -r '.retention // empty' <<<"$full")' is not a valid retention value"; mfail=1; }
-  _manifest_archive_reason_ok "$full" \
-    || { ontarch_err "$label: archive_reason='$(jq -r '.archive_reason // empty' <<<"$full")' is not in the schema enum"; mfail=1; }
-  return "$mfail"
+  local label="$1" full="$2"
+  local tmp
+  tmp="$(mktemp "${TMPDIR:-/tmp}/ontarch-mf-check.XXXXXX")"
+  printf '%s\n' "$full" > "$tmp"
+  if ontarch_validate_manifest_doc "$tmp"; then
+    rm -f "$tmp"
+    return 0
+  fi
+  ontarch_err "$label: failed ontarch_validate_manifest_doc"
+  rm -f "$tmp"
+  return 1
 }
 
 _selfcheck_manifest_retention() {
