@@ -14,7 +14,8 @@
     "macOS and Linux pinned gates both required for S6.1 closure; Linux closed via Lima alpine aarch64 in the review follow-up, then re-confirmed against the final D2 diff in review-followup-2.",
     "S6.1 stayed open and STATE.md was not advanced to S7 until E09_DEFERRED.md D1 and D2 both closed; both are now done as of review-followup-2.",
     "Review follow-up: create E09_DEFERRED.md; tighten transition identity; RTK projection; wait re-await; expand matrix coverage map.",
-    "Review follow-up 2: close every remaining \u00a77 coverage-map row; fix the broken-pipe exit-code fidelity bug found along the way; S6.1 complete, S7 unblocked."
+    "Review follow-up 2: close every remaining \u00a77 coverage-map row; fix the broken-pipe exit-code fidelity bug found along the way; S6.1 complete, S7 unblocked.",
+    "Review follow-up 3 (R1): closure evidence must name true final code commit 185ba37 (280 tests), not fd5a5e0 (279); malformed-only-latest \u00a77.4 row delivered in 185ba37; docs/evidence only."
   ],
   "changed_paths": [
     "packages/takogami/src/commands.rs",
@@ -261,6 +262,43 @@
           "note": "moon not installed in guest; files synced via limactl copy; equivalent cargo/ontarch/panoply commands executed directly"
         }
       }
+    },
+    {
+      "phase": "review-followup-3",
+      "title": "Closure evidence correction (R1) — true final code commit 185ba37",
+      "status": "done",
+      "summary": "Corrected S6.1-14-class closure drift: D2 §7.4 had listed session_latest_malformed_only_surfaces_skipped_diagnostics as covered at fd5a5e0/279, but that test and its production fix (query.rs show_latest_with_diagnostics → Option; commands.rs not-found diagnostics) landed only in 185ba37 (280 tests). No production code changes this phase — code already correct at HEAD. Re-ran dual-platform gates at 185ba37; updated final_commit/token_note and E09_DEFERRED/STATE/SESSIONS to name 185ba37/280. Spec: Build/bin/wfos/2026-07-25-wfos-e09-s6.1-closure-evidence-correction-addendum.md.",
+      "fixes_applied": [
+        "No Takogami production diff — 185ba37 already carries the malformed-only-latest fix + test.",
+        "Closure surfaces (session JSON final_commit/token_note, E09_DEFERRED baseline/D1/§7.4 honesty note/§7.7, STATE notes, SESSIONS s6.1 row) corrected from fd5a5e0/279 → 185ba37/280."
+      ],
+      "gate_evidence": {
+        "true_final_code_commit": "185ba37aec2adf72926584c63cfc5340fd3c0ee0",
+        "prior_stale_claim": "fd5a5e01178669ae677cee164bbdccd291419431 (279 tests; predates malformed-only-latest)",
+        "macos-aarch64": {
+          "rustc": "1.96.0",
+          "cargo": "1.96.0",
+          "moon": "2.3.2",
+          "takogami_test": "PASS 280/280 (lib 151, cli_smoke 17, contracts_roundtrip 19, execution_cli 16, policy_cli 17, resolution_cli 27, session_cli 12, session_store 21)",
+          "clippy": "PASS -D warnings",
+          "fmt": "PASS",
+          "ontarch_sync": "PASS",
+          "ontarch_validate": "PASS",
+          "panoply_gen_check": "PASS",
+          "panoply_validate_substrate": "PASS"
+        },
+        "linux-aarch64-alpine-lima": {
+          "instance": "wfos-s61-alpine",
+          "rustc": "1.96.0 (aarch64-unknown-linux-musl)",
+          "cargo": "1.96.0",
+          "takogami_test": "PASS 280/280",
+          "clippy": "PASS -D warnings",
+          "fmt": "PASS",
+          "ontarch_validate": "PASS",
+          "panoply_validate_substrate": "PASS",
+          "note": "moon not installed in guest; tree rsynced to $HOME/wfos-s61 excluding target/.git; equivalent cargo/ontarch/panoply commands executed directly"
+        }
+      }
     }
   ],
   "findings_status": {
@@ -283,6 +321,6 @@
   "blockers": [
     "ontarch:secrets-scan historical age-secret-key finding (commit a3a4978, 2026-06-24) preserved verbatim; unrelated to S6.1, not a gate blocker. See E09_DEFERRED.md D3."
   ],
-  "token_note": "Final close-out after review-followup-2: closed every remaining D2 \u00a77 coverage-map row, found and fixed one real production bug (broken-pipe exit-code fidelity in output/mod.rs::emit_executed), re-ran the full pinned gate on both macOS and Linux (279/279 tests each). D1+D2 done; S6.1 complete; S7 unblocked. Close-out commit fd5a5e0 (later 6cd91a9 is MAINT.agents-pattern only).",
-  "final_commit": "fd5a5e01178669ae677cee164bbdccd291419431"
+  "token_note": "Closure evidence correction (review-followup-3): true final code commit is 185ba37 (280 tests) — not fd5a5e0 (279). Malformed-only-latest §7.4 row + production fix landed in 185ba37; dual-platform gate re-run PASS at HEAD (macOS + Lima alpine). D1+D2 remain done; S6.1 complete; S7 unblocked. Evidence commit lands on top of 185ba37.",
+  "final_commit": "185ba37aec2adf72926584c63cfc5340fd3c0ee0"
 }
