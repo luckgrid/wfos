@@ -1,0 +1,5 @@
+{
+  "id": "stale-demo",
+  "kind": "workflow",
+  "retention": "auto-archive-after:30d"
+}
