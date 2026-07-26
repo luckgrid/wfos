@@ -83,7 +83,7 @@
       "implementation_commits": {
         "phase_1": "6b30400b98186eae4b4382079158ef050a8f57d6",
         "phase_1_closure_iteration": "fc99ae20230d1c5d1a48ea6edccecd7506c3ce55",
-        "phase_1_final_correction": "pending_user_commit (gate green on working tree over fc99ae2)"
+        "phase_1_final_correction": "1b186da904da1614ef52becfb58c8239e0c5fce0"
       },
       "summary": "Closed F01\u2013F08: pair-install tracks had_a/had_b with checked restore/remove and generated_pair:rollback_failed; locked path grammar across schema/shell/scope/Rust; ontarch_validate_manifest_doc before archive/delete classification; cleanup combo_ok matrix + schema if/then; agent archive/delete refuse after option/scope parse before inventory; human report-only honors scope; graph no_ctrl rejects DEL with stable control_character_id; first-install DOT rollback; invalid-workflow report retains prior pair; E2E digest recomputation test; ontarch-validate cleanup negatives complete.",
       "production_changed_paths": [
@@ -361,5 +361,5 @@
   ],
   "next": "E09.S7 Phase 2 Takogami graph adapter \u2014 only after explicit go-ahead; Phase 1 DONE",
   "blockers": [],
-  "token_note": "Phase 1 final closure corrections green (27 graph + 26 bin; dual-platform). Phase 2 blocked until go-ahead. Final correction commit pending user commit."
+  "token_note": "Phase 1 final closure corrections green (27 graph + 26 bin; dual-platform). Phase 2 blocked until go-ahead."
 }
