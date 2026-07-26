@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::cli::{Command, ListTarget, SessionCommand};
+use crate::cli::{Command, GraphFormat, ListTarget, SessionCommand};
 use crate::contracts::types::{
     DiagnosticRecord, ExecutionRecord, OutputSummary, RECORD_KIND_COMMAND_EXECUTION, RequestRecord,
     RuntimeCommandRecord, SCHEMA_VERSION,
@@ -40,6 +40,7 @@ pub async fn dispatch_implemented(
         Command::Tools => run_tools(sink),
         Command::Interfaces { validate } => run_interfaces(sink, *validate),
         Command::Session { sub } => run_session(sink, sub, cli_state_home, cli_profile),
+        Command::Graph { format } => run_graph(sink, *format),
         Command::Dev { .. } | Command::Build { .. } | Command::Check { .. } => {
             let (verb, unit, explain, execute) =
                 command.lifecycle_parts().expect("lifecycle command");
@@ -60,6 +61,63 @@ pub async fn dispatch_implemented(
             "dispatch_implemented called for unimplemented command",
         )),
     }
+}
+
+/// Zero-spawn graph projection: load → validate/freshness → render. Never touches executor/records.
+fn run_graph(sink: &OutputSink, format: GraphFormat) -> Result<u8, ControllerError> {
+    let paths = resolve_registry_paths()?;
+    let access = RegistryAccess::new(paths);
+    let loaded = access.load_graph()?;
+    let freshness = loaded.freshness;
+    let doc = loaded.document;
+    let graph_value = serde_json::to_value(&doc)
+        .map_err(|e| ControllerError::internal(format!("serialize graph: {e}")))?;
+
+    let (fmt_name, rendered): (&str, Option<String>) = match format {
+        GraphFormat::Text => (
+            "text",
+            Some(crate::graph::render_text(&doc, freshness.as_str())),
+        ),
+        GraphFormat::Dot => ("dot", Some(crate::graph::render_dot(&doc))),
+        GraphFormat::Json => ("json", None),
+    };
+
+    if sink.json {
+        let mut data = serde_json::json!({
+            "format": fmt_name,
+            "freshness": freshness.as_str(),
+            "graph": graph_value,
+        });
+        if let Some(r) = rendered {
+            data["rendered"] = serde_json::Value::String(r);
+        }
+        return sink
+            .emit_success("graph", data, Some(freshness), &[])
+            .map_err(map_emit_io);
+    }
+
+    use std::io::Write;
+    let body = match format {
+        GraphFormat::Json => {
+            serde_json::to_string_pretty(&doc)
+                .map_err(|e| ControllerError::internal(format!("serialize graph: {e}")))?
+                + "\n"
+        }
+        GraphFormat::Text | GraphFormat::Dot => rendered.expect("rendered"),
+    };
+    let _ = sink.no_color;
+    match write!(std::io::stdout(), "{body}") {
+        Ok(()) => Ok(crate::exit_codes::SUCCESS),
+        Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => Ok(crate::exit_codes::SUCCESS),
+        Err(e) => Err(ControllerError::internal(format!("write stdout: {e}"))),
+    }
+}
+
+fn map_emit_io(e: std::io::Error) -> ControllerError {
+    if e.kind() == std::io::ErrorKind::BrokenPipe {
+        return ControllerError::internal("broken pipe");
+    }
+    ControllerError::internal(format!("emit: {e}"))
 }
 
 /// Factory abstraction for opening a record store, injected so lifecycle coordination does not

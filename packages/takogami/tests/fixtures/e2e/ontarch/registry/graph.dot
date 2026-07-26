@@ -1,6 +1,3 @@
-digraph ontarch {
-  rankdir=LR;
-  node [shape=box];
-  "demo" -> "policy:takogami.agent" [label="governed-by"];
-  "profile:workspace-dev" -> "policy:takogami.agent" [label="selects"];
+digraph {
+  "WRONG_SIBLING";
 }

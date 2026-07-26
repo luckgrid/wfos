@@ -1,1 +1,9 @@
-# PENDING — replace with complete canonical graph text projection when Phase 2 lands (S7-R13).
+Graph freshness: hit
+Generated at: 2026-07-25T00:00:00Z
+Nodes: 4
+Edges: 4
+
+demo -governed-by-> policy:takogami.agent
+demo -provides-> capability:build
+demo -uses-> capability:build
+profile:workspace-dev -selects-> policy:takogami.agent

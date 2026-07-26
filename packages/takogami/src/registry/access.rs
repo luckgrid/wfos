@@ -90,6 +90,11 @@ impl RegistryAccess {
         self.paths.registry_root.join(kind.file_name())
     }
 
+    /// Secure no-follow load of registry/graph.json with validation and freshness.
+    pub fn load_graph(&self) -> Result<crate::graph::GraphLoadOutcome, ControllerError> {
+        crate::graph::validate::load_graph(self)
+    }
+
     /// Read units.json: miss returns empty doc + Miss; malformed → error; else freshness.
     pub fn load_units(&self) -> Result<(UnitsDocument, Freshness), ControllerError> {
         let path = self.file_path(RegistryFileKind::Units);

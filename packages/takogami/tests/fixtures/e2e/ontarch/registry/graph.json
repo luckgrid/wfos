@@ -6,26 +6,30 @@
       {
         "path": "registry/policies.json",
         "algorithm": "sha256",
-        "digest": "e47656c5d14e8147248b14a6a74a57c182a4eefad36d37b827f8fcc2b4921ad5"
+        "digest": "8d19f14c5377db3f12cb99d52d6e33bc0611f8cf438ff695f06bd8e7f2d52953"
       },
       {
         "path": "registry/profiles.json",
         "algorithm": "sha256",
-        "digest": "097e4276891522bda60588d8b1c1f4b7bedfc775b86db005a7a082ee45218d67"
+        "digest": "d0e3e41214b2a1c588d98e45f78567cfb5a0260e0b46d292d559d072397f197f"
       },
       {
         "path": "registry/skills.json",
         "algorithm": "sha256",
-        "digest": "0fabb65e876267b9f9f6368b7b0d915e9f3f17fb57349d91eb1977ba3e15e5af"
+        "digest": "76ec6918d937caaba8649ab56edd2a8b45c1cc06a5417803e5bee11aa9af2316"
       },
       {
         "path": "registry/units.json",
         "algorithm": "sha256",
-        "digest": "076937e41826a2b668b2edb3ce1994c37557c8eaae0475684a538b1b0e483f2d"
+        "digest": "f2d442b08c139a3214f2739565735e0ae8d1d2ddca76eef207c2a91765e9c2ea"
       }
     ]
   },
   "nodes": [
+    {
+      "id": "capability:build",
+      "kind": "capability"
+    },
     {
       "id": "demo",
       "kind": "package"
@@ -44,6 +48,16 @@
       "from": "demo",
       "rel": "governed-by",
       "to": "policy:takogami.agent"
+    },
+    {
+      "from": "demo",
+      "rel": "provides",
+      "to": "capability:build"
+    },
+    {
+      "from": "demo",
+      "rel": "uses",
+      "to": "capability:build"
     },
     {
       "from": "profile:workspace-dev",

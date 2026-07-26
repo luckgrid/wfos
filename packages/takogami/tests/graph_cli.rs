@@ -1,23 +1,22 @@
-//! E09.S7 Phase 0 — graph projection acceptance map (§14.1 / §15).
-//!
-//! Asserts final S7 contracts. At baseline these fail because `graph` is still
-//! `not_implemented` (exit 10) and Ontarch graph freshness is not yet emitted.
-//! Do not `#[ignore]` — failures must stay visible until Phase 2 lands.
+//! E09.S7 Phase 2 — graph projection acceptance map (§14.1 / §15).
 
 use serde_json::{Value, json};
 use std::fs;
 use std::os::unix::fs::{PermissionsExt, symlink};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
-use takogami::contracts::{RegistryGeneration, fingerprint_bytes, fingerprint_file};
-use takogami::exit_codes::{CONTRACT, NOT_IMPLEMENTED, SUCCESS};
+use takogami::contracts::{
+    RegistryGeneration, SourceFingerprint, fingerprint_bytes, fingerprint_file,
+};
+use takogami::exit_codes::{CONTRACT, NOT_IMPLEMENTED, RESOLUTION, SUCCESS};
+use takogami::graph::types::GRAPH_FILE_LIMIT_BYTES;
+use takogami::graph::validate::GRAPH_UPSTREAM_PATHS;
+
+const GENERATED_AT: &str = "2026-07-25T00:00:00Z";
+const DESCRIPTOR_REL: &str = "registry/sources/descriptors/demo.descriptor.toml";
 
 fn bin() -> Command {
     Command::new(env!("CARGO_BIN_EXE_takogami"))
-}
-
-fn fixture_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/resolution")
 }
 
 fn stdout(o: &Output) -> &str {
@@ -26,6 +25,10 @@ fn stdout(o: &Output) -> &str {
 
 fn stderr(o: &Output) -> &str {
     std::str::from_utf8(&o.stderr).unwrap()
+}
+
+fn has_ansi(s: &str) -> bool {
+    s.contains('\u{1b}')
 }
 
 struct GraphHarness {
@@ -45,11 +48,13 @@ impl GraphHarness {
         let registry = workspace.join("registry");
         let state_home = temp.path().join("state-home");
         let path_dir = workspace.join("bin");
-        fs::create_dir_all(&workspace).unwrap();
+        fs::create_dir_all(&registry).unwrap();
         fs::create_dir_all(&path_dir).unwrap();
-        copy_dir(&fixture_root(), &workspace);
+        fs::create_dir_all(registry.join("sources/descriptors")).unwrap();
+
         let marker = workspace.join("MARKER_RAN");
         write_marker_exe(&path_dir.join("ontarch"), &marker);
+
         let h = Self {
             temp,
             workspace,
@@ -58,87 +63,142 @@ impl GraphHarness {
             path_dir,
             marker,
         };
-        h.write_upstream_docs();
+        h.seed_descriptor();
+        h.write_upstream_registry();
+        h.write_units();
         h.write_valid_graph();
         h
     }
 
-    fn write_upstream_docs(&self) {
-        for name in [
-            "units.json",
-            "policies.json",
-            "profiles.json",
-            "skills.json",
-        ] {
-            let path = self.registry.join(name);
-            if path.exists() {
-                continue;
-            }
-            fs::write(
-                &path,
-                serde_json::to_string_pretty(&json!({
-                    "generated_at": "2026-07-25T00:00:00Z",
-                    name.trim_end_matches(".json"): []
-                }))
-                .unwrap(),
-            )
-            .unwrap();
-        }
-        // Ensure skills.json exists even when resolution fixture omits it.
-        let skills = self.registry.join("skills.json");
-        if !skills.exists() {
-            fs::write(
-                &skills,
-                r#"{"generated_at":"2026-07-25T00:00:00Z","skills":[]}"#,
-            )
-            .unwrap();
-        }
+    fn seed_descriptor(&self) {
+        let body = r#"id = "demo"
+kind = "package"
+title = "Graph harness demo unit"
+status = "active"
+"#;
+        fs::write(self.workspace.join(DESCRIPTOR_REL), body).unwrap();
     }
 
-    fn upstream_fps(&self) -> Vec<Value> {
-        let mut fps = Vec::new();
-        for name in [
-            "units.json",
-            "policies.json",
-            "profiles.json",
-            "skills.json",
-        ] {
-            let rel = format!("registry/{name}");
-            let abs = self.workspace.join(&rel);
-            let fp = fingerprint_file(&abs, &rel).unwrap();
-            fps.push(serde_json::to_value(&fp).unwrap());
+    fn descriptor_fingerprint(&self) -> SourceFingerprint {
+        fingerprint_file(&self.workspace.join(DESCRIPTOR_REL), DESCRIPTOR_REL).unwrap()
+    }
+
+    fn write_upstream_registry(&self) {
+        fs::write(
+            self.registry.join("policies.json"),
+            serde_json::to_string_pretty(&json!({
+                "generated_at": GENERATED_AT,
+                "policies": [{
+                    "id": "takogami.agent",
+                    "applies_to": "agent",
+                    "version": "0.1.0",
+                    "allow": { "commands": ["takogami graph"] },
+                    "gate": { "commands": [] },
+                    "block": { "commands": [] }
+                }]
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            self.registry.join("profiles.json"),
+            serde_json::to_string_pretty(&json!({
+                "generated_at": GENERATED_AT,
+                "profiles": [{
+                    "id": "workspace-dev",
+                    "title": "Harness dev",
+                    "purpose": "graph-cli",
+                    "rails": "takogami.agent",
+                    "allowed_paths": ["**"],
+                    "blocked_paths": []
+                }]
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            self.registry.join("skills.json"),
+            serde_json::to_string_pretty(&json!({
+                "generated_at": GENERATED_AT,
+                "skills": []
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+    }
+
+    fn write_units(&self) {
+        let authored = RegistryGeneration {
+            generated_at: GENERATED_AT.into(),
+            source_fingerprints: vec![self.descriptor_fingerprint()],
+        };
+        fs::write(
+            self.registry.join("units.json"),
+            serde_json::to_string_pretty(&json!({
+                "generated_at": GENERATED_AT,
+                "registry_generation": authored,
+                "summary": { "total": 1 },
+                "units": [{ "id": "demo", "kind": "package" }]
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+    }
+
+    fn upstream_fps(&self) -> Vec<SourceFingerprint> {
+        let mut fps = Vec::with_capacity(GRAPH_UPSTREAM_PATHS.len());
+        for rel in GRAPH_UPSTREAM_PATHS {
+            let abs = self.workspace.join(rel);
+            let fp = fingerprint_file(&abs, rel).unwrap();
+            assert_eq!(fp.path, rel);
+            fps.push(fp);
         }
+        assert_eq!(
+            fps.iter().map(|f| f.path.as_str()).collect::<Vec<_>>(),
+            GRAPH_UPSTREAM_PATHS.to_vec()
+        );
         fps
     }
 
     fn write_valid_graph(&self) {
+        let nodes = json!([
+            {"id": "capability:build", "kind": "capability"},
+            {"id": "demo", "kind": "package"},
+            {"id": "policy:takogami.agent", "kind": "policy"},
+            {"id": "profile:workspace-dev", "kind": "profile"}
+        ]);
+        let edges = json!([
+            {"from": "demo", "rel": "governed-by", "to": "policy:takogami.agent"},
+            {"from": "demo", "rel": "provides", "to": "capability:build"},
+            {"from": "demo", "rel": "uses", "to": "capability:build"},
+            {"from": "profile:workspace-dev", "rel": "selects", "to": "policy:takogami.agent"}
+        ]);
+        self.write_graph_payload(nodes, edges);
+        fs::write(
+            self.registry.join("graph.dot"),
+            "digraph {\n  \"WRONG_SIBLING\";\n}\n",
+        )
+        .unwrap();
+    }
+
+    fn write_graph_payload(&self, nodes: Value, edges: Value) {
+        let fps: Vec<Value> = self
+            .upstream_fps()
+            .into_iter()
+            .map(|fp| serde_json::to_value(fp).unwrap())
+            .collect();
         let doc = json!({
-            "generated_at": "2026-07-25T00:00:00Z",
+            "generated_at": GENERATED_AT,
             "registry_generation": {
-                "generated_at": "2026-07-25T00:00:00Z",
-                "source_fingerprints": self.upstream_fps(),
+                "generated_at": GENERATED_AT,
+                "source_fingerprints": fps,
             },
-            "nodes": [
-                {"id": "demo", "kind": "package"},
-                {"id": "policy:takogami.agent", "kind": "policy"},
-                {"id": "profile:workspace-dev", "kind": "profile"},
-                {"id": "capability:build", "kind": "capability"}
-            ],
-            "edges": [
-                {"from": "profile:workspace-dev", "rel": "selects", "to": "policy:takogami.agent"},
-                {"from": "demo", "rel": "governed-by", "to": "policy:takogami.agent"},
-                {"from": "demo", "rel": "provides", "to": "capability:build"},
-                {"from": "demo", "rel": "uses", "to": "capability:build"}
-            ]
+            "nodes": nodes,
+            "edges": edges,
         });
         fs::write(
             self.registry.join("graph.json"),
             serde_json::to_string_pretty(&doc).unwrap(),
-        )
-        .unwrap();
-        fs::write(
-            self.registry.join("graph.dot"),
-            "digraph {\n  \"demo\";\n}\n",
         )
         .unwrap();
     }
@@ -199,22 +259,6 @@ fn write_marker_exe(path: &Path, marker: &Path) {
     fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
 }
 
-fn copy_dir(src: &Path, dst: &Path) {
-    for entry in fs::read_dir(src).unwrap() {
-        let entry = entry.unwrap();
-        let to = dst.join(entry.file_name());
-        if entry.file_type().unwrap().is_dir() {
-            fs::create_dir_all(&to).unwrap();
-            copy_dir(&entry.path(), &to);
-        } else {
-            if let Some(parent) = to.parent() {
-                fs::create_dir_all(parent).unwrap();
-            }
-            fs::copy(entry.path(), &to).unwrap();
-        }
-    }
-}
-
 fn parse_json(out: &Output) -> Value {
     let s = stdout(out);
     serde_json::from_str(s).unwrap_or_else(|e| panic!("JSON parse failed: {e}\nstdout={s}"))
@@ -230,22 +274,45 @@ fn assert_one_json_document(raw: &str) {
     let _ = first;
 }
 
-fn assert_not_still_unimplemented(out: &Output) {
-    // Phase 0: document why this fails today when handlers are absent.
-    assert_ne!(
-        out.status.code(),
-        Some(NOT_IMPLEMENTED as i32),
-        "S7 graph contracts not implemented yet (exit 10). stderr={}",
-        stderr(out)
-    );
+fn diagnostic_codes(v: &Value) -> Vec<String> {
+    v["diagnostics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|d| d["code"].as_str().map(str::to_string))
+        .collect()
 }
 
 // --- §14.1 hit / formats ---
 
 #[test]
+fn untouched_fixture_is_freshness_hit() {
+    let h = GraphHarness::new();
+    let out = h.run(&["--json", "graph"]);
+    assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
+    let v = parse_json(&out);
+    assert_eq!(v["status"], "ok");
+    assert_eq!(v["data"]["freshness"], "hit");
+    assert_eq!(v["metrics"]["registry_cache"], "hit");
+    h.assert_no_child_and_no_record();
+}
+
+#[test]
+fn empty_graph_is_hit_not_miss() {
+    let h = GraphHarness::new();
+    h.write_graph_payload(json!([]), json!([]));
+    let out = h.run(&["--json", "graph", "--format", "json"]);
+    assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
+    let v = parse_json(&out);
+    assert_eq!(v["data"]["freshness"], "hit");
+    assert_eq!(v["data"]["graph"]["nodes"], json!([]));
+    assert_eq!(v["data"]["graph"]["edges"], json!([]));
+    h.assert_no_child_and_no_record();
+}
+
+#[test]
 fn valid_current_graph_text_is_deterministic_hit() {
     let h = GraphHarness::new();
-    // Shuffle input order; output must be byte-identical across runs.
     let mut doc: Value =
         serde_json::from_str(&fs::read_to_string(h.registry.join("graph.json")).unwrap()).unwrap();
     if let Some(nodes) = doc["nodes"].as_array_mut() {
@@ -260,7 +327,6 @@ fn valid_current_graph_text_is_deterministic_hit() {
     )
     .unwrap();
     let out1 = h.run(&["graph"]);
-    assert_not_still_unimplemented(&out1);
     assert_eq!(
         out1.status.code(),
         Some(SUCCESS as i32),
@@ -274,9 +340,21 @@ fn valid_current_graph_text_is_deterministic_hit() {
         text1,
         "text projection must be deterministic"
     );
-    assert!(text1.contains("Graph freshness: hit") || text1.contains("freshness: hit"));
-    assert!(text1.contains("Nodes:") || text1.contains("nodes"));
-    assert!(text1.contains("Edges:") || text1.contains("edges"));
+    assert!(text1.contains("Graph freshness: hit"));
+    assert!(text1.contains("Nodes:"));
+    assert!(text1.contains("Edges:"));
+    h.assert_no_child_and_no_record();
+}
+
+#[test]
+fn no_color_text_has_no_ansi() {
+    let h = GraphHarness::new();
+    let out = h.run(&["--no-color", "graph"]);
+    assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
+    assert!(
+        !has_ansi(stdout(&out)),
+        "text output must not contain ANSI escapes when --no-color is set"
+    );
     h.assert_no_child_and_no_record();
 }
 
@@ -284,7 +362,6 @@ fn valid_current_graph_text_is_deterministic_hit() {
 fn valid_current_graph_format_text_explicit() {
     let h = GraphHarness::new();
     let out = h.run(&["graph", "--format", "text"]);
-    assert_not_still_unimplemented(&out);
     assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
     h.assert_no_child_and_no_record();
 }
@@ -302,10 +379,8 @@ fn valid_current_graph_dot_is_escaped_and_deterministic() {
         serde_json::to_string_pretty(&doc).unwrap(),
     )
     .unwrap();
-    // Sibling graph.dot must not be trusted as the projection source.
     fs::write(h.registry.join("graph.dot"), "digraph { \"WRONG\"; }\n").unwrap();
     let out1 = h.run(&["graph", "--format", "dot"]);
-    assert_not_still_unimplemented(&out1);
     assert_eq!(
         out1.status.code(),
         Some(SUCCESS as i32),
@@ -327,10 +402,9 @@ fn valid_current_graph_dot_is_escaped_and_deterministic() {
 fn valid_current_graph_json_payload() {
     let h = GraphHarness::new();
     let out = h.run(&["graph", "--format", "json"]);
-    assert_not_still_unimplemented(&out);
     assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
     assert_one_json_document(stdout(&out));
-    let v = parse_json(&out);
+    let v: Value = serde_json::from_str(stdout(&out)).unwrap();
     assert!(v.get("nodes").is_some());
     assert!(v.get("edges").is_some());
     assert!(v.get("registry_generation").is_some());
@@ -342,7 +416,6 @@ fn global_json_wraps_each_graph_format_in_one_envelope() {
     let h = GraphHarness::new();
     for format in ["text", "dot", "json"] {
         let out = h.run(&["--json", "graph", "--format", format]);
-        assert_not_still_unimplemented(&out);
         assert_eq!(
             out.status.code(),
             Some(SUCCESS as i32),
@@ -381,18 +454,23 @@ fn missing_graph_is_typed_miss_without_sync_or_record() {
     let h = GraphHarness::new();
     fs::remove_file(h.registry.join("graph.json")).unwrap();
     let out = h.run(&["--json", "graph"]);
-    assert_not_still_unimplemented(&out);
+    assert_eq!(
+        out.status.code(),
+        Some(RESOLUTION as i32),
+        "{}",
+        stderr(&out)
+    );
     let v = parse_json(&out);
     assert_eq!(v["status"], "error");
-    let codes: Vec<&str> = v["diagnostics"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter_map(|d| d["code"].as_str())
-        .collect();
+    let codes = diagnostic_codes(&v);
     assert!(
-        codes.iter().any(|c| *c == "graph_missing"),
+        codes.iter().any(|c| c == "graph_missing"),
         "expected graph_missing, got {codes:?}"
+    );
+    let body = format!("{}{}", stdout(&out), stderr(&out));
+    assert!(
+        body.contains("ontarch sync"),
+        "missing graph must mention ontarch sync remediation: {body}"
     );
     h.assert_no_child_and_no_record();
 }
@@ -402,18 +480,23 @@ fn stale_graph_input_fingerprint_is_typed_stale_without_sync() {
     let h = GraphHarness::new();
     h.mutate_units_fingerprint();
     let out = h.run(&["--json", "graph"]);
-    assert_not_still_unimplemented(&out);
+    assert_eq!(
+        out.status.code(),
+        Some(RESOLUTION as i32),
+        "{}",
+        stderr(&out)
+    );
     let v = parse_json(&out);
     assert_eq!(v["status"], "error");
-    let codes: Vec<&str> = v["diagnostics"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter_map(|d| d["code"].as_str())
-        .collect();
+    let codes = diagnostic_codes(&v);
     assert!(
-        codes.iter().any(|c| *c == "graph_stale"),
+        codes.iter().any(|c| c == "graph_stale"),
         "expected graph_stale, got {codes:?}"
+    );
+    let body = format!("{}{}", stdout(&out), stderr(&out));
+    assert!(
+        body.contains("ontarch sync"),
+        "stale graph must mention ontarch sync remediation: {body}"
     );
     h.assert_no_child_and_no_record();
 }
@@ -421,32 +504,28 @@ fn stale_graph_input_fingerprint_is_typed_stale_without_sync() {
 #[test]
 fn authored_unit_fingerprint_stale_is_typed_stale() {
     let h = GraphHarness::new();
-    // Break authored source binding inside units registry_generation while graph fps still match
-    // the units.json file bytes — S7 requires both layers.
     let units_path = h.registry.join("units.json");
     let mut units: Value = serde_json::from_str(&fs::read_to_string(&units_path).unwrap()).unwrap();
     let mut bogus = fingerprint_bytes(b"not-the-authored-source");
     bogus.path = "registry/sources/descriptors/x.toml".into();
     units["registry_generation"] = serde_json::to_value(&RegistryGeneration {
-        generated_at: "2026-07-25T00:00:00Z".into(),
+        generated_at: GENERATED_AT.into(),
         source_fingerprints: vec![bogus],
     })
     .unwrap();
     fs::write(&units_path, serde_json::to_string_pretty(&units).unwrap()).unwrap();
-    // Refresh graph fps so only authored-layer drift remains.
     h.write_valid_graph();
 
     let out = h.run(&["--json", "graph"]);
-    assert_not_still_unimplemented(&out);
-    let v = parse_json(&out);
-    let codes: Vec<&str> = v["diagnostics"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter_map(|d| d["code"].as_str())
-        .collect();
+    assert_eq!(
+        out.status.code(),
+        Some(RESOLUTION as i32),
+        "{}",
+        stderr(&out)
+    );
+    let codes = diagnostic_codes(&parse_json(&out));
     assert!(
-        codes.iter().any(|c| *c == "graph_stale"),
+        codes.iter().any(|c| c == "graph_stale"),
         "expected graph_stale for authored drift, got {codes:?}"
     );
     h.assert_no_child_and_no_record();
@@ -457,7 +536,6 @@ fn malformed_graph_json_is_invalid_registry() {
     let h = GraphHarness::new();
     fs::write(h.registry.join("graph.json"), "{not-json").unwrap();
     let out = h.run(&["--json", "graph"]);
-    assert_not_still_unimplemented(&out);
     assert_eq!(out.status.code(), Some(CONTRACT as i32), "{}", stderr(&out));
     h.assert_no_child_and_no_record();
 }
@@ -477,7 +555,6 @@ fn unknown_node_kind_is_contract_error() {
     )
     .unwrap();
     let out = h.run(&["--json", "graph"]);
-    assert_not_still_unimplemented(&out);
     assert_eq!(out.status.code(), Some(CONTRACT as i32), "{}", stderr(&out));
     h.assert_no_child_and_no_record();
 }
@@ -498,7 +575,6 @@ fn unknown_relation_is_contract_error() {
     )
     .unwrap();
     let out = h.run(&["--json", "graph"]);
-    assert_not_still_unimplemented(&out);
     assert_eq!(out.status.code(), Some(CONTRACT as i32), "{}", stderr(&out));
     h.assert_no_child_and_no_record();
 }
@@ -518,7 +594,6 @@ fn duplicate_node_is_contract_error() {
     )
     .unwrap();
     let out = h.run(&["--json", "graph"]);
-    assert_not_still_unimplemented(&out);
     assert_eq!(out.status.code(), Some(CONTRACT as i32), "{}", stderr(&out));
     h.assert_no_child_and_no_record();
 }
@@ -539,7 +614,6 @@ fn missing_edge_source_is_endpoint_error() {
     )
     .unwrap();
     let out = h.run(&["--json", "graph"]);
-    assert_not_still_unimplemented(&out);
     assert_eq!(out.status.code(), Some(CONTRACT as i32), "{}", stderr(&out));
     let body = format!("{}{}", stdout(&out), stderr(&out));
     assert!(
@@ -567,7 +641,6 @@ fn missing_edge_target_is_endpoint_error() {
     )
     .unwrap();
     let out = h.run(&["--json", "graph"]);
-    assert_not_still_unimplemented(&out);
     assert_eq!(out.status.code(), Some(CONTRACT as i32), "{}", stderr(&out));
     h.assert_no_child_and_no_record();
 }
@@ -585,8 +658,28 @@ fn duplicate_edge_is_deterministic_rejection() {
     )
     .unwrap();
     let out = h.run(&["--json", "graph"]);
-    assert_not_still_unimplemented(&out);
     assert_eq!(out.status.code(), Some(CONTRACT as i32), "{}", stderr(&out));
+    h.assert_no_child_and_no_record();
+}
+
+#[test]
+fn absolute_fingerprint_path_is_contract_error() {
+    let h = GraphHarness::new();
+    let mut doc: Value =
+        serde_json::from_str(&fs::read_to_string(h.registry.join("graph.json")).unwrap()).unwrap();
+    doc["registry_generation"]["source_fingerprints"][0]["path"] = json!("/registry/policies.json");
+    fs::write(
+        h.registry.join("graph.json"),
+        serde_json::to_string_pretty(&doc).unwrap(),
+    )
+    .unwrap();
+    let out = h.run(&["--json", "graph"]);
+    assert_eq!(out.status.code(), Some(CONTRACT as i32), "{}", stderr(&out));
+    let codes = diagnostic_codes(&parse_json(&out));
+    assert!(
+        codes.iter().any(|c| c == "graph_contract_invalid"),
+        "expected graph_contract_invalid, got {codes:?}"
+    );
     h.assert_no_child_and_no_record();
 }
 
@@ -597,7 +690,6 @@ fn symlink_graph_file_fails_closed() {
     fs::rename(h.registry.join("graph.json"), &real).unwrap();
     symlink(&real, h.registry.join("graph.json")).unwrap();
     let out = h.run(&["--json", "graph"]);
-    assert_not_still_unimplemented(&out);
     assert_eq!(out.status.code(), Some(CONTRACT as i32), "{}", stderr(&out));
     h.assert_no_child_and_no_record();
 }
@@ -608,45 +700,101 @@ fn non_regular_graph_file_fails_closed() {
     fs::remove_file(h.registry.join("graph.json")).unwrap();
     fs::create_dir(h.registry.join("graph.json")).unwrap();
     let out = h.run(&["--json", "graph"]);
-    assert_not_still_unimplemented(&out);
     assert_eq!(out.status.code(), Some(CONTRACT as i32), "{}", stderr(&out));
     h.assert_no_child_and_no_record();
 }
 
 #[test]
-fn oversized_graph_hits_bounded_error() {
+fn graph_file_over_8mib_hits_limit() {
     let h = GraphHarness::new();
-    // Build a graph that exceeds the S7 node/edge/string budget once limits land.
+    let pad_len = (GRAPH_FILE_LIMIT_BYTES as usize) + 1024;
+    let pad = "x".repeat(pad_len);
+    let doc = format!(
+        r#"{{"generated_at":"{GENERATED_AT}","registry_generation":{{"generated_at":"{GENERATED_AT}","source_fingerprints":[]}},"nodes":[],"edges":[],"_pad":"{pad}"}}"#
+    );
+    assert!(doc.len() > GRAPH_FILE_LIMIT_BYTES as usize);
+    fs::write(h.registry.join("graph.json"), doc).unwrap();
+    let out = h.run(&["--json", "graph"]);
+    assert_eq!(out.status.code(), Some(CONTRACT as i32), "{}", stderr(&out));
+    let codes = diagnostic_codes(&parse_json(&out));
+    assert!(
+        codes.iter().any(|c| c == "graph_limit_exceeded"),
+        "expected graph_limit_exceeded, got {codes:?}"
+    );
+    h.assert_no_child_and_no_record();
+}
+
+#[test]
+fn node_count_over_20000_hits_limit() {
+    let h = GraphHarness::new();
     let mut nodes = Vec::new();
+    for i in 0..20_001 {
+        nodes.push(json!({"id": format!("n{i}"), "kind": "package"}));
+    }
+    h.write_graph_payload(json!(nodes), json!([]));
+    let out = h.run(&["--json", "graph"]);
+    assert_eq!(out.status.code(), Some(CONTRACT as i32), "{}", stderr(&out));
+    let codes = diagnostic_codes(&parse_json(&out));
+    assert!(
+        codes.iter().any(|c| c == "graph_limit_exceeded"),
+        "expected graph_limit_exceeded, got {codes:?}"
+    );
+    h.assert_no_child_and_no_record();
+}
+
+#[test]
+fn edge_count_over_100000_hits_limit() {
+    let h = GraphHarness::new();
+    let n = 5_000;
+    let mut nodes = Vec::with_capacity(n);
     let mut edges = Vec::new();
-    for i in 0..50_000 {
-        let id = format!("n{i}");
-        nodes.push(json!({"id": id, "kind": "package"}));
-        if i > 0 {
+    for i in 0..n {
+        nodes.push(json!({"id": format!("n{i}"), "kind": "package"}));
+    }
+    for i in 0..n {
+        for k in 0..21 {
+            let j = (i + k + 1) % n;
             edges.push(json!({
-                "from": format!("n{}", i - 1),
+                "from": format!("n{i}"),
                 "rel": "uses",
-                "to": format!("n{i}")
+                "to": format!("n{j}")
             }));
         }
     }
-    let doc = json!({
-        "generated_at": "2026-07-25T00:00:00Z",
-        "registry_generation": {
-            "generated_at": "2026-07-25T00:00:00Z",
-            "source_fingerprints": h.upstream_fps(),
-        },
-        "nodes": nodes,
-        "edges": edges,
-    });
+    assert!(edges.len() > 100_000, "edge count {}", edges.len());
+    h.write_graph_payload(json!(nodes), json!(edges));
+    let out = h.run(&["--json", "graph"]);
+    assert_eq!(out.status.code(), Some(CONTRACT as i32), "{}", stderr(&out));
+    let codes = diagnostic_codes(&parse_json(&out));
+    assert!(
+        codes.iter().any(|c| c == "graph_limit_exceeded"),
+        "expected graph_limit_exceeded, got {codes:?}"
+    );
+    h.assert_no_child_and_no_record();
+}
+
+#[test]
+fn node_id_over_512_bytes_hits_limit() {
+    let h = GraphHarness::new();
+    let long_id = "a".repeat(513);
+    let mut doc: Value =
+        serde_json::from_str(&fs::read_to_string(h.registry.join("graph.json")).unwrap()).unwrap();
+    doc["nodes"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"id": long_id, "kind": "package"}));
     fs::write(
         h.registry.join("graph.json"),
-        serde_json::to_string(&doc).unwrap(),
+        serde_json::to_string_pretty(&doc).unwrap(),
     )
     .unwrap();
     let out = h.run(&["--json", "graph"]);
-    assert_not_still_unimplemented(&out);
     assert_eq!(out.status.code(), Some(CONTRACT as i32), "{}", stderr(&out));
+    let codes = diagnostic_codes(&parse_json(&out));
+    assert!(
+        codes.iter().any(|c| c == "graph_limit_exceeded"),
+        "expected graph_limit_exceeded, got {codes:?}"
+    );
     h.assert_no_child_and_no_record();
 }
 
@@ -670,7 +818,6 @@ fn printable_dot_special_characters_are_escaped() {
     )
     .unwrap();
     let out = h.run(&["graph", "--format", "dot"]);
-    assert_not_still_unimplemented(&out);
     assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
     let dot = stdout(&out);
     assert!(
@@ -683,7 +830,12 @@ fn printable_dot_special_characters_are_escaped() {
 #[test]
 fn graph_ids_with_control_characters_are_rejected() {
     let h = GraphHarness::new();
-    for bad_id in ["has\nnewline", "has\rcarriage", "has\u{0000}nul"] {
+    for bad_id in [
+        "has\nnewline",
+        "has\rcarriage",
+        "has\u{0000}nul",
+        "has\u{007f}del",
+    ] {
         h.write_valid_graph();
         let mut doc: Value =
             serde_json::from_str(&fs::read_to_string(h.registry.join("graph.json")).unwrap())
@@ -698,7 +850,6 @@ fn graph_ids_with_control_characters_are_rejected() {
         )
         .unwrap();
         let out = h.run(&["--json", "graph"]);
-        assert_not_still_unimplemented(&out);
         assert_eq!(
             out.status.code(),
             Some(CONTRACT as i32),
@@ -711,8 +862,6 @@ fn graph_ids_with_control_characters_are_rejected() {
 
 #[test]
 fn schema_and_rust_enums_win_over_stale_readme_vocabulary() {
-    // Contract: closed schema/Rust enums are authoritative. A future README drift must not
-    // widen accepted kinds. Assert unknown kind still fails after Phase 2.
     let h = GraphHarness::new();
     let mut doc: Value =
         serde_json::from_str(&fs::read_to_string(h.registry.join("graph.json")).unwrap()).unwrap();
@@ -726,7 +875,286 @@ fn schema_and_rust_enums_win_over_stale_readme_vocabulary() {
     )
     .unwrap();
     let out = h.run(&["--json", "graph"]);
-    assert_not_still_unimplemented(&out);
     assert_eq!(out.status.code(), Some(CONTRACT as i32), "{}", stderr(&out));
+    h.assert_no_child_and_no_record();
+}
+
+#[test]
+fn bin_still_not_implemented() {
+    let h = GraphHarness::new();
+    let out = h.run(&["bin", "report"]);
+    assert_eq!(
+        out.status.code(),
+        Some(NOT_IMPLEMENTED as i32),
+        "{}",
+        stderr(&out)
+    );
+    h.assert_no_child_and_no_record();
+}
+
+// --- P2-R03 tracked e2e goldens (byte-compare) ---
+
+fn e2e_fixture_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/e2e")
+}
+
+fn copy_e2e_ontarch(dest: &Path) {
+    let src = e2e_fixture_root().join("ontarch");
+    copy_dir_all(&src, dest);
+}
+
+fn copy_dir_all(src: &Path, dest: &Path) {
+    fs::create_dir_all(dest).unwrap();
+    for entry in fs::read_dir(src).unwrap() {
+        let entry = entry.unwrap();
+        let from = entry.path();
+        let to = dest.join(entry.file_name());
+        if from.is_dir() {
+            copy_dir_all(&from, &to);
+        } else {
+            fs::copy(&from, &to).unwrap();
+        }
+    }
+}
+
+struct E2eGraphHarness {
+    #[allow(dead_code)]
+    temp: tempfile::TempDir,
+    workspace: PathBuf,
+    registry: PathBuf,
+    state_home: PathBuf,
+    path_dir: PathBuf,
+    marker: PathBuf,
+}
+
+impl E2eGraphHarness {
+    fn new() -> Self {
+        let temp = tempfile::tempdir().unwrap();
+        let workspace = temp.path().join("ontarch");
+        copy_e2e_ontarch(&workspace);
+        let registry = workspace.join("registry");
+        let state_home = temp.path().join("state-home");
+        let path_dir = temp.path().join("bin");
+        fs::create_dir_all(&path_dir).unwrap();
+        let marker = temp.path().join("MARKER_RAN");
+        write_marker_exe(&path_dir.join("ontarch"), &marker);
+        // Decoy sibling must remain wrong if present.
+        assert!(registry.join("graph.dot").exists());
+        Self {
+            temp,
+            workspace,
+            registry,
+            state_home,
+            path_dir,
+            marker,
+        }
+    }
+
+    fn run(&self, args: &[&str]) -> Output {
+        bin()
+            .arg("--state-home")
+            .arg(&self.state_home)
+            .args(args)
+            .env("TAKOGAMI_ONTARCH_REGISTRY", &self.registry)
+            .env("TAKOGAMI_WORKSPACE_ROOT", &self.workspace)
+            .env("TAKOGAMI_STATE_HOME", &self.state_home)
+            .env("PATH", &self.path_dir)
+            .env_remove("TAKOGAMI_PROFILE")
+            .env_remove("XDG_STATE_HOME")
+            .output()
+            .expect("spawn takogami")
+    }
+
+    fn assert_no_child_and_no_record(&self) {
+        assert!(
+            !self.marker.exists(),
+            "graph must never spawn ontarch/child"
+        );
+        assert!(
+            !self.state_home.exists() || {
+                fs::read_dir(&self.state_home)
+                    .map(|d| d.filter_map(Result::ok).count() == 0)
+                    .unwrap_or(true)
+            },
+            "graph must not create state-home records"
+        );
+    }
+}
+
+#[test]
+fn e2e_expected_graph_text_matches_byte_for_byte() {
+    let h = E2eGraphHarness::new();
+    let out = h.run(&["graph"]);
+    assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
+    let expected = fs::read(e2e_fixture_root().join("expected/graph-text.txt")).unwrap();
+    assert_eq!(
+        out.stdout, expected,
+        "graph text must match tracked golden byte-for-byte"
+    );
+    h.assert_no_child_and_no_record();
+}
+
+#[test]
+fn e2e_expected_graph_dot_matches_byte_for_byte() {
+    let h = E2eGraphHarness::new();
+    let out = h.run(&["graph", "--format", "dot"]);
+    assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
+    let expected = fs::read(e2e_fixture_root().join("expected/graph-dot.txt")).unwrap();
+    assert_eq!(
+        out.stdout, expected,
+        "graph DOT must match tracked golden byte-for-byte"
+    );
+    assert!(
+        !stdout(&out).contains("WRONG_SIBLING"),
+        "must not read sibling graph.dot"
+    );
+    h.assert_no_child_and_no_record();
+}
+
+#[test]
+fn e2e_expected_graph_envelope_matches_byte_for_byte() {
+    let h = E2eGraphHarness::new();
+    let out = h.run(&["--json", "graph", "--format", "text"]);
+    assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
+    let expected = fs::read(e2e_fixture_root().join("expected/graph-envelope.json")).unwrap();
+    assert_eq!(
+        out.stdout, expected,
+        "graph envelope must match tracked golden byte-for-byte"
+    );
+    let v = parse_json(&out);
+    assert!(!v.as_object().unwrap().contains_key("_pending"));
+    assert_eq!(v["data"]["freshness"], "hit");
+    h.assert_no_child_and_no_record();
+}
+
+#[test]
+fn text_edge_truncation_reports_omitted_count() {
+    let h = GraphHarness::new();
+    let limit = takogami::graph::TEXT_EDGE_LINE_LIMIT;
+    let mut nodes = vec![
+        json!({"id": "capability:build", "kind": "capability"}),
+        json!({"id": "demo", "kind": "package"}),
+    ];
+    let mut edges = Vec::new();
+    // Enough distinct package nodes + uses edges to exceed the text line limit.
+    for i in 0..(limit + 3) {
+        let id = format!("pkg-{i:05}");
+        nodes.push(json!({"id": id, "kind": "package"}));
+        edges.push(json!({
+            "from": format!("pkg-{i:05}"),
+            "rel": "uses",
+            "to": "capability:build"
+        }));
+    }
+    h.write_graph_payload(json!(nodes), json!(edges));
+    let out = h.run(&["graph"]);
+    assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
+    let text = stdout(&out);
+    assert!(
+        text.contains(&format!("… 3 edge line(s) omitted (limit {limit})")),
+        "must report omitted count: {text}"
+    );
+    h.assert_no_child_and_no_record();
+}
+
+#[test]
+fn broken_pipe_on_graph_text_is_success() {
+    let h = GraphHarness::new();
+    // `head -c 0` closes the pipe immediately; graph must treat BrokenPipe as success.
+    let mut child = bin()
+        .arg("--state-home")
+        .arg(&h.state_home)
+        .arg("graph")
+        .env("TAKOGAMI_ONTARCH_REGISTRY", &h.registry)
+        .env("TAKOGAMI_WORKSPACE_ROOT", &h.workspace)
+        .env("TAKOGAMI_STATE_HOME", &h.state_home)
+        .env("PATH", &h.path_dir)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("spawn");
+    drop(child.stdout.take());
+    let status = child.wait().expect("wait");
+    assert_eq!(
+        status.code(),
+        Some(SUCCESS as i32),
+        "broken pipe must exit success"
+    );
+}
+
+#[test]
+fn invalid_generated_at_is_contract_error() {
+    let h = GraphHarness::new();
+    let mut doc: Value =
+        serde_json::from_str(&fs::read_to_string(h.registry.join("graph.json")).unwrap()).unwrap();
+    doc["generated_at"] = json!("2026-07-25T00:00:00.123Z");
+    fs::write(
+        h.registry.join("graph.json"),
+        serde_json::to_string_pretty(&doc).unwrap(),
+    )
+    .unwrap();
+    let out = h.run(&["--json", "graph"]);
+    assert_eq!(out.status.code(), Some(CONTRACT as i32), "{}", stderr(&out));
+    h.assert_no_child_and_no_record();
+}
+
+#[test]
+fn unknown_graph_root_field_is_contract_error() {
+    let h = GraphHarness::new();
+    let mut doc: Value =
+        serde_json::from_str(&fs::read_to_string(h.registry.join("graph.json")).unwrap()).unwrap();
+    doc["extra"] = json!(true);
+    fs::write(
+        h.registry.join("graph.json"),
+        serde_json::to_string_pretty(&doc).unwrap(),
+    )
+    .unwrap();
+    let out = h.run(&["--json", "graph"]);
+    assert_eq!(out.status.code(), Some(CONTRACT as i32), "{}", stderr(&out));
+    h.assert_no_child_and_no_record();
+}
+
+#[test]
+fn unsorted_fingerprint_paths_are_contract_error() {
+    let h = GraphHarness::new();
+    let mut doc: Value =
+        serde_json::from_str(&fs::read_to_string(h.registry.join("graph.json")).unwrap()).unwrap();
+    let fps = doc["registry_generation"]["source_fingerprints"]
+        .as_array_mut()
+        .unwrap();
+    fps.swap(0, 1);
+    fs::write(
+        h.registry.join("graph.json"),
+        serde_json::to_string_pretty(&doc).unwrap(),
+    )
+    .unwrap();
+    let out = h.run(&["--json", "graph"]);
+    assert_eq!(out.status.code(), Some(CONTRACT as i32), "{}", stderr(&out));
+    h.assert_no_child_and_no_record();
+}
+
+#[test]
+fn edge_endpoint_over_512_bytes_hits_limit() {
+    let h = GraphHarness::new();
+    let mut doc: Value =
+        serde_json::from_str(&fs::read_to_string(h.registry.join("graph.json")).unwrap()).unwrap();
+    let long = "f".repeat(513);
+    doc["edges"].as_array_mut().unwrap().push(json!({
+        "from": long,
+        "rel": "uses",
+        "to": "capability:build"
+    }));
+    fs::write(
+        h.registry.join("graph.json"),
+        serde_json::to_string_pretty(&doc).unwrap(),
+    )
+    .unwrap();
+    let out = h.run(&["--json", "graph"]);
+    assert_eq!(out.status.code(), Some(CONTRACT as i32), "{}", stderr(&out));
+    let codes = diagnostic_codes(&parse_json(&out));
+    assert!(
+        codes.iter().any(|c| c == "graph_limit_exceeded"),
+        "expected graph_limit_exceeded, got {codes:?}"
+    );
     h.assert_no_child_and_no_record();
 }

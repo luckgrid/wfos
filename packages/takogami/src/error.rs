@@ -173,6 +173,10 @@ pub enum ControllerError {
     #[diagnostic(code(takogami::execution_io))]
     ExecutionIo { message: String, code: String },
 
+    #[error("graph contract error ({code}): {message}")]
+    #[diagnostic(code(takogami::graph_contract))]
+    GraphContract { code: String, message: String },
+
     #[error("internal error: {message}")]
     #[diagnostic(code(takogami::internal))]
     Internal { message: String },
@@ -241,6 +245,48 @@ impl ControllerError {
         }
     }
 
+    pub fn graph_missing() -> Self {
+        Self::Resolution {
+            code: "graph_missing".into(),
+            message: "registry/graph.json is missing — run `ontarch sync` to generate it".into(),
+            session_id: None,
+            explanation_partial: None,
+        }
+    }
+
+    pub fn graph_stale(message: impl Into<String>) -> Self {
+        Self::Resolution {
+            code: "graph_stale".into(),
+            message: format!(
+                "{} — run `ontarch sync` to refresh the graph",
+                message.into()
+            ),
+            session_id: None,
+            explanation_partial: None,
+        }
+    }
+
+    pub fn graph_contract_invalid(message: impl Into<String>) -> Self {
+        Self::GraphContract {
+            code: "graph_contract_invalid".into(),
+            message: message.into(),
+        }
+    }
+
+    pub fn graph_endpoint_invalid(message: impl Into<String>) -> Self {
+        Self::GraphContract {
+            code: "graph_endpoint_invalid".into(),
+            message: message.into(),
+        }
+    }
+
+    pub fn graph_limit_exceeded(message: impl Into<String>) -> Self {
+        Self::GraphContract {
+            code: "graph_limit_exceeded".into(),
+            message: message.into(),
+        }
+    }
+
     pub fn from_policy_contract(err: PolicyContractError) -> Self {
         let code = err.kind.code().to_string();
         Self::PolicyContract {
@@ -288,9 +334,10 @@ impl ControllerError {
             Self::NotImplemented { .. }
             | Self::ExecutionUnavailable { .. }
             | Self::ExecutionClassUnavailable { .. } => NOT_IMPLEMENTED,
-            Self::Contract { .. } | Self::InvalidRegistry { .. } | Self::PolicyContract { .. } => {
-                CONTRACT
-            }
+            Self::Contract { .. }
+            | Self::InvalidRegistry { .. }
+            | Self::PolicyContract { .. }
+            | Self::GraphContract { .. } => CONTRACT,
             Self::NotFound { .. } | Self::Ambiguous { .. } | Self::InvalidFilter { .. } => USAGE,
             Self::Resolution { .. } => RESOLUTION,
             Self::PolicyDeny { .. } => POLICY_DENY,
@@ -313,6 +360,7 @@ impl ControllerError {
             Self::UnavailableSource { .. } => "unavailable_source",
             Self::Resolution { code, .. } => code.as_str(),
             Self::PolicyContract { code, .. } => code.as_str(),
+            Self::GraphContract { code, .. } => code.as_str(),
             Self::PolicyDeny { .. } => "policy_deny",
             Self::PolicyGate { .. } => "policy_gate",
             Self::ExecutionUnavailable { .. } => "execution_unavailable",

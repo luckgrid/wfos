@@ -250,6 +250,7 @@ impl Command {
                 | Self::Build { .. }
                 | Self::Check { .. }
                 | Self::Session { .. }
+                | Self::Graph { .. }
         )
     }
 

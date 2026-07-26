@@ -1,1 +1,22 @@
-{"generated_at":"2026-07-25T00:00:00Z","summary":{"total":1,"by_kind":{"package":1}},"units":[{"id":"demo","kind":"package","provides":[],"requires":[]}]}
+{
+  "generated_at": "2026-07-25T00:00:00Z",
+  "registry_generation": {
+    "generated_at": "2026-07-25T00:00:00Z",
+    "source_fingerprints": [
+      {
+        "path": "registry/sources/descriptors/demo.descriptor.toml",
+        "algorithm": "sha256",
+        "digest": "e720cae96508e1a23fa1a2b7a7a22dd8fb3d728f9f95795c5c6b1237cb18b830"
+      }
+    ]
+  },
+  "summary": {
+    "total": 1
+  },
+  "units": [
+    {
+      "id": "demo",
+      "kind": "package"
+    }
+  ]
+}

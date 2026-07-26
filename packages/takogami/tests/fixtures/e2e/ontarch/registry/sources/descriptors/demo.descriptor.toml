@@ -1,0 +1,4 @@
+id = "demo"
+kind = "package"
+title = "Graph harness demo unit"
+status = "active"

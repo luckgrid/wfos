@@ -1,1 +1,15 @@
-{"generated_at":"2026-07-25T00:00:00Z","profiles":[{"id":"workspace-dev","rails":"takogami.agent","rails_bin":null,"allowed_skill_ids":[]}]}
+{
+  "generated_at": "2026-07-25T00:00:00Z",
+  "profiles": [
+    {
+      "id": "workspace-dev",
+      "title": "Harness dev",
+      "purpose": "graph-cli",
+      "rails": "takogami.agent",
+      "allowed_paths": [
+        "**"
+      ],
+      "blocked_paths": []
+    }
+  ]
+}

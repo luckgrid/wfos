@@ -1,2 +1,10 @@
-# PENDING — replace with complete canonical DOT projection when Phase 2 lands (S7-R13).
-digraph {}
+digraph {
+  "demo";
+  "policy:takogami.agent";
+  "capability:build";
+  "profile:workspace-dev";
+  "demo" -> "policy:takogami.agent" [label="governed-by"];
+  "demo" -> "capability:build" [label="provides"];
+  "demo" -> "capability:build" [label="uses"];
+  "profile:workspace-dev" -> "policy:takogami.agent" [label="selects"];
+}

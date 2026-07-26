@@ -1,1 +1,21 @@
-{"generated_at":"2026-07-25T00:00:00Z","policies":[{"id":"takogami.agent","applies_to":"demo","version":"0.1.0"}]}
+{
+  "generated_at": "2026-07-25T00:00:00Z",
+  "policies": [
+    {
+      "id": "takogami.agent",
+      "applies_to": "agent",
+      "version": "0.1.0",
+      "allow": {
+        "commands": [
+          "takogami graph"
+        ]
+      },
+      "gate": {
+        "commands": []
+      },
+      "block": {
+        "commands": []
+      }
+    }
+  ]
+}
