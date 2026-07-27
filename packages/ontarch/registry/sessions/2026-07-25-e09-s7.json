@@ -175,7 +175,8 @@
         }
       },
       "d9": "open / decide-before-Phase-3",
-      "phase_boundary": "Phase 1 COMPLETE; Phase 2 COMPLETE; Phase 3 READY FOR KICKOFF; Command::Bin unimplemented; E09.S7 in_progress; M4 in_progress"
+      "phase_boundary": "Phase 1 COMPLETE; Phase 2 COMPLETE; Phase 3 READY FOR KICKOFF; Command::Bin unimplemented; E09.S7 in_progress; M4 in_progress",
+      "evidence_commit": "2e28ab2f2ba1dfb0b7d1fb765adc32b6d22398b9"
     },
     {
       "phase": "2-final-evidence-follow-up-review",
