@@ -347,7 +347,12 @@ fn apply_projection_test_drift(exe: &Path, cwd: &Path) -> Result<(), ExecFailure
             use std::os::unix::fs::PermissionsExt;
             if let Ok(meta) = fs::metadata(&target) {
                 let mut perms = meta.permissions();
-                perms.set_mode(0o755);
+                // Optional octal mode (e.g. "0757") for world-writable first-match tests.
+                let mode = std::env::var("TAKOGAMI_TEST_HELPER_SHADOW_MODE")
+                    .ok()
+                    .and_then(|s| u32::from_str_radix(s.trim_start_matches('0'), 8).ok())
+                    .unwrap_or(0o755);
+                perms.set_mode(mode);
                 let _ = fs::set_permissions(&target, perms);
             }
         }

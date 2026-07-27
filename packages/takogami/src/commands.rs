@@ -2334,6 +2334,7 @@ adapter = "direct""#,
         workspace: PathBuf,
         _registry: PathBuf,
         state_home: PathBuf,
+        child_spawn_marker: PathBuf,
         _guard: std::sync::MutexGuard<'static, ()>,
     }
 
@@ -2361,7 +2362,21 @@ adapter = "direct""#,
                 perms.set_mode(0o755);
                 fs::set_permissions(path, perms).unwrap();
             };
-            write_exe(&ontarch.join("bin/ontarch"));
+            let child_spawn_marker = temp.path().join("CHILD_SPAWN_MARKER");
+            // Direct spawn evidence: child appends a line if execute_projection reaches spawn.
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let marker_q = child_spawn_marker.to_string_lossy().replace('\'', "'\\''");
+                let body = format!(
+                    "#!/bin/sh\necho ran >> '{marker_q}'\nexit 0\n"
+                );
+                let ontarch_bin = ontarch.join("bin/ontarch");
+                fs::create_dir_all(ontarch_bin.parent().unwrap()).unwrap();
+                fs::write(&ontarch_bin, body.as_bytes()).unwrap();
+                let mut perms = fs::metadata(&ontarch_bin).unwrap().permissions();
+                perms.set_mode(0o755);
+                fs::set_permissions(&ontarch_bin, perms).unwrap();
+            }
             write_exe(&ontarch.join("bin/ontarch-bin-report"));
             write_exe(&ontarch.join("bin/ontarch-bin-cleanup"));
             fs::create_dir_all(ontarch.join("lib")).unwrap();
@@ -2388,8 +2403,20 @@ adapter = "direct""#,
                 workspace,
                 _registry: registry,
                 state_home,
+                child_spawn_marker,
                 _guard: guard,
             }
+        }
+
+        fn child_spawn_count(&self) -> usize {
+            if !self.child_spawn_marker.exists() {
+                return 0;
+            }
+            fs::read_to_string(&self.child_spawn_marker)
+                .unwrap()
+                .lines()
+                .filter(|l| !l.is_empty())
+                .count()
         }
 
         fn load_records(&self) -> Vec<serde_json::Value> {
@@ -2517,11 +2544,51 @@ adapter = "direct""#,
         write_exe_file(&early.join("bash"));
     }
 
+    /// Counts real `execute_projection` entries while delegating to the production executor.
+    struct CountingProjectionExecutor<E> {
+        inner: E,
+        calls: AtomicU32,
+    }
+
+    impl<E> CountingProjectionExecutor<E> {
+        fn new(inner: E) -> Self {
+            Self {
+                inner,
+                calls: AtomicU32::new(0),
+            }
+        }
+
+        fn calls(&self) -> u32 {
+            self.calls.load(Ordering::SeqCst)
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl<E: ProjectionExecutor> ProjectionExecutor for CountingProjectionExecutor<E> {
+        async fn execute_projection(
+            &self,
+            plan: &crate::policy::AuthorizedProjectionPlan,
+            options: &crate::execution::ExecutionOptions,
+        ) -> ExecutionReport {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            self.inner.execute_projection(plan, options).await
+        }
+    }
+
+    #[derive(Clone, Copy)]
+    enum HelperShadowKind {
+        DistinctBytes,
+        SameBytes,
+        WorldWritable,
+        SymlinkToWorldWritableTarget,
+    }
+
     async fn run_bin_with_helper_shadow(
         early: &Path,
         late: &Path,
         state_home: &Path,
-        same_bytes: bool,
+        kind: HelperShadowKind,
+        outside: Option<&Path>,
     ) -> (
         Result<u8, ControllerError>,
         std::sync::Arc<ObservingRecordWriter>,
@@ -2529,7 +2596,7 @@ adapter = "direct""#,
     ) {
         let sink = std::sync::Arc::new(std::sync::Mutex::new(None));
         let factory = observing_factory(sink.clone());
-        let exe = crate::execution::TokioExecutor;
+        let exe = CountingProjectionExecutor::new(crate::execution::TokioExecutor);
         let late_jq = late.join("jq");
         unsafe {
             std::env::set_var("TAKOGAMI_TEST_INJECT_HELPER_SHADOW", "1");
@@ -2538,15 +2605,37 @@ adapter = "direct""#,
                 early.display().to_string(),
             );
             std::env::set_var("TAKOGAMI_TEST_HELPER_SHADOW_NAME", "jq");
-            if same_bytes {
-                std::env::set_var(
-                    "TAKOGAMI_TEST_HELPER_SHADOW_SAME_BYTES",
-                    late_jq.display().to_string(),
-                );
-            } else {
-                std::env::remove_var("TAKOGAMI_TEST_HELPER_SHADOW_SAME_BYTES");
-            }
+            std::env::remove_var("TAKOGAMI_TEST_HELPER_SHADOW_SAME_BYTES");
             std::env::remove_var("TAKOGAMI_TEST_HELPER_SHADOW_SYMLINK");
+            std::env::remove_var("TAKOGAMI_TEST_HELPER_SHADOW_LINK_TO");
+            std::env::remove_var("TAKOGAMI_TEST_HELPER_SHADOW_MODE");
+            match kind {
+                HelperShadowKind::DistinctBytes => {}
+                HelperShadowKind::SameBytes => {
+                    std::env::set_var(
+                        "TAKOGAMI_TEST_HELPER_SHADOW_SAME_BYTES",
+                        late_jq.display().to_string(),
+                    );
+                }
+                HelperShadowKind::WorldWritable => {
+                    std::env::set_var("TAKOGAMI_TEST_HELPER_SHADOW_MODE", "0757");
+                }
+                HelperShadowKind::SymlinkToWorldWritableTarget => {
+                    let outside = outside.expect("outside dir required for symlink shadow");
+                    fs::create_dir_all(outside).unwrap();
+                    let target = outside.join("jq-ww");
+                    write_exe_file(&target);
+                    use std::os::unix::fs::PermissionsExt;
+                    let mut perms = fs::metadata(&target).unwrap().permissions();
+                    perms.set_mode(0o757);
+                    fs::set_permissions(&target, perms).unwrap();
+                    std::env::set_var("TAKOGAMI_TEST_HELPER_SHADOW_SYMLINK", "1");
+                    std::env::set_var(
+                        "TAKOGAMI_TEST_HELPER_SHADOW_LINK_TO",
+                        target.display().to_string(),
+                    );
+                }
+            }
         }
         crate::projection::install_test_search_dirs(vec![early.to_path_buf(), late.to_path_buf()]);
         let result = run_bin_with(BinCommand::Report, &exe, &factory, state_home).await;
@@ -2556,11 +2645,43 @@ adapter = "direct""#,
             std::env::remove_var("TAKOGAMI_TEST_HELPER_SHADOW_DIR");
             std::env::remove_var("TAKOGAMI_TEST_HELPER_SHADOW_NAME");
             std::env::remove_var("TAKOGAMI_TEST_HELPER_SHADOW_SAME_BYTES");
+            std::env::remove_var("TAKOGAMI_TEST_HELPER_SHADOW_SYMLINK");
+            std::env::remove_var("TAKOGAMI_TEST_HELPER_SHADOW_LINK_TO");
+            std::env::remove_var("TAKOGAMI_TEST_HELPER_SHADOW_MODE");
         }
         let observer = sink.lock().unwrap().clone().expect("observer installed");
-        // Authorization writes pending before executor; one executor entry => snapshots >= 1.
-        let calls = u32::from(!observer.snapshots().is_empty());
+        let calls = exe.calls();
         (result, observer, calls)
+    }
+
+    fn assert_untrusted_helper_terminal(
+        result: &Result<u8, ControllerError>,
+        observer: &ObservingRecordWriter,
+        calls: u32,
+        child_spawns: usize,
+        early: &Path,
+        late: &Path,
+    ) {
+        assert_eq!(result.as_ref().unwrap().clone(), crate::exit_codes::EXECUTION_IO);
+        assert_eq!(
+            calls, 1,
+            "execute_projection must be entered exactly once after authorization"
+        );
+        assert_eq!(child_spawns, 0, "child spawn count must remain zero");
+        let snaps = observer.snapshots();
+        assert_eq!(snaps.len(), 2, "pending then terminal only (no PID)");
+        assert_eq!(snaps[0].execution.outcome, "pending");
+        assert!(snaps[0].execution.pid.is_none());
+        let terminal = &snaps[1];
+        assert_eq!(terminal.execution.outcome, "failed_to_spawn");
+        assert!(!terminal.execution.started);
+        assert!(terminal.execution.pid.is_none());
+        assert!(terminal.execution.exit_code.is_none());
+        let err = terminal.error.as_ref().expect("terminal error required");
+        assert_eq!(err.code, "projection_contract_changed");
+        assert_immutable_fields_byte_identical(&snaps[0], terminal);
+        assert!(!err.message.contains(early.to_string_lossy().as_ref()));
+        assert!(!err.message.contains(late.to_string_lossy().as_ref()));
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -2569,26 +2690,22 @@ adapter = "direct""#,
         let early = fx.workspace.join("helper-early");
         let late = fx.workspace.join("helper-late");
         write_split_projection_helpers(&early, &late);
-        let (result, observer, calls) =
-            run_bin_with_helper_shadow(&early, &late, &fx.state_home, false).await;
-        assert_eq!(result.unwrap(), crate::exit_codes::EXECUTION_IO);
-        assert_eq!(
-            calls, 1,
-            "executor must be entered once after authorization"
+        let (result, observer, calls) = run_bin_with_helper_shadow(
+            &early,
+            &late,
+            &fx.state_home,
+            HelperShadowKind::DistinctBytes,
+            None,
+        )
+        .await;
+        assert_untrusted_helper_terminal(
+            &result,
+            &observer,
+            calls,
+            fx.child_spawn_count(),
+            &early,
+            &late,
         );
-        let snaps = observer.snapshots();
-        assert_eq!(snaps.len(), 2, "pending then terminal only (no PID)");
-        assert_eq!(snaps[0].execution.outcome, "pending");
-        let terminal = &snaps[1];
-        assert_eq!(terminal.execution.outcome, "failed_to_spawn");
-        assert!(!terminal.execution.started);
-        assert!(terminal.execution.pid.is_none());
-        let err = terminal.error.as_ref().expect("terminal error required");
-        assert_eq!(err.code, "projection_contract_changed");
-        assert_immutable_fields_byte_identical(&snaps[0], terminal);
-        assert!(!err.message.contains(early.to_string_lossy().as_ref()));
-        assert!(!err.message.contains(late.to_string_lossy().as_ref()));
-        assert!(!early.join("jq").exists() || early.join("jq").is_file());
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -2597,21 +2714,162 @@ adapter = "direct""#,
         let early = fx.workspace.join("helper-early");
         let late = fx.workspace.join("helper-late");
         write_split_projection_helpers(&early, &late);
-        let (result, observer, calls) =
-            run_bin_with_helper_shadow(&early, &late, &fx.state_home, true).await;
-        assert_eq!(result.unwrap(), crate::exit_codes::EXECUTION_IO);
-        assert_eq!(calls, 1);
-        let snaps = observer.snapshots();
-        assert_eq!(snaps.len(), 2);
-        let terminal = &snaps[1];
-        assert_eq!(terminal.execution.outcome, "failed_to_spawn");
-        assert!(!terminal.execution.started);
-        assert!(terminal.execution.pid.is_none());
-        assert_eq!(
-            terminal.error.as_ref().unwrap().code,
-            "projection_contract_changed"
+        let (result, observer, calls) = run_bin_with_helper_shadow(
+            &early,
+            &late,
+            &fx.state_home,
+            HelperShadowKind::SameBytes,
+            None,
+        )
+        .await;
+        assert_untrusted_helper_terminal(
+            &result,
+            &observer,
+            calls,
+            fx.child_spawn_count(),
+            &early,
+            &late,
         );
-        assert_immutable_fields_byte_identical(&snaps[0], terminal);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn post_authorization_untrusted_helper_first_match_is_terminal_no_spawn() {
+        let fx = BinFaultFixture::new();
+        let early = fx.workspace.join("helper-early");
+        let late = fx.workspace.join("helper-late");
+        write_split_projection_helpers(&early, &late);
+        let (result, observer, calls) = run_bin_with_helper_shadow(
+            &early,
+            &late,
+            &fx.state_home,
+            HelperShadowKind::WorldWritable,
+            None,
+        )
+        .await;
+        assert_untrusted_helper_terminal(
+            &result,
+            &observer,
+            calls,
+            fx.child_spawn_count(),
+            &early,
+            &late,
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn post_authorization_untrusted_helper_executor_called_exactly_once() {
+        let fx = BinFaultFixture::new();
+        let early = fx.workspace.join("helper-early");
+        let late = fx.workspace.join("helper-late");
+        write_split_projection_helpers(&early, &late);
+        let (result, observer, calls) = run_bin_with_helper_shadow(
+            &early,
+            &late,
+            &fx.state_home,
+            HelperShadowKind::WorldWritable,
+            None,
+        )
+        .await;
+        assert!(result.is_ok());
+        assert_eq!(calls, 1);
+        assert_eq!(observer.snapshots().len(), 2);
+        assert_eq!(fx.child_spawn_count(), 0);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn post_authorization_untrusted_helper_child_spawn_count_zero() {
+        let fx = BinFaultFixture::new();
+        let early = fx.workspace.join("helper-early");
+        let late = fx.workspace.join("helper-late");
+        write_split_projection_helpers(&early, &late);
+        let (_result, _observer, calls) = run_bin_with_helper_shadow(
+            &early,
+            &late,
+            &fx.state_home,
+            HelperShadowKind::WorldWritable,
+            None,
+        )
+        .await;
+        assert_eq!(calls, 1);
+        assert_eq!(fx.child_spawn_count(), 0);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn post_authorization_untrusted_helper_preserves_record_identity() {
+        let fx = BinFaultFixture::new();
+        let early = fx.workspace.join("helper-early");
+        let late = fx.workspace.join("helper-late");
+        write_split_projection_helpers(&early, &late);
+        let (result, observer, calls) = run_bin_with_helper_shadow(
+            &early,
+            &late,
+            &fx.state_home,
+            HelperShadowKind::WorldWritable,
+            None,
+        )
+        .await;
+        assert_untrusted_helper_terminal(
+            &result,
+            &observer,
+            calls,
+            fx.child_spawn_count(),
+            &early,
+            &late,
+        );
+        let snaps = observer.snapshots();
+        assert_immutable_fields_byte_identical(&snaps[0], &snaps[1]);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn post_authorization_world_writable_helper_shadow_is_terminal_no_spawn() {
+        let fx = BinFaultFixture::new();
+        let early = fx.workspace.join("helper-early");
+        let late = fx.workspace.join("helper-late");
+        write_split_projection_helpers(&early, &late);
+        let (result, observer, calls) = run_bin_with_helper_shadow(
+            &early,
+            &late,
+            &fx.state_home,
+            HelperShadowKind::WorldWritable,
+            None,
+        )
+        .await;
+        assert_untrusted_helper_terminal(
+            &result,
+            &observer,
+            calls,
+            fx.child_spawn_count(),
+            &early,
+            &late,
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn post_authorization_world_writable_symlink_target_is_terminal_no_spawn() {
+        let fx = BinFaultFixture::new();
+        let early = fx.workspace.join("helper-early");
+        let late = fx.workspace.join("helper-late");
+        let outside = fx.workspace.join("helper-outside");
+        write_split_projection_helpers(&early, &late);
+        let (result, observer, calls) = run_bin_with_helper_shadow(
+            &early,
+            &late,
+            &fx.state_home,
+            HelperShadowKind::SymlinkToWorldWritableTarget,
+            Some(&outside),
+        )
+        .await;
+        assert_untrusted_helper_terminal(
+            &result,
+            &observer,
+            calls,
+            fx.child_spawn_count(),
+            &early,
+            &late,
+        );
+        let snaps = observer.snapshots();
+        let msg = &snaps[1].error.as_ref().unwrap().message;
+        assert!(!msg.contains(outside.to_string_lossy().as_ref()));
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -2620,8 +2878,14 @@ adapter = "direct""#,
         let early = fx.workspace.join("helper-early");
         let late = fx.workspace.join("helper-late");
         write_split_projection_helpers(&early, &late);
-        let (result, observer, _) =
-            run_bin_with_helper_shadow(&early, &late, &fx.state_home, false).await;
+        let (result, observer, _) = run_bin_with_helper_shadow(
+            &early,
+            &late,
+            &fx.state_home,
+            HelperShadowKind::DistinctBytes,
+            None,
+        )
+        .await;
         assert_eq!(result.unwrap(), crate::exit_codes::EXECUTION_IO);
         let terminal = &observer.snapshots()[1];
         let msg = &terminal.error.as_ref().unwrap().message;
@@ -2636,8 +2900,32 @@ adapter = "direct""#,
         assert!(!dumped.contains(late.to_string_lossy().as_ref()));
     }
 
+    #[tokio::test(flavor = "current_thread")]
+    async fn world_writable_helper_shadow_diagnostic_omits_absolute_roots() {
+        let fx = BinFaultFixture::new();
+        let early = fx.workspace.join("helper-early");
+        let late = fx.workspace.join("helper-late");
+        write_split_projection_helpers(&early, &late);
+        let (result, observer, _) = run_bin_with_helper_shadow(
+            &early,
+            &late,
+            &fx.state_home,
+            HelperShadowKind::WorldWritable,
+            None,
+        )
+        .await;
+        assert_eq!(result.unwrap(), crate::exit_codes::EXECUTION_IO);
+        let snaps = observer.snapshots();
+        let msg = &snaps[1].error.as_ref().unwrap().message;
+        assert!(!msg.contains(early.to_string_lossy().as_ref()));
+        assert!(!msg.contains(late.to_string_lossy().as_ref()));
+        assert!(!msg.contains("/usr/bin"));
+        assert!(!msg.contains("/opt/homebrew"));
+    }
+
     #[tokio::test]
     async fn projection_preflight_failure_observer_requires_safe_terminal() {
+
         let fx = BinFaultFixture::new();
         let sink = std::sync::Arc::new(std::sync::Mutex::new(None));
         let factory = observing_factory(sink.clone());
