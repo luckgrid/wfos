@@ -354,6 +354,31 @@ status = "active"
     }
 }
 
+/// Restores file mode on drop (panic-safe permission cleanup for privileged-runner tests).
+struct RestoreMode {
+    path: PathBuf,
+    mode: u32,
+}
+
+impl RestoreMode {
+    fn chmod000(path: PathBuf) -> Self {
+        let meta = fs::symlink_metadata(&path).unwrap();
+        let mode = meta.permissions().mode();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o000)).unwrap();
+        Self { path, mode }
+    }
+
+    fn still_readable(&self) -> bool {
+        fs::File::open(&self.path).is_ok()
+    }
+}
+
+impl Drop for RestoreMode {
+    fn drop(&mut self) {
+        let _ = fs::set_permissions(&self.path, fs::Permissions::from_mode(self.mode));
+    }
+}
+
 fn write_marker_exe(path: &Path, marker: &Path) {
     let script = format!("#!/bin/sh\necho ran >> {}\nexit 0\n", marker.display());
     fs::write(path, script).unwrap();
@@ -877,7 +902,6 @@ fn absolute_fingerprint_path_is_contract_error() {
 #[test]
 fn symlink_graph_file_fails_closed() {
     let h = GraphHarness::new();
-    let before = h.snapshot_tree();
     let real = h.registry.join("graph.real.json");
     fs::rename(h.registry.join("graph.json"), &real).unwrap();
     symlink(&real, h.registry.join("graph.json")).unwrap();
@@ -887,7 +911,6 @@ fn symlink_graph_file_fails_closed() {
     assert!(codes.iter().any(|c| c == "graph_contract_invalid"));
     h.assert_diags_omit_physical_roots(&out);
     h.assert_no_child_and_no_record();
-    let _ = before;
 }
 
 #[test]
@@ -1735,7 +1758,6 @@ fn authored_source_symlink_is_contract() {
 #[test]
 fn graph_file_fifo_is_contract_without_blocking() {
     let h = GraphHarness::new();
-    let before = h.snapshot_tree();
     fs::remove_file(h.registry.join("graph.json")).unwrap();
     let path = h.registry.join("graph.json");
     let status = Command::new("mkfifo").arg(&path).status().expect("mkfifo");
@@ -1748,9 +1770,7 @@ fn graph_file_fifo_is_contract_without_blocking() {
         "expected graph_contract_invalid, got {codes:?}"
     );
     h.assert_diags_omit_physical_roots(&out);
-    // FIFO replacement mutates tree; only assert no child/record.
     h.assert_no_child_and_no_record();
-    let _ = before;
 }
 
 #[test]
@@ -1852,7 +1872,6 @@ fn streaming_hash_large_authored_file_succeeds() {
 #[test]
 fn dangling_graph_symlink_is_contract_not_miss() {
     let h = GraphHarness::new();
-    let before = h.snapshot_tree();
     fs::remove_file(h.registry.join("graph.json")).unwrap();
     symlink(
         h.registry.join("does-not-exist.json"),
@@ -1872,7 +1891,6 @@ fn dangling_graph_symlink_is_contract_not_miss() {
     );
     h.assert_diags_omit_physical_roots(&out);
     h.assert_no_child_and_no_record();
-    let _ = before;
 }
 
 #[test]
@@ -1957,9 +1975,13 @@ fn authored_missing_is_stale() {
 fn present_regular_upstream_io_failure_is_contract() {
     let h = GraphHarness::new();
     let path = h.registry.join("policies.json");
-    fs::set_permissions(&path, fs::Permissions::from_mode(0o000)).unwrap();
+    let guard = RestoreMode::chmod000(path);
+    // privileged-runner: mode 000 still readable — skip chmod-denial assertion.
+    if guard.still_readable() {
+        eprintln!("privileged-runner: mode 000 still readable; skipping chmod-denial CLI assert");
+        return;
+    }
     let out = h.run(&["--json", "graph"]);
-    let _ = fs::set_permissions(&path, fs::Permissions::from_mode(0o644));
     assert_eq!(out.status.code(), Some(CONTRACT as i32), "{}", stderr(&out));
     let codes = diagnostic_codes(&parse_json(&out));
     assert!(
@@ -1969,15 +1991,20 @@ fn present_regular_upstream_io_failure_is_contract() {
     assert!(!codes.iter().any(|c| c == "graph_stale"));
     h.assert_diags_omit_physical_roots(&out);
     h.assert_no_child_and_no_record();
+    drop(guard);
 }
 
 #[test]
 fn present_regular_authored_io_failure_is_contract() {
     let h = GraphHarness::new();
     let path = h.workspace.join(DESCRIPTOR_REL);
-    fs::set_permissions(&path, fs::Permissions::from_mode(0o000)).unwrap();
+    let guard = RestoreMode::chmod000(path);
+    // privileged-runner: mode 000 still readable — skip chmod-denial assertion.
+    if guard.still_readable() {
+        eprintln!("privileged-runner: mode 000 still readable; skipping chmod-denial CLI assert");
+        return;
+    }
     let out = h.run(&["--json", "graph"]);
-    let _ = fs::set_permissions(&path, fs::Permissions::from_mode(0o644));
     assert_eq!(out.status.code(), Some(CONTRACT as i32), "{}", stderr(&out));
     let codes = diagnostic_codes(&parse_json(&out));
     assert!(
@@ -1986,6 +2013,7 @@ fn present_regular_authored_io_failure_is_contract() {
     );
     assert!(!codes.iter().any(|c| c == "graph_stale"));
     h.assert_diags_omit_physical_roots(&out);
+    drop(guard);
 }
 
 #[test]
@@ -2086,8 +2114,7 @@ fn oversized_units_freshness_metadata_hits_limit() {
         "expected graph_limit_exceeded, got {codes:?}"
     );
     h.assert_diags_omit_physical_roots(&out);
-    h.assert_no_child_and_no_record();
-    let _ = before;
+    h.assert_tree_unchanged(&before);
 }
 
 #[test]
@@ -2156,12 +2183,33 @@ fn mode_or_filetype_change_detected_by_snapshot() {
 }
 
 #[test]
-fn hit_text_snapshot_unchanged() {
-    let h = GraphHarness::new();
-    let before = h.snapshot_tree();
-    let out = h.run(&["graph"]);
-    assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
-    h.assert_tree_unchanged(&before);
+fn success_output_surfaces_leave_tree_byte_identical() {
+    for args in [
+        &["graph"][..],
+        &["graph", "--format", "dot"][..],
+        &["graph", "--format", "json"][..],
+        &["--json", "graph"][..],
+    ] {
+        let h = GraphHarness::new();
+        let before = h.snapshot_tree();
+        let out = h.run(args);
+        assert_eq!(
+            out.status.code(),
+            Some(SUCCESS as i32),
+            "args={args:?} stderr={}",
+            stderr(&out)
+        );
+        if args.first() == Some(&"--json") {
+            assert_eq!(parse_json(&out)["data"]["freshness"], "hit");
+        } else if args == ["graph"] {
+            assert!(
+                stdout(&out).contains("Graph freshness: hit"),
+                "{}",
+                stdout(&out)
+            );
+        }
+        h.assert_tree_unchanged(&before);
+    }
 }
 
 #[test]
@@ -2206,5 +2254,103 @@ fn dangling_contract_snapshot_unchanged_aside_from_setup() {
     let before = h.snapshot_tree();
     let out = h.run(&["--json", "graph"]);
     assert_eq!(out.status.code(), Some(CONTRACT as i32), "{}", stderr(&out));
+    h.assert_tree_unchanged(&before);
+}
+
+#[test]
+fn layer2_stale_leaves_tree_byte_identical() {
+    let h = GraphHarness::new();
+    let units_path = h.registry.join("units.json");
+    let mut units: Value = serde_json::from_str(&fs::read_to_string(&units_path).unwrap()).unwrap();
+    let mut bogus = fingerprint_bytes(b"not-the-authored-source");
+    bogus.path = "registry/sources/descriptors/x.toml".into();
+    units["registry_generation"] = serde_json::to_value(&RegistryGeneration {
+        generated_at: GENERATED_AT.into(),
+        source_fingerprints: vec![bogus],
+    })
+    .unwrap();
+    fs::write(&units_path, serde_json::to_string_pretty(&units).unwrap()).unwrap();
+    h.write_valid_graph();
+    let before = h.snapshot_tree();
+    let out = h.run(&["--json", "graph"]);
+    assert_eq!(
+        out.status.code(),
+        Some(RESOLUTION as i32),
+        "{}",
+        stderr(&out)
+    );
+    let codes = diagnostic_codes(&parse_json(&out));
+    assert!(codes.iter().any(|c| c == "graph_stale"), "got {codes:?}");
+    h.assert_tree_unchanged(&before);
+}
+
+#[test]
+fn decode_contract_leaves_tree_byte_identical() {
+    let h = GraphHarness::new();
+    fs::write(h.registry.join("graph.json"), "{not-json").unwrap();
+    let before = h.snapshot_tree();
+    let out = h.run(&["--json", "graph"]);
+    assert_eq!(out.status.code(), Some(CONTRACT as i32), "{}", stderr(&out));
+    let codes = diagnostic_codes(&parse_json(&out));
+    assert!(
+        codes.iter().any(|c| c == "graph_contract_invalid"),
+        "got {codes:?}"
+    );
+    h.assert_tree_unchanged(&before);
+}
+
+#[test]
+fn endpoint_contract_leaves_tree_byte_identical() {
+    let h = GraphHarness::new();
+    h.write_graph_payload(
+        json!([{"id": "demo", "kind": "package"}]),
+        json!([{"from": "missing-src", "rel": "uses", "to": "demo"}]),
+    );
+    let before = h.snapshot_tree();
+    let out = h.run(&["--json", "graph"]);
+    assert_eq!(out.status.code(), Some(CONTRACT as i32), "{}", stderr(&out));
+    let codes = diagnostic_codes(&parse_json(&out));
+    assert!(
+        codes.iter().any(|c| c == "graph_endpoint_invalid"),
+        "got {codes:?}"
+    );
+    h.assert_tree_unchanged(&before);
+}
+
+#[test]
+fn special_file_contract_leaves_tree_byte_identical() {
+    let h = GraphHarness::new();
+    fs::remove_file(h.registry.join("graph.json")).unwrap();
+    symlink(
+        h.registry.join("missing.json"),
+        h.registry.join("graph.json"),
+    )
+    .unwrap();
+    let before = h.snapshot_tree();
+    let out = h.run(&["--json", "graph"]);
+    assert_eq!(out.status.code(), Some(CONTRACT as i32), "{}", stderr(&out));
+    let codes = diagnostic_codes(&parse_json(&out));
+    assert!(
+        codes.iter().any(|c| c == "graph_contract_invalid"),
+        "got {codes:?}"
+    );
+    h.assert_tree_unchanged(&before);
+}
+
+#[test]
+fn limit_contract_leaves_tree_byte_identical() {
+    let h = GraphHarness::new();
+    let path = h.registry.join("units.json");
+    let f = fs::File::create(&path).unwrap();
+    f.set_len(GRAPH_FRESHNESS_METADATA_LIMIT_BYTES + 1).unwrap();
+    h.write_valid_graph();
+    let before = h.snapshot_tree();
+    let out = h.run(&["--json", "graph"]);
+    assert_eq!(out.status.code(), Some(CONTRACT as i32), "{}", stderr(&out));
+    let codes = diagnostic_codes(&parse_json(&out));
+    assert!(
+        codes.iter().any(|c| c == "graph_limit_exceeded"),
+        "got {codes:?}"
+    );
     h.assert_tree_unchanged(&before);
 }

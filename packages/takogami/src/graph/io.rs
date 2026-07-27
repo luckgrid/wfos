@@ -79,14 +79,17 @@ impl SecureFileError {
 }
 
 #[cfg(test)]
+type OpenOverrideFn = fn(&Path, &str) -> Result<fs::File, SecureFileError>;
+
+#[cfg(test)]
 thread_local! {
     // Test seam: when set, open_regular_nofollow delegates to this override.
-    static OPEN_OVERRIDE: std::cell::Cell<Option<fn(&Path, &str) -> Result<fs::File, SecureFileError>>> =
+    static OPEN_OVERRIDE: std::cell::Cell<Option<OpenOverrideFn>> =
         const { std::cell::Cell::new(None) };
 }
 
 #[cfg(test)]
-pub(super) fn set_open_override(f: Option<fn(&Path, &str) -> Result<fs::File, SecureFileError>>) {
+pub(super) fn set_open_override(f: Option<OpenOverrideFn>) {
     OPEN_OVERRIDE.with(|c| c.set(f));
 }
 

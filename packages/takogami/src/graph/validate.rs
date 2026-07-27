@@ -610,4 +610,103 @@ mod tests {
             err
         );
     }
+    fn io_open_fail_authored(
+        physical: &std::path::Path,
+        display: &str,
+    ) -> Result<std::fs::File, super::super::io::SecureFileError> {
+        if display.contains("sources/descriptors") {
+            return Err(super::super::io::SecureFileError::io(
+                super::super::io::SecureFileOperation::Open,
+                display,
+                std::io::Error::other("injected authored"),
+            ));
+        }
+        // Clear override so real nofollow open is used for upstream/units.
+        super::super::io::set_open_override(None);
+        let result = super::super::io::open_regular_nofollow(physical, display);
+        super::super::io::set_open_override(Some(io_open_fail_authored));
+        result
+    }
+
+    #[test]
+    fn present_regular_authored_io_failure_is_contract_not_stale() {
+        use crate::contracts::fingerprint_bytes;
+
+        let dir = tempfile::tempdir().unwrap();
+        let workspace = dir.path().to_path_buf();
+        let registry = workspace.join("registry");
+        std::fs::create_dir_all(registry.join("sources/descriptors")).unwrap();
+
+        for name in [
+            "policies.json",
+            "profiles.json",
+            "skills.json",
+            "units.json",
+        ] {
+            std::fs::write(registry.join(name), format!(r#"{{"k":"{name}"}}"#)).unwrap();
+        }
+
+        let authored_rel = "registry/sources/descriptors/demo.descriptor.toml";
+        let authored_abs = workspace.join(authored_rel);
+        std::fs::write(&authored_abs, b"id = \"demo\"\n").unwrap();
+        let authored_digest = fingerprint_bytes(&std::fs::read(&authored_abs).unwrap()).digest;
+        let authored_fp = GraphSourceFingerprint {
+            path: authored_rel.into(),
+            algorithm: "sha256".into(),
+            digest: authored_digest,
+        };
+
+        let units_body = serde_json::json!({
+            "generated_at": "2026-07-25T00:00:00Z",
+            "registry_generation": {
+                "generated_at": "2026-07-25T00:00:00Z",
+                "source_fingerprints": [{
+                    "path": authored_fp.path,
+                    "algorithm": authored_fp.algorithm,
+                    "digest": authored_fp.digest,
+                }],
+            },
+            "units": []
+        });
+        std::fs::write(
+            registry.join("units.json"),
+            serde_json::to_vec_pretty(&units_body).unwrap(),
+        )
+        .unwrap();
+
+        let mut upstream_fps = Vec::new();
+        for rel in GRAPH_UPSTREAM_PATHS {
+            let abs = workspace.join(rel);
+            let digest = fingerprint_bytes(&std::fs::read(&abs).unwrap()).digest;
+            upstream_fps.push(GraphSourceFingerprint {
+                path: (*rel).into(),
+                algorithm: "sha256".into(),
+                digest,
+            });
+        }
+
+        let access = crate::registry::RegistryAccess::new(crate::registry::RegistryPaths {
+            registry_root: registry,
+            workspace_root: workspace,
+        });
+        let doc = GraphDocument {
+            generated_at: "2026-07-25T00:00:00Z".into(),
+            registry_generation: GraphRegistryGeneration {
+                generated_at: "2026-07-25T00:00:00Z".into(),
+                source_fingerprints: upstream_fps,
+            },
+            nodes: vec![],
+            edges: vec![],
+        };
+
+        super::super::io::set_open_override(Some(io_open_fail_authored));
+        let err = evaluate_graph_freshness(&access, &doc).unwrap_err();
+        super::super::io::set_open_override(None);
+        assert_eq!(err.diagnostic_code(), "graph_contract_invalid");
+        let root = dir.path().to_str().unwrap();
+        assert!(
+            !err.to_string().contains(root),
+            "must not leak physical root: {err}"
+        );
+    }
 }

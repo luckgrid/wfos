@@ -512,10 +512,7 @@ fn projection_cwd_identity_drift_after_seal_fails_preflight() {
     let out = h.run(&["--json", "bin", "report"]);
     assert_not_still_unimplemented(&out);
     // When Phase 3 lands, replace this with post-seal cwd mutation via injectable hook.
-    assert!(
-        false,
-        "Phase 3 seam required: inject cwd identity drift after seal, before spawn"
-    );
+    panic!("Phase 3 seam required: inject cwd identity drift after seal, before spawn");
 }
 
 #[test]

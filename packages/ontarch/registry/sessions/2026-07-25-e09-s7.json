@@ -86,6 +86,21 @@
   ],
   "progress": [
     {
+      "phase": "2-final-evidence-follow-up-review",
+      "title": "Phase 2 final evidence follow-up review",
+      "status": "changes-required",
+      "reviewed_correction_commit": "7473a94854a9906862ca8cd203fb82d8b6747735",
+      "reviewed_evidence_head": "201e64ad5cf5e93dcf7d6c6dff4e978b99c8bff2",
+      "addendum": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-2-final-closure-evidence-follow-up-addendum.md",
+      "production_disposition": "accepted",
+      "blockers": [
+        "incomplete byte-identical outcome matrix",
+        "permission tests not privileged-runner safe",
+        "writable Linux sync/scan/build evidence incomplete",
+        "Phase 4 graph E2E red misclassified as Phase 3"
+      ]
+    },
+    {
       "phase": "2-final-evidence",
       "title": "Phase 2 final closure dual-platform evidence",
       "status": "done",
@@ -667,10 +682,13 @@
     "Build/bin/wfos/2026-07-26-wfos-e09-s7-phase-1-closure-follow-up-review-final-corrections.md",
     "Build/bin/wfos/2026-07-26-wfos-e09-s7-phase-2-readiness-review-and-implementation-acceptance-addendum.md"
   ],
-  "next": "E09.S7 Phase 3 bin routing (blocked until explicit go-ahead; D9 open)",
+  "next": "E09.S7 Phase 2 final evidence follow-up",
   "blockers": [
-    "D9 Phase 3 bin --scope grammar conflict (open / decide-before-Phase-3)",
-    "Phase 3 Command::Bin not implemented (expected)"
+    "incomplete byte-identical outcome matrix",
+    "permission tests not privileged-runner safe",
+    "writable Linux sync/scan/build evidence incomplete",
+    "Phase 4 graph E2E red misclassified as Phase 3",
+    "D9 Phase 3 bin --scope grammar conflict (open / decide-before-Phase-3)"
   ],
-  "token_note": "Phase 2 COMPLETE after F01\u2013F06 final corrections; stop before Phase 3/E10"
+  "token_note": "Phase 2 production accepted; evidence follow-up E01\u2013E04; stop before Phase 3/E10"
 }
