@@ -75,6 +75,11 @@ Generated `units.json` and `scan.json` include a `registry_generation` object
 requires explicit consent (`takogami scan --refresh` → Ontarch scan/sync), never as a side
 effect of a read-only query.
 
+`takogami graph` consumes the generated `graph.json` the same way: hit / miss / stale, no
+implicit sync. On miss or stale, run `moon run ontarch:sync` (or `ontarch sync`) explicitly.
+Graph projection is zero-spawn and writes no operational command record; sibling `graph.dot`
+is not trusted by Takogami.
+
 The registry is a **pre-computed context cache**. One filtered query answers what a repo scan
 otherwise would:
 
@@ -111,9 +116,9 @@ can appear on disk only when filesystem expression is actually needed.
 
 - **`native-toolchain` (Panoply)** produces the registry (`panoply doctor`) and is governed by
   the agent policy here.
-- **`runtime-controller` (Takogami, `takogami`)** is **in progress** — descriptor, schemas,
-  Ontarch projection, and Rust contracts ship today; full discovery, routing, policy
-  execution, and operational sessions are still ahead. **`package-translator` (Polytope,
+- **`runtime-controller` (Takogami, `takogami`)** is **in progress** — discovery, routing,
+  policy, direct execute, command-execution sessions, and graph projection ship today; bin
+  routing and interactive providers remain ahead. **`package-translator` (Polytope,
   `takogami package`)** remains planned and will read metadata-plane data when implemented.
 - **Native manifests stay authoritative.** The metadata plane describes meaning, routing,
   policy, and relationships; it does not replace `Cargo.toml`, `package.json`, `mise.toml`, or

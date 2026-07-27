@@ -91,9 +91,11 @@ fn run_graph(sink: &OutputSink, format: GraphFormat) -> Result<u8, ControllerErr
         if let Some(r) = rendered {
             data["rendered"] = serde_json::Value::String(r);
         }
-        return sink
-            .emit_success("graph", data, Some(freshness), &[])
-            .map_err(map_emit_io);
+        return match sink.emit_success("graph", data, Some(freshness), &[]) {
+            Ok(code) => Ok(code),
+            Err(e) if crate::output::is_broken_pipe(&e) => Ok(crate::exit_codes::SUCCESS),
+            Err(e) => Err(ControllerError::internal(format!("emit: {e}"))),
+        };
     }
 
     use std::io::Write;
@@ -108,16 +110,9 @@ fn run_graph(sink: &OutputSink, format: GraphFormat) -> Result<u8, ControllerErr
     let _ = sink.no_color;
     match write!(std::io::stdout(), "{body}") {
         Ok(()) => Ok(crate::exit_codes::SUCCESS),
-        Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => Ok(crate::exit_codes::SUCCESS),
+        Err(e) if crate::output::is_broken_pipe(&e) => Ok(crate::exit_codes::SUCCESS),
         Err(e) => Err(ControllerError::internal(format!("write stdout: {e}"))),
     }
-}
-
-fn map_emit_io(e: std::io::Error) -> ControllerError {
-    if e.kind() == std::io::ErrorKind::BrokenPipe {
-        return ControllerError::internal("broken pipe");
-    }
-    ControllerError::internal(format!("emit: {e}"))
 }
 
 /// Factory abstraction for opening a record store, injected so lifecycle coordination does not

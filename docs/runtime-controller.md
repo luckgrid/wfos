@@ -11,13 +11,13 @@ Those belong to optional providers (tmux / Herdr for terminals; Hammerspoon and 
 desktop layout; an external gateway such as Push for message/schedule ingress). See
 [native-toolchain.md](native-toolchain.md).
 
-Status: **in progress; direct native execution and command records are implemented.**
-Discovery, list/info/tools/interfaces, doctor, dual-layer policy, sealed-plan resolution, and
-`session list|show|latest` are in place. Allowed direct `--execute` writes a durable pending
-`command_execution` record, then runs the sealed program with literal argv and a cleared
-environment. Gate/Deny never spawn. Optional RTK postprocesses bounded human streams only.
-Graph/bin, interactive providers, and work-session restore remain ahead. See
-[`packages/takogami/README.md`](../packages/takogami/README.md); provenance lives in
+Status: **in progress; direct native execution, command records, and graph projection are
+implemented.** Discovery, list/info/tools/interfaces, doctor, dual-layer policy, sealed-plan
+resolution, `session list|show|latest`, and `takogami graph` are in place. Allowed direct
+`--execute` writes a durable pending `command_execution` record, then runs the sealed program
+with literal argv and a cleared environment. Gate/Deny never spawn. Optional RTK postprocesses
+bounded human streams only. Bin routing, interactive providers, and work-session restore remain
+ahead. See [`packages/takogami/README.md`](../packages/takogami/README.md); provenance lives in
 [`packages/ontarch/registry/sessions/`](../packages/ontarch/registry/sessions/).
 
 ## Responsibilities
@@ -41,10 +41,21 @@ takogami doctor       validate local machine readiness
 takogami tools        report tools from Panoply / Ontarch projections
 takogami interfaces   validate descriptors, schemas, policies, registry entries
 takogami dev|build|check <unit> [--explain] [--execute]   resolve + policy + optional direct execute
-takogami graph        project metadata-plane graph
-takogami bin report|cleanup   project bin/archive contracts
+takogami graph        project metadata-plane graph (read-only; see Graph projection)
+takogami bin report|cleanup   project bin/archive contracts (not yet implemented)
 takogami session list|show|latest   read command execution records (not work sessions)
 ```
+
+### Graph projection
+
+`takogami graph` loads `registry/graph.json` with no-follow, bounded reads and layered
+freshness. Upstream fingerprints use Ontarch `registry_root`; authored unit fingerprints use
+`workspace_root`. Formats: `text` (default), `dot`, `json`. Global `--json` emits one envelope.
+
+Hit / miss / stale never trigger an implicit sync. On miss or stale, run
+`moon run ontarch:sync` (or `ontarch sync`) explicitly, then re-query. Graph queries spawn no
+child and write no operational command record. Sibling `graph.dot` is not trusted.
+`takogami bin` remains exit 10 until projection authorization lands.
 
 Lifecycle verbs resolve a sealed plan, then evaluate dual-layer policy (Takogami request +
 child intent) with Deny > Gate > Allow. `--explain` prints resolution and policy provenance;

@@ -68,6 +68,8 @@ impl E2eHarness {
             copy_dir(&resolution_root().join("demo"), &workspace.join("demo"));
         }
         // Overlay tracked e2e graph (with registry_generation) if present.
+        // Full upstream overlay lives in graph_cli E2eGraphHarness; this MVP harness
+        // keeps resolution registry for discovery/lifecycle and only swaps graph artifacts.
         let tracked_graph = root.join("ontarch/registry/graph.json");
         if tracked_graph.is_file() {
             fs::copy(&tracked_graph, registry.join("graph.json")).unwrap();

@@ -86,6 +86,106 @@
   ],
   "progress": [
     {
+      "phase": "2-closure",
+      "title": "Phase 2 closure corrections (C01–C08)",
+      "status": "done",
+      "addendum": "Build/bin/wfos/2026-07-26-wfos-e09-s7-phase-2-implementation-review-closure-corrections-addendum.md",
+      "based_on_review_head": "04a4acf1b4cc0740c1f8ef6b3b2d4ce62f2302d5",
+      "based_on_implementation_commit": "48c1ff98e8173f7bd21ea796a580214459098a1e",
+      "summary": "Closed C01–C08: Layer-1 registry_root resolve_graph_upstream; GraphRegistryGeneration/GraphSourceFingerprint deny_unknown_fields; graph/io nofollow+O_NONBLOCK+post-open regular+streaming sha256; strict require_graph_utc_seconds; Unicode-safe truncate_id; broken-pipe SUCCESS for all graph surfaces; standalone+embedded topology tests; operator docs; D9 preserved open.",
+      "production_changed_paths": [
+        "packages/takogami/src/graph/io.rs",
+        "packages/takogami/src/graph/types.rs",
+        "packages/takogami/src/graph/validate.rs",
+        "packages/takogami/src/graph/mod.rs",
+        "packages/takogami/src/graph/render.rs",
+        "packages/takogami/src/commands.rs",
+        "packages/takogami/src/output/mod.rs",
+        "packages/takogami/README.md",
+        "docs/runtime-controller.md",
+        "docs/metadata-plane.md"
+      ],
+      "test_changed_paths": [
+        "packages/takogami/tests/graph_cli.rs",
+        "packages/takogami/tests/e2e_mvp.rs"
+      ],
+      "gate": {
+        "toolchain": {
+          "rustc": "1.96.0",
+          "moon": "2.3.2"
+        },
+        "platform_macos": {
+          "arch": "aarch64-apple-darwin",
+          "graph_cli": "61 passed",
+          "lib_graph": "15 passed",
+          "ontarch_graph_contract": "27 passed",
+          "ontarch_bin_contract": "26 passed",
+          "takogami_non_bin_suites": "409 passed (lib+graph_cli+contracts+cli/execution/policy/resolution/session)",
+          "takogami_build": "PASS",
+          "takogami_lint": "PASS",
+          "takogami_format_check": "PASS",
+          "ontarch_sync": "PASS",
+          "ontarch_scan": "PASS",
+          "ontarch_validate": "PASS",
+          "panoply_gen_check": "PASS",
+          "panoply_validate_substrate": "PASS",
+          "git_diff_check": "PASS",
+          "real_layout_graph_hit": "PASS (Workstreams workspace_root + nested registry_root)",
+          "command_bin_implemented": false,
+          "expected_red_remaining": [
+            "bin_cli (Phase 3 exit 10 seams)",
+            "e2e_mvp bin path + mixed-registry graph overlay"
+          ]
+        },
+        "platform_linux": {
+          "vm": "lima wfos-s61-alpine",
+          "arch": "aarch64",
+          "kernel": "Alpine Linux virt",
+          "graph_cli": "61 passed",
+          "lib_graph": "15 passed",
+          "ontarch_graph_contract": "27 passed",
+          "ontarch_bin_contract": "26 passed",
+          "takogami_clippy_lib": "PASS",
+          "takogami_fmt": "PASS",
+          "command_bin_implemented": false
+        },
+        "ci_evidence": {
+          "macos_local_gate": "PASS",
+          "lima_linux_local_gate": "PASS",
+          "github_actions_status_checks": "not present for this working tree"
+        },
+        "phase_2_done": true,
+        "takogami_graph_handler": true,
+        "takogami_bin_handler": false,
+        "d9_preserved_open": true
+      },
+      "implementation_commits": {
+        "phase_2_initial": "48c1ff98e8173f7bd21ea796a580214459098a1e",
+        "phase_2_initial_evidence": "04a4acf1b4cc0740c1f8ef6b3b2d4ce62f2302d5",
+        "phase_2_final_correction": "PENDING_COMMIT"
+      },
+      "completed_at": "2026-07-27T01:45:00Z"
+    },
+    {
+      "phase": "2-review",
+      "title": "Phase 2 implementation review",
+      "status": "changes-required",
+      "reviewed_implementation_commit": "48c1ff98e8173f7bd21ea796a580214459098a1e",
+      "reviewed_evidence_head": "04a4acf1b4cc0740c1f8ef6b3b2d4ce62f2302d5",
+      "addendum": "Build/bin/wfos/2026-07-26-wfos-e09-s7-phase-2-implementation-review-closure-corrections-addendum.md",
+      "blockers": [
+        "graph upstream path base",
+        "nested graph wire closure",
+        "no-follow freshness reads"
+      ],
+      "baseline_c01_failure": {
+        "layout": "embedded Workstreams",
+        "TAKOGAMI_WORKSPACE_ROOT": "/Users/dvz/Workstreams",
+        "TAKOGAMI_ONTARCH_REGISTRY": "Build/src/workspaces/wfos/packages/ontarch/registry",
+        "observed": "graph_stale — Layer 1 resolved registry/*.json under workspace_root instead of registry_root"
+      }
+    },
+    {
       "phase": 2,
       "title": "Takogami graph adapter and output only",
       "status": "done",
@@ -458,5 +558,5 @@
   ],
   "next": "E09.S7 Phase 3 — projection authorization and bin routing (do not start until explicit go-ahead)",
   "blockers": [],
-  "token_note": "Phase 2 DONE (graph-only; Command::Bin false). Dual-platform gate PASS. Stop before Phase 3."
+  "token_note": "Phase 2 DONE after C01–C08 closure corrections. Command::Bin false. D9 open. Dual-platform gate PASS. Stop before Phase 3/E10."
 }

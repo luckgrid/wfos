@@ -229,6 +229,33 @@ status = "active"
         );
     }
 
+    fn snapshot_tree(&self) -> Vec<(String, u64)> {
+        let mut entries = Vec::new();
+        for root in [
+            &self.registry,
+            &self.workspace,
+            &self.state_home,
+            &self.path_dir,
+        ] {
+            if !root.exists() {
+                continue;
+            }
+            snapshot_walk(root, root, &mut entries);
+        }
+        entries.sort();
+        entries
+    }
+
+    fn assert_tree_unchanged(&self, before: &[(String, u64)]) {
+        let after = self.snapshot_tree();
+        assert_eq!(
+            before,
+            after.as_slice(),
+            "graph must not mutate registry/workspace/state/marker trees"
+        );
+        self.assert_no_child_and_no_record();
+    }
+
     fn load_records(&self) -> Vec<Value> {
         if !self.state_home.exists() {
             return Vec::new();
@@ -257,6 +284,27 @@ fn write_marker_exe(path: &Path, marker: &Path) {
     let script = format!("#!/bin/sh\necho ran >> {}\nexit 0\n", marker.display());
     fs::write(path, script).unwrap();
     fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+}
+
+fn snapshot_walk(base: &Path, dir: &Path, out: &mut Vec<(String, u64)>) {
+    let Ok(rd) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in rd {
+        let entry = entry.unwrap();
+        let path = entry.path();
+        let rel = path
+            .strip_prefix(base)
+            .unwrap_or(&path)
+            .to_string_lossy()
+            .into_owned();
+        let meta = fs::symlink_metadata(&path).unwrap();
+        if meta.file_type().is_dir() && !meta.file_type().is_symlink() {
+            snapshot_walk(base, &path, out);
+        } else {
+            out.push((format!("{}:{}", base.display(), rel), meta.len()));
+        }
+    }
 }
 
 fn parse_json(out: &Output) -> Value {
@@ -1157,4 +1205,469 @@ fn edge_endpoint_over_512_bytes_hits_limit() {
         "expected graph_limit_exceeded, got {codes:?}"
     );
     h.assert_no_child_and_no_record();
+}
+
+// --- Phase 2 closure corrections (C01–C07) ---
+
+enum TopologyKind {
+    Standalone,
+    Embedded,
+}
+
+struct TopologyHarness {
+    #[allow(dead_code)]
+    temp: tempfile::TempDir,
+    workspace: PathBuf,
+    registry: PathBuf,
+    state_home: PathBuf,
+    path_dir: PathBuf,
+    marker: PathBuf,
+    descriptor_rel: String,
+}
+
+impl TopologyHarness {
+    fn new(kind: TopologyKind) -> Self {
+        let temp = tempfile::tempdir().unwrap();
+        let (workspace, registry, descriptor_rel) = match kind {
+            TopologyKind::Standalone => {
+                let root = temp.path().join("wfos");
+                fs::create_dir_all(root.join(".agents")).unwrap();
+                let registry = root.join("packages/ontarch/registry");
+                (
+                    root,
+                    registry,
+                    "packages/ontarch/descriptors/demo.descriptor.toml".to_string(),
+                )
+            }
+            TopologyKind::Embedded => {
+                let ws = temp.path().join("workstreams");
+                fs::create_dir_all(ws.join(".agents")).unwrap();
+                let registry = ws.join("Build/src/workspaces/wfos/packages/ontarch/registry");
+                (
+                    ws,
+                    registry,
+                    "Build/src/workspaces/wfos/packages/ontarch/descriptors/demo.descriptor.toml"
+                        .to_string(),
+                )
+            }
+        };
+        let state_home = temp.path().join("state-home");
+        let path_dir = temp.path().join("bin");
+        fs::create_dir_all(&registry).unwrap();
+        fs::create_dir_all(registry.join("sources/descriptors")).unwrap();
+        fs::create_dir_all(workspace.join(Path::new(&descriptor_rel).parent().unwrap())).unwrap();
+        fs::create_dir_all(&path_dir).unwrap();
+        let marker = temp.path().join("MARKER_RAN");
+        write_marker_exe(&path_dir.join("ontarch"), &marker);
+
+        let h = Self {
+            temp,
+            workspace,
+            registry,
+            state_home,
+            path_dir,
+            marker,
+            descriptor_rel,
+        };
+        h.seed();
+        h
+    }
+
+    fn seed(&self) {
+        let body = r#"id = "demo"
+kind = "package"
+title = "Topology demo"
+status = "active"
+"#;
+        fs::write(self.workspace.join(&self.descriptor_rel), body).unwrap();
+        for name in ["policies.json", "profiles.json", "skills.json"] {
+            fs::write(
+                self.registry.join(name),
+                serde_json::to_string_pretty(&json!({
+                    "generated_at": GENERATED_AT,
+                    "items": []
+                }))
+                .unwrap(),
+            )
+            .unwrap();
+        }
+        let authored = RegistryGeneration {
+            generated_at: GENERATED_AT.into(),
+            source_fingerprints: vec![
+                fingerprint_file(
+                    &self.workspace.join(&self.descriptor_rel),
+                    &self.descriptor_rel,
+                )
+                .unwrap(),
+            ],
+        };
+        fs::write(
+            self.registry.join("units.json"),
+            serde_json::to_string_pretty(&json!({
+                "generated_at": GENERATED_AT,
+                "registry_generation": authored,
+                "summary": { "total": 1 },
+                "units": [{ "id": "demo", "kind": "package" }]
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let mut fps = Vec::new();
+        for rel in GRAPH_UPSTREAM_PATHS {
+            let name = rel.strip_prefix("registry/").unwrap();
+            let abs = self.registry.join(name);
+            fps.push(fingerprint_file(&abs, rel).unwrap());
+        }
+        let doc = json!({
+            "generated_at": GENERATED_AT,
+            "registry_generation": {
+                "generated_at": GENERATED_AT,
+                "source_fingerprints": fps,
+            },
+            "nodes": [{"id": "demo", "kind": "package"}],
+            "edges": []
+        });
+        fs::write(
+            self.registry.join("graph.json"),
+            serde_json::to_string_pretty(&doc).unwrap(),
+        )
+        .unwrap();
+    }
+
+    fn run(&self, args: &[&str]) -> Output {
+        bin()
+            .arg("--state-home")
+            .arg(&self.state_home)
+            .args(args)
+            .env("TAKOGAMI_ONTARCH_REGISTRY", &self.registry)
+            .env("TAKOGAMI_WORKSPACE_ROOT", &self.workspace)
+            .env("TAKOGAMI_STATE_HOME", &self.state_home)
+            .env("PATH", &self.path_dir)
+            .env_remove("TAKOGAMI_PROFILE")
+            .env_remove("XDG_STATE_HOME")
+            .output()
+            .expect("spawn takogami")
+    }
+
+    fn assert_no_child_and_no_record(&self) {
+        assert!(
+            !self.marker.exists(),
+            "graph must never spawn ontarch/child"
+        );
+        assert!(
+            !self.state_home.exists()
+                || fs::read_dir(&self.state_home)
+                    .map(|d| d.filter_map(Result::ok).count() == 0)
+                    .unwrap_or(true),
+            "graph must not create state-home records"
+        );
+    }
+}
+
+#[test]
+fn standalone_wfos_topology_graph_hit() {
+    let h = TopologyHarness::new(TopologyKind::Standalone);
+    assert!(h.workspace.join("packages/ontarch/registry").exists());
+    assert_ne!(h.workspace, h.registry);
+    let out = h.run(&["graph"]);
+    assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
+    assert!(stdout(&out).contains("Graph freshness: hit"));
+    h.assert_no_child_and_no_record();
+}
+
+#[test]
+fn standalone_wfos_topology_json_graph_hit() {
+    let h = TopologyHarness::new(TopologyKind::Standalone);
+    let out = h.run(&["--json", "graph"]);
+    assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
+    let v = parse_json(&out);
+    assert_eq!(v["data"]["freshness"], "hit");
+    h.assert_no_child_and_no_record();
+}
+
+#[test]
+fn embedded_workstreams_topology_graph_hit() {
+    let h = TopologyHarness::new(TopologyKind::Embedded);
+    assert!(
+        h.registry
+            .ends_with("Build/src/workspaces/wfos/packages/ontarch/registry")
+    );
+    let out = h.run(&["graph"]);
+    assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
+    assert!(stdout(&out).contains("Graph freshness: hit"));
+    h.assert_no_child_and_no_record();
+}
+
+#[test]
+fn embedded_workstreams_topology_json_graph_hit() {
+    let h = TopologyHarness::new(TopologyKind::Embedded);
+    let out = h.run(&["--json", "graph"]);
+    assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
+    assert_eq!(parse_json(&out)["data"]["freshness"], "hit");
+    h.assert_no_child_and_no_record();
+}
+
+#[test]
+fn workspace_root_move_does_not_break_layer1_upstream() {
+    let h = TopologyHarness::new(TopologyKind::Embedded);
+    // Move authored base to a sibling while keeping registry_root fixed.
+    let alt_ws = h.temp.path().join("alt-ws");
+    fs::create_dir_all(&alt_ws).unwrap();
+    // Copy descriptor into alt workspace at same relative path so Layer 2 still hits.
+    let dest = alt_ws.join(&h.descriptor_rel);
+    fs::create_dir_all(dest.parent().unwrap()).unwrap();
+    fs::copy(h.workspace.join(&h.descriptor_rel), &dest).unwrap();
+    let out = bin()
+        .arg("--state-home")
+        .arg(&h.state_home)
+        .args(["--json", "graph"])
+        .env("TAKOGAMI_ONTARCH_REGISTRY", &h.registry)
+        .env("TAKOGAMI_WORKSPACE_ROOT", &alt_ws)
+        .env("TAKOGAMI_STATE_HOME", &h.state_home)
+        .env("PATH", &h.path_dir)
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
+    assert_eq!(parse_json(&out)["data"]["freshness"], "hit");
+}
+
+#[test]
+fn unknown_graph_registry_generation_field_is_contract() {
+    let h = GraphHarness::new();
+    let mut doc: Value =
+        serde_json::from_str(&fs::read_to_string(h.registry.join("graph.json")).unwrap()).unwrap();
+    doc["registry_generation"]["unexpected"] = json!(true);
+    fs::write(
+        h.registry.join("graph.json"),
+        serde_json::to_string_pretty(&doc).unwrap(),
+    )
+    .unwrap();
+    let before = h.snapshot_tree();
+    let out = h.run(&["--json", "graph"]);
+    assert_eq!(out.status.code(), Some(CONTRACT as i32), "{}", stderr(&out));
+    h.assert_tree_unchanged(&before);
+}
+
+#[test]
+fn unknown_graph_fingerprint_field_is_contract() {
+    let h = GraphHarness::new();
+    let mut doc: Value =
+        serde_json::from_str(&fs::read_to_string(h.registry.join("graph.json")).unwrap()).unwrap();
+    doc["registry_generation"]["source_fingerprints"][0]["unexpected"] = json!(1);
+    fs::write(
+        h.registry.join("graph.json"),
+        serde_json::to_string_pretty(&doc).unwrap(),
+    )
+    .unwrap();
+    let out = h.run(&["--json", "graph"]);
+    assert_eq!(out.status.code(), Some(CONTRACT as i32), "{}", stderr(&out));
+    h.assert_no_child_and_no_record();
+}
+
+#[test]
+fn unknown_units_registry_generation_field_is_contract() {
+    let h = GraphHarness::new();
+    let mut units: Value =
+        serde_json::from_str(&fs::read_to_string(h.registry.join("units.json")).unwrap()).unwrap();
+    units["registry_generation"]["unexpected"] = json!(true);
+    fs::write(
+        h.registry.join("units.json"),
+        serde_json::to_string_pretty(&units).unwrap(),
+    )
+    .unwrap();
+    // Refresh graph fingerprints for units.json after mutation.
+    h.write_valid_graph();
+    let out = h.run(&["--json", "graph"]);
+    assert_eq!(out.status.code(), Some(CONTRACT as i32), "{}", stderr(&out));
+    h.assert_no_child_and_no_record();
+}
+
+#[test]
+fn unknown_units_authored_fingerprint_field_is_contract() {
+    let h = GraphHarness::new();
+    let mut units: Value =
+        serde_json::from_str(&fs::read_to_string(h.registry.join("units.json")).unwrap()).unwrap();
+    units["registry_generation"]["source_fingerprints"][0]["extra"] = json!("x");
+    fs::write(
+        h.registry.join("units.json"),
+        serde_json::to_string_pretty(&units).unwrap(),
+    )
+    .unwrap();
+    h.write_valid_graph();
+    let out = h.run(&["--json", "graph"]);
+    assert_eq!(out.status.code(), Some(CONTRACT as i32), "{}", stderr(&out));
+    h.assert_no_child_and_no_record();
+}
+
+#[test]
+fn calendar_invalid_generated_at_is_contract() {
+    let h = GraphHarness::new();
+    let mut doc: Value =
+        serde_json::from_str(&fs::read_to_string(h.registry.join("graph.json")).unwrap()).unwrap();
+    doc["generated_at"] = json!("2026-13-40T99:99:99Z");
+    fs::write(
+        h.registry.join("graph.json"),
+        serde_json::to_string_pretty(&doc).unwrap(),
+    )
+    .unwrap();
+    let out = h.run(&["--json", "graph"]);
+    assert_eq!(out.status.code(), Some(CONTRACT as i32), "{}", stderr(&out));
+    h.assert_no_child_and_no_record();
+}
+
+#[test]
+fn non_leap_feb_29_generated_at_is_contract() {
+    let h = GraphHarness::new();
+    let mut doc: Value =
+        serde_json::from_str(&fs::read_to_string(h.registry.join("graph.json")).unwrap()).unwrap();
+    doc["generated_at"] = json!("2025-02-29T00:00:00Z");
+    fs::write(
+        h.registry.join("graph.json"),
+        serde_json::to_string_pretty(&doc).unwrap(),
+    )
+    .unwrap();
+    let out = h.run(&["--json", "graph"]);
+    assert_eq!(out.status.code(), Some(CONTRACT as i32), "{}", stderr(&out));
+}
+
+#[test]
+fn upstream_registry_symlink_is_contract() {
+    let h = GraphHarness::new();
+    let real = h.registry.join("policies.json.real");
+    fs::rename(h.registry.join("policies.json"), &real).unwrap();
+    symlink(&real, h.registry.join("policies.json")).unwrap();
+    let out = h.run(&["--json", "graph"]);
+    assert_eq!(out.status.code(), Some(CONTRACT as i32), "{}", stderr(&out));
+    h.assert_no_child_and_no_record();
+}
+
+#[test]
+fn upstream_registry_directory_is_contract() {
+    let h = GraphHarness::new();
+    fs::remove_file(h.registry.join("policies.json")).unwrap();
+    fs::create_dir(h.registry.join("policies.json")).unwrap();
+    let out = h.run(&["--json", "graph"]);
+    assert_eq!(out.status.code(), Some(CONTRACT as i32), "{}", stderr(&out));
+}
+
+#[test]
+fn authored_source_symlink_is_contract() {
+    let h = GraphHarness::new();
+    let path = h.workspace.join(DESCRIPTOR_REL);
+    let real = h
+        .workspace
+        .join("registry/sources/descriptors/demo.real.toml");
+    fs::rename(&path, &real).unwrap();
+    symlink(&real, &path).unwrap();
+    let out = h.run(&["--json", "graph"]);
+    assert_eq!(out.status.code(), Some(CONTRACT as i32), "{}", stderr(&out));
+}
+
+#[test]
+fn graph_file_fifo_is_contract_without_blocking() {
+    let h = GraphHarness::new();
+    fs::remove_file(h.registry.join("graph.json")).unwrap();
+    let path = h.registry.join("graph.json");
+    let status = Command::new("mkfifo").arg(&path).status().expect("mkfifo");
+    assert!(status.success(), "mkfifo failed");
+    let out = h.run(&["--json", "graph"]);
+    assert_eq!(out.status.code(), Some(CONTRACT as i32), "{}", stderr(&out));
+    h.assert_no_child_and_no_record();
+}
+
+#[test]
+fn duplicate_long_emoji_id_no_panic_bounded_diagnostic() {
+    let h = GraphHarness::new();
+    let long = "\u{1F44D}".repeat(70);
+    h.write_graph_payload(
+        json!([
+            {"id": long, "kind": "package"},
+            {"id": long, "kind": "policy"}
+        ]),
+        json!([]),
+    );
+    let out = h.run(&["--json", "graph"]);
+    assert_eq!(out.status.code(), Some(CONTRACT as i32), "{}", stderr(&out));
+    let codes = diagnostic_codes(&parse_json(&out));
+    assert!(codes.iter().any(|c| c == "graph_contract_invalid"));
+    h.assert_no_child_and_no_record();
+}
+
+#[test]
+fn missing_long_unicode_source_endpoint_no_panic() {
+    let h = GraphHarness::new();
+    let long = "\u{1F3AF}".repeat(40);
+    h.write_graph_payload(
+        json!([{"id": "demo", "kind": "package"}]),
+        json!([{"from": long, "rel": "uses", "to": "demo"}]),
+    );
+    let out = h.run(&["--json", "graph"]);
+    assert_eq!(out.status.code(), Some(CONTRACT as i32), "{}", stderr(&out));
+    let codes = diagnostic_codes(&parse_json(&out));
+    assert!(codes.iter().any(|c| c == "graph_endpoint_invalid"));
+}
+
+fn broken_pipe_case(args: &[&str]) {
+    let h = GraphHarness::new();
+    let before = h.snapshot_tree();
+    let mut child = bin()
+        .arg("--state-home")
+        .arg(&h.state_home)
+        .args(args)
+        .env("TAKOGAMI_ONTARCH_REGISTRY", &h.registry)
+        .env("TAKOGAMI_WORKSPACE_ROOT", &h.workspace)
+        .env("TAKOGAMI_STATE_HOME", &h.state_home)
+        .env("PATH", &h.path_dir)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("spawn");
+    drop(child.stdout.take());
+    let status = child.wait().expect("wait");
+    assert_eq!(
+        status.code(),
+        Some(SUCCESS as i32),
+        "broken pipe must exit success for {args:?}"
+    );
+    h.assert_tree_unchanged(&before);
+}
+
+#[test]
+fn broken_pipe_graph_dot_is_success() {
+    broken_pipe_case(&["graph", "--format", "dot"]);
+}
+
+#[test]
+fn broken_pipe_graph_raw_json_is_success() {
+    broken_pipe_case(&["graph", "--format", "json"]);
+}
+
+#[test]
+fn broken_pipe_json_envelope_text_is_success() {
+    broken_pipe_case(&["--json", "graph"]);
+}
+
+#[test]
+fn broken_pipe_json_envelope_dot_is_success() {
+    broken_pipe_case(&["--json", "graph", "--format", "dot"]);
+}
+
+#[test]
+fn broken_pipe_json_envelope_graph_is_success() {
+    broken_pipe_case(&["--json", "graph", "--format", "json"]);
+}
+
+#[test]
+fn streaming_hash_large_authored_file_succeeds() {
+    let h = GraphHarness::new();
+    let path = h.workspace.join(DESCRIPTOR_REL);
+    // 1 MiB authored file — must stream-hash without failing.
+    let big = vec![b'x'; 1024 * 1024];
+    fs::write(&path, &big).unwrap();
+    h.write_units();
+    h.write_valid_graph();
+    let out = h.run(&["--json", "graph"]);
+    assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
+    assert_eq!(parse_json(&out)["data"]["freshness"], "hit");
 }

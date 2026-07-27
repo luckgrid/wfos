@@ -1,6 +1,5 @@
 //! Closed graph document types (deny_unknown_fields; schema-parity enums).
 
-use crate::contracts::RegistryGeneration;
 use serde::{Deserialize, Serialize};
 
 /// Maximum accepted graph.json size (8 MiB).
@@ -11,14 +10,33 @@ pub const GRAPH_NODE_LIMIT: usize = 20_000;
 pub const GRAPH_EDGE_LIMIT: usize = 100_000;
 /// Maximum UTF-8 byte length for node/edge endpoint IDs.
 pub const GRAPH_ID_LIMIT_BYTES: usize = 512;
+/// Bound for Layer-2 units.json freshness metadata reads (32 MiB).
+pub const GRAPH_FRESHNESS_METADATA_LIMIT_BYTES: u64 = 32 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct GraphDocument {
     pub generated_at: String,
-    pub registry_generation: RegistryGeneration,
+    pub registry_generation: GraphRegistryGeneration,
     pub nodes: Vec<GraphNode>,
     pub edges: Vec<GraphEdge>,
+}
+
+/// Closed graph-only registry generation envelope (schema additionalProperties: false).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct GraphRegistryGeneration {
+    pub generated_at: String,
+    pub source_fingerprints: Vec<GraphSourceFingerprint>,
+}
+
+/// Closed graph-only source fingerprint entry.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct GraphSourceFingerprint {
+    pub path: String,
+    pub algorithm: String,
+    pub digest: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -131,6 +149,18 @@ mod tests {
     #[test]
     fn rejects_unknown_root_field() {
         let raw = r#"{"generated_at":"2026-07-25T00:00:00Z","registry_generation":{"generated_at":"2026-07-25T00:00:00Z","source_fingerprints":[]},"nodes":[],"edges":[],"extra":1}"#;
+        assert!(serde_json::from_str::<GraphDocument>(raw).is_err());
+    }
+
+    #[test]
+    fn rejects_unknown_nested_generation_field() {
+        let raw = r#"{"generated_at":"2026-07-25T00:00:00Z","registry_generation":{"generated_at":"2026-07-25T00:00:00Z","source_fingerprints":[],"unexpected":true},"nodes":[],"edges":[]}"#;
+        assert!(serde_json::from_str::<GraphDocument>(raw).is_err());
+    }
+
+    #[test]
+    fn rejects_unknown_fingerprint_field() {
+        let raw = r#"{"generated_at":"2026-07-25T00:00:00Z","registry_generation":{"generated_at":"2026-07-25T00:00:00Z","source_fingerprints":[{"path":"registry/policies.json","algorithm":"sha256","digest":"aa","unexpected":true}]},"nodes":[],"edges":[]}"#;
         assert!(serde_json::from_str::<GraphDocument>(raw).is_err());
     }
 

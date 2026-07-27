@@ -7,13 +7,14 @@ policy, command execution records, and explain output. It coordinates the
 
 It does not own persistent terminal PTYs (tmux / optional Herdr) or desktop window restore.
 
-**Status: direct native execution + command records implemented.** Lifecycle
+**Status: direct native execution + command records + graph projection implemented.** Lifecycle
 `dev` / `build` / `check` resolve a sealed plan, evaluate dual-layer profile/policy rules
 (request + child), and emit Allow / Gate / Deny with safe provenance. Allowed direct
 `--execute` writes a durable pending `RuntimeCommandRecord`, then runs the sealed child with
 literal argv and `env_clear` + sealed non-sensitive keys. `session list|show|latest` queries
-those records. Optional RTK postprocesses eligible human streams only. Graph/bin and
-interactive providers remain ahead.
+those records. `takogami graph` projects the Ontarch registry graph (zero-spawn, no operational
+record). Optional RTK postprocesses eligible human streams only. Bin routing and interactive
+providers remain ahead.
 
 ## Build
 
@@ -42,13 +43,28 @@ takogami dev|build|check <unit> [--explain] [--execute] [--json]
   → child exit codes pass through; state I/O exit 7; execution I/O exit 8
 takogami session list|show|latest [--limit N] [--json]
   → operational command_execution records only (not build or work sessions)
-takogami graph|bin|session …
-  → not_implemented (exit 10) until later runtime-controller phases
+takogami graph [--format text|dot|json] [--json]
+  → typed registry graph projection; hit/miss/stale; no child; no operational record
+takogami bin …
+  → not_implemented (exit 10) until projection authorization / bin routing
 ```
 
 Global flags: `--json`, `--profile`, `--state-home`, `--no-color`, `--verbose`.
 
 Registry override for tests/fixtures: `TAKOGAMI_ONTARCH_REGISTRY`, `TAKOGAMI_WORKSPACE_ROOT`.
+
+### Graph projection
+
+- Reads `registry/graph.json` only (sibling `graph.dot` is never trusted).
+- Layered freshness: graph upstream fingerprints resolve under `TAKOGAMI_ONTARCH_REGISTRY`
+  (`registry_root`); authored unit fingerprints resolve under `TAKOGAMI_WORKSPACE_ROOT`.
+- Hit / miss / stale are typed exits. Miss or stale never syncs implicitly — run
+  `moon run ontarch:sync` (or `ontarch sync`) explicitly, then re-query.
+- Formats: `--format text` (default), `dot`, or `json`. Global `--json` wraps one
+  `CommandEnvelope` with structured `data.graph`.
+- Zero child process and zero operational command record on every graph path.
+- Internal limits (fail closed): 8 MiB graph file, 20k nodes, 100k edges, 512-byte IDs.
+- `Command::Bin` remains unavailable.
 
 ### Lifecycle resolution
 

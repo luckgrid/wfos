@@ -64,18 +64,20 @@ fn escape_dot(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contracts::{RegistryGeneration, SourceFingerprint};
-    use crate::graph::types::{GraphEdge, GraphNode, GraphNodeKind, GraphRelation};
+    use crate::graph::types::{
+        GraphEdge, GraphNode, GraphNodeKind, GraphRegistryGeneration, GraphRelation,
+        GraphSourceFingerprint,
+    };
     use crate::graph::validate::GRAPH_UPSTREAM_PATHS;
 
     fn sample() -> GraphDocument {
         GraphDocument {
             generated_at: "2026-07-25T00:00:00Z".into(),
-            registry_generation: RegistryGeneration {
+            registry_generation: GraphRegistryGeneration {
                 generated_at: "2026-07-25T00:00:00Z".into(),
                 source_fingerprints: GRAPH_UPSTREAM_PATHS
                     .iter()
-                    .map(|p| SourceFingerprint {
+                    .map(|p| GraphSourceFingerprint {
                         path: (*p).into(),
                         algorithm: "sha256".into(),
                         digest: "ab".repeat(32),

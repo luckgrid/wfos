@@ -1,17 +1,19 @@
 //! Graph semantic validation and layered freshness.
 
 use std::collections::{BTreeSet, HashSet};
-use std::fs;
-use std::io::Read;
-use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 
-use crate::contracts::{RegistryGeneration, fingerprint_bytes, fingerprint_file};
-use crate::error::ControllerError;
-use crate::registry::{Freshness, RegistryAccess, RegistryFileKind, UnitsDocument};
+use serde::Deserialize;
 
+use crate::contracts::{fingerprint_bytes, parse_rfc3339_utc_seconds};
+use crate::error::ControllerError;
+use crate::registry::{Freshness, RegistryAccess, RegistryFileKind};
+
+use super::io::{read_bounded_nofollow, sha256_regular_nofollow};
 use super::types::{
-    GRAPH_EDGE_LIMIT, GRAPH_FILE_LIMIT_BYTES, GRAPH_ID_LIMIT_BYTES, GRAPH_NODE_LIMIT, GraphDocument,
+    GRAPH_EDGE_LIMIT, GRAPH_FILE_LIMIT_BYTES, GRAPH_FRESHNESS_METADATA_LIMIT_BYTES,
+    GRAPH_ID_LIMIT_BYTES, GRAPH_NODE_LIMIT, GraphDocument, GraphRegistryGeneration,
+    GraphSourceFingerprint,
 };
 
 /// Canonical Layer-1 fingerprint paths (sorted).
@@ -28,11 +30,18 @@ pub struct GraphLoadOutcome {
     pub freshness: Freshness,
 }
 
+/// Closed Layer-2 view of units.json freshness metadata only.
+#[derive(Debug, Deserialize)]
+struct UnitsFreshnessView {
+    #[serde(default)]
+    registry_generation: Option<GraphRegistryGeneration>,
+}
+
 /// Load, validate, and freshness-check `registry/graph.json` (no-follow, bounded).
 pub fn load_graph(access: &RegistryAccess) -> Result<GraphLoadOutcome, ControllerError> {
     let path = access.file_path(RegistryFileKind::Graph);
-    let meta = match fs::symlink_metadata(&path) {
-        Ok(m) => m,
+    match std::fs::symlink_metadata(&path) {
+        Ok(_) => {}
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             return Err(ControllerError::graph_missing());
         }
@@ -41,54 +50,18 @@ pub fn load_graph(access: &RegistryAccess) -> Result<GraphLoadOutcome, Controlle
                 "cannot stat graph.json: {e}"
             )));
         }
-    };
-    let ft = meta.file_type();
-    if ft.is_symlink() {
-        return Err(ControllerError::graph_contract_invalid(
-            "graph.json must not be a symlink",
-        ));
-    }
-    if !ft.is_file() {
-        return Err(ControllerError::graph_contract_invalid(
-            "graph.json must be a regular file",
-        ));
-    }
-    if meta.len() > GRAPH_FILE_LIMIT_BYTES {
-        return Err(ControllerError::graph_limit_exceeded(format!(
-            "graph.json exceeds {} byte limit",
-            GRAPH_FILE_LIMIT_BYTES
-        )));
     }
 
-    let mut file = open_nofollow_read(&path).map_err(|e| {
-        if e.kind() == std::io::ErrorKind::NotFound {
-            ControllerError::graph_missing()
-        } else {
-            ControllerError::graph_contract_invalid(format!("cannot open graph.json: {e}"))
+    let buf = match read_bounded_nofollow(&path, GRAPH_FILE_LIMIT_BYTES) {
+        Ok(b) => b,
+        Err(e) if e.diagnostic_code() == "graph_limit_exceeded" => return Err(e),
+        Err(e) => {
+            if !path.exists() {
+                return Err(ControllerError::graph_missing());
+            }
+            return Err(e);
         }
-    })?;
-    // Recheck after open when metadata is available.
-    if let Ok(opened) = file.metadata()
-        && opened.len() > GRAPH_FILE_LIMIT_BYTES
-    {
-        return Err(ControllerError::graph_limit_exceeded(format!(
-            "graph.json exceeds {} byte limit",
-            GRAPH_FILE_LIMIT_BYTES
-        )));
-    }
-
-    let mut buf = Vec::new();
-    let limit = (GRAPH_FILE_LIMIT_BYTES as usize).saturating_add(1);
-    let mut take = (&mut file).take(limit as u64);
-    take.read_to_end(&mut buf).map_err(|e| {
-        ControllerError::graph_contract_invalid(format!("cannot read graph.json: {e}"))
-    })?;
-    if buf.len() > GRAPH_FILE_LIMIT_BYTES as usize {
-        return Err(ControllerError::graph_limit_exceeded(format!(
-            "graph.json exceeds {} byte limit",
-            GRAPH_FILE_LIMIT_BYTES
-        )));
-    }
+    };
 
     let mut doc: GraphDocument = serde_json::from_slice(&buf).map_err(|e| {
         ControllerError::graph_contract_invalid(format!("malformed graph.json: {e}"))
@@ -106,17 +79,10 @@ pub fn load_graph(access: &RegistryAccess) -> Result<GraphLoadOutcome, Controlle
     }
 }
 
-fn open_nofollow_read(path: &Path) -> std::io::Result<fs::File> {
-    fs::OpenOptions::new()
-        .read(true)
-        .custom_flags(libc::O_NOFOLLOW)
-        .open(path)
-}
-
 /// Validate semantics/limits and sort nodes/edges in place.
 pub fn validate_graph_document(doc: &mut GraphDocument) -> Result<(), ControllerError> {
-    require_utc_seconds(&doc.generated_at, "generated_at")?;
-    require_utc_seconds(
+    require_graph_utc_seconds(&doc.generated_at, "generated_at")?;
+    require_graph_utc_seconds(
         &doc.registry_generation.generated_at,
         "registry_generation.generated_at",
     )?;
@@ -187,7 +153,7 @@ pub fn canonicalize_graph(doc: &mut GraphDocument) {
     });
 }
 
-fn validate_fingerprint_shape(generation: &RegistryGeneration) -> Result<(), ControllerError> {
+fn validate_fingerprint_shape(generation: &GraphRegistryGeneration) -> Result<(), ControllerError> {
     let fps = &generation.source_fingerprints;
     if fps.len() != 4 {
         return Err(ControllerError::graph_contract_invalid(
@@ -221,7 +187,6 @@ fn validate_fingerprint_shape(generation: &RegistryGeneration) -> Result<(), Con
     }
     let expected: Vec<&str> = GRAPH_UPSTREAM_PATHS.to_vec();
     if paths != expected {
-        // Distinguish unsorted vs wrong set.
         let mut sorted = paths.clone();
         sorted.sort();
         if sorted == expected {
@@ -236,54 +201,71 @@ fn validate_fingerprint_shape(generation: &RegistryGeneration) -> Result<(), Con
     Ok(())
 }
 
-/// Layer 1 (graph→upstream) + Layer 2 (units authored) freshness.
+/// Resolve Phase 1 package-relative `registry/*.json` against `registry_root`.
+pub fn resolve_graph_upstream(
+    registry_root: &Path,
+    recorded: &str,
+) -> Result<PathBuf, ControllerError> {
+    let name = recorded.strip_prefix("registry/").ok_or_else(|| {
+        ControllerError::graph_contract_invalid(
+            "graph upstream fingerprint path must start with registry/",
+        )
+    })?;
+    if !matches!(
+        name,
+        "policies.json" | "profiles.json" | "skills.json" | "units.json"
+    ) {
+        return Err(ControllerError::graph_contract_invalid(
+            "graph upstream fingerprint path set must be policies/profiles/skills/units",
+        ));
+    }
+    if name.contains('/') || name.contains('\\') || name.contains("..") {
+        return Err(ControllerError::graph_contract_invalid(
+            "fingerprint path must be relative and non-traversing",
+        ));
+    }
+    Ok(registry_root.join(name))
+}
+
+/// Layer 1 (graph->upstream via registry_root) + Layer 2 (units authored via workspace_root).
 pub fn evaluate_graph_freshness(
     access: &RegistryAccess,
     doc: &GraphDocument,
 ) -> Result<Freshness, ControllerError> {
-    // Layer 1: exact upstream bytes under workspace_root.
     for fp in &doc.registry_generation.source_fingerprints {
-        let abs = resolve_confined(&access.paths.workspace_root, &fp.path)?;
-        let meta = match fs::symlink_metadata(&abs) {
-            Ok(m) => m,
-            Err(_) => return Ok(Freshness::Stale),
+        let abs = resolve_graph_upstream(&access.paths.registry_root, &fp.path)?;
+        let current = match hash_regular_or_stale(
+            &abs,
+            &fp.path,
+            "upstream fingerprint target must be a regular non-symlink file",
+        )? {
+            Some(c) => c,
+            None => return Ok(Freshness::Stale),
         };
-        if meta.file_type().is_symlink() || !meta.file_type().is_file() {
-            return Err(ControllerError::graph_contract_invalid(format!(
-                "upstream fingerprint target must be a regular non-symlink file ({})",
-                fp.path
-            )));
-        }
-        let current = fingerprint_file(&abs, &fp.path).map_err(|e| {
-            ControllerError::graph_contract_invalid(format!("cannot fingerprint {}: {e}", fp.path))
-        })?;
         if current.digest != fp.digest || current.algorithm != fp.algorithm {
             return Ok(Freshness::Stale);
         }
     }
 
-    // Layer 2: units.json.registry_generation authored sources.
     let units_path = access.file_path(RegistryFileKind::Units);
-    let units_meta = match fs::symlink_metadata(&units_path) {
-        Ok(m) => m,
-        Err(_) => return Ok(Freshness::Stale),
+    let units_bytes = match read_bounded_nofollow(&units_path, GRAPH_FRESHNESS_METADATA_LIMIT_BYTES)
+    {
+        Ok(b) => b,
+        Err(e) if e.diagnostic_code() == "graph_limit_exceeded" => return Err(e),
+        Err(e) => {
+            if path_is_non_regular(&units_path) {
+                return Err(e);
+            }
+            return Ok(Freshness::Stale);
+        }
     };
-    if units_meta.file_type().is_symlink() || !units_meta.file_type().is_file() {
-        return Err(ControllerError::graph_contract_invalid(
-            "units.json must be a regular non-symlink file",
-        ));
-    }
-    let units_text = fs::read_to_string(&units_path).map_err(|e| {
-        ControllerError::graph_contract_invalid(format!("cannot read units.json: {e}"))
-    })?;
-    let units: UnitsDocument = serde_json::from_str(&units_text).map_err(|e| {
+    let units_view: UnitsFreshnessView = serde_json::from_slice(&units_bytes).map_err(|e| {
         ControllerError::graph_contract_invalid(format!("malformed units.json: {e}"))
     })?;
-    let Some(authored) = units.registry_generation.as_ref() else {
-        // Phase 2 fixture contract: missing authored generation ⇒ stale.
+    let Some(authored) = units_view.registry_generation else {
         return Ok(Freshness::Stale);
     };
-    require_utc_seconds(
+    require_graph_utc_seconds(
         &authored.generated_at,
         "units.registry_generation.generated_at",
     )?;
@@ -297,26 +279,52 @@ pub fn evaluate_graph_freshness(
             ));
         }
         let abs = resolve_confined(&access.paths.workspace_root, &fp.path)?;
-        let meta = match fs::symlink_metadata(&abs) {
-            Ok(m) => m,
-            Err(_) => return Ok(Freshness::Stale),
+        let current = match hash_regular_or_stale(
+            &abs,
+            &fp.path,
+            "authored source must be a regular non-symlink file",
+        )? {
+            Some(c) => c,
+            None => return Ok(Freshness::Stale),
         };
-        if meta.file_type().is_symlink() || !meta.file_type().is_file() {
-            return Err(ControllerError::graph_contract_invalid(
-                "authored source must be a regular non-symlink file",
-            ));
-        }
-        let current = fingerprint_file(&abs, &fp.path).map_err(|e| {
-            ControllerError::graph_contract_invalid(format!(
-                "cannot fingerprint authored {}: {e}",
-                fp.path
-            ))
-        })?;
         if current.digest != fp.digest {
             return Ok(Freshness::Stale);
         }
     }
     Ok(Freshness::Hit)
+}
+
+/// `Ok(None)` = missing -> stale; `Err` = non-regular contract.
+fn hash_regular_or_stale(
+    abs: &Path,
+    display: &str,
+    non_regular_msg: &str,
+) -> Result<Option<GraphSourceFingerprint>, ControllerError> {
+    match sha256_regular_nofollow(abs, display) {
+        Ok(fp) => Ok(Some(fp)),
+        Err(_) => match std::fs::symlink_metadata(abs) {
+            Err(_) => Ok(None),
+            Ok(meta) => {
+                let ft = meta.file_type();
+                if ft.is_symlink() || ft.is_dir() || !ft.is_file() {
+                    return Err(ControllerError::graph_contract_invalid(format!(
+                        "{non_regular_msg} ({display})"
+                    )));
+                }
+                Ok(None)
+            }
+        },
+    }
+}
+
+fn path_is_non_regular(path: &Path) -> bool {
+    match std::fs::symlink_metadata(path) {
+        Ok(meta) => {
+            let ft = meta.file_type();
+            ft.is_symlink() || ft.is_dir() || !ft.is_file()
+        }
+        Err(_) => false,
+    }
 }
 
 fn resolve_confined(workspace_root: &Path, recorded: &str) -> Result<PathBuf, ControllerError> {
@@ -333,7 +341,6 @@ fn resolve_confined(workspace_root: &Path, recorded: &str) -> Result<PathBuf, Co
     let root = workspace_root
         .canonicalize()
         .unwrap_or_else(|_| workspace_root.to_path_buf());
-    // Best-effort confinement without following the target (parent canonicalize).
     if let Some(parent) = joined.parent()
         && let Ok(canon_parent) = parent.canonicalize()
         && !canon_parent.starts_with(&root)
@@ -345,19 +352,29 @@ fn resolve_confined(workspace_root: &Path, recorded: &str) -> Result<PathBuf, Co
     Ok(joined)
 }
 
-fn require_utc_seconds(ts: &str, field: &str) -> Result<(), ControllerError> {
-    // YYYY-MM-DDTHH:MM:SSZ
-    let ok = ts.len() == 20
+fn require_graph_utc_seconds(ts: &str, field: &str) -> Result<(), ControllerError> {
+    // Exact graph lexical form YYYY-MM-DDTHH:MM:SSZ, then calendar-valid parse.
+    let lexical = ts.len() == 20
+        && ts.as_bytes().get(4) == Some(&b'-')
+        && ts.as_bytes().get(7) == Some(&b'-')
         && ts.as_bytes().get(10) == Some(&b'T')
+        && ts.as_bytes().get(13) == Some(&b':')
+        && ts.as_bytes().get(16) == Some(&b':')
         && ts.ends_with('Z')
-        && ts
-            .bytes()
-            .all(|b| b.is_ascii_digit() || matches!(b, b'-' | b':' | b'T' | b'Z'));
-    if !ok {
+        && ts[..4].bytes().all(|b| b.is_ascii_digit())
+        && ts[5..7].bytes().all(|b| b.is_ascii_digit())
+        && ts[8..10].bytes().all(|b| b.is_ascii_digit())
+        && ts[11..13].bytes().all(|b| b.is_ascii_digit())
+        && ts[14..16].bytes().all(|b| b.is_ascii_digit())
+        && ts[17..19].bytes().all(|b| b.is_ascii_digit());
+    if !lexical {
         return Err(ControllerError::graph_contract_invalid(format!(
             "invalid {field} timestamp"
         )));
     }
+    parse_rfc3339_utc_seconds(ts).map_err(|_| {
+        ControllerError::graph_contract_invalid(format!("invalid {field} timestamp"))
+    })?;
     Ok(())
 }
 
@@ -390,10 +407,13 @@ fn is_sha256_hex(s: &str) -> bool {
 }
 
 fn truncate_id(id: &str) -> String {
-    if id.len() <= 64 {
-        id.to_string()
+    const MAX_CHARS: usize = 60;
+    let mut chars = id.chars();
+    let prefix: String = chars.by_ref().take(MAX_CHARS).collect();
+    if chars.next().is_some() {
+        format!("{prefix}\u{2026}")
     } else {
-        format!("{}…", &id[..61])
+        prefix
     }
 }
 
@@ -406,15 +426,14 @@ pub fn digest_hex(data: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contracts::{RegistryGeneration, SourceFingerprint};
     use crate::graph::types::{GraphEdge, GraphNode, GraphNodeKind, GraphRelation};
 
-    fn empty_gen() -> RegistryGeneration {
-        RegistryGeneration {
+    fn empty_gen() -> GraphRegistryGeneration {
+        GraphRegistryGeneration {
             generated_at: "2026-07-25T00:00:00Z".into(),
             source_fingerprints: GRAPH_UPSTREAM_PATHS
                 .iter()
-                .map(|p| SourceFingerprint {
+                .map(|p| GraphSourceFingerprint {
                     path: (*p).into(),
                     algorithm: "sha256".into(),
                     digest: "ab".repeat(32),
@@ -475,5 +494,47 @@ mod tests {
         };
         let err = validate_graph_document(&mut doc).unwrap_err();
         assert_eq!(err.diagnostic_code(), "graph_contract_invalid");
+    }
+
+    #[test]
+    fn resolve_graph_upstream_strips_registry_prefix() {
+        let root = PathBuf::from("/tmp/reg");
+        let p = resolve_graph_upstream(&root, "registry/policies.json").unwrap();
+        assert_eq!(p, root.join("policies.json"));
+    }
+
+    #[test]
+    fn rejects_calendar_invalid_timestamp() {
+        let mut doc = GraphDocument {
+            generated_at: "2026-13-40T99:99:99Z".into(),
+            registry_generation: empty_gen(),
+            nodes: vec![],
+            edges: vec![],
+        };
+        let err = validate_graph_document(&mut doc).unwrap_err();
+        assert_eq!(err.diagnostic_code(), "graph_contract_invalid");
+    }
+
+    #[test]
+    fn accepts_valid_leap_day() {
+        let mut generation = empty_gen();
+        generation.generated_at = "2024-02-29T12:00:00Z".into();
+        let mut doc = GraphDocument {
+            generated_at: "2024-02-29T12:00:00Z".into(),
+            registry_generation: generation,
+            nodes: vec![],
+            edges: vec![],
+        };
+        validate_graph_document(&mut doc).unwrap();
+    }
+
+    #[test]
+    fn truncate_id_is_utf8_safe_for_emoji() {
+        // 70 emoji chars (>60 char truncate threshold; also >64 bytes).
+        let id = "\u{1F44D}".repeat(70);
+        assert!(id.len() > 64);
+        let t = truncate_id(&id);
+        assert!(t.ends_with('\u{2026}'));
+        assert!(std::str::from_utf8(t.as_bytes()).is_ok());
     }
 }

@@ -22,7 +22,7 @@ use serde::Serialize;
 use std::io::{self, Write};
 use std::path::Path;
 
-fn is_broken_pipe(err: &io::Error) -> bool {
+pub(crate) fn is_broken_pipe(err: &io::Error) -> bool {
     err.kind() == io::ErrorKind::BrokenPipe || err.raw_os_error() == Some(libc::EPIPE)
 }
 
