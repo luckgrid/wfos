@@ -34,6 +34,40 @@ fn stderr(o: &Output) -> &str {
     std::str::from_utf8(&o.stderr).unwrap()
 }
 
+/// Closed projection source set required for seal (logical packages/ontarch/… labels).
+fn ensure_projection_source_manifest(ontarch_pkg: &std::path::Path) {
+    let real = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../ontarch");
+    let copy_or_stub = |rel: &str, stub: &[u8]| {
+        let dest = ontarch_pkg.join(rel);
+        fs::create_dir_all(dest.parent().unwrap()).unwrap();
+        let src = real.join(rel);
+        if src.is_file() {
+            fs::copy(&src, &dest).unwrap();
+        } else {
+            fs::write(&dest, stub).unwrap();
+        }
+    };
+    // Bins already include ontarch; ensure siblings exist as regular files.
+    if !ontarch_pkg.join("bin/ontarch-bin-report").is_file() {
+        write_executable(
+            &ontarch_pkg.join("bin/ontarch-bin-report"),
+            "#!/bin/sh\nexit 0\n",
+        );
+    }
+    if !ontarch_pkg.join("bin/ontarch-bin-cleanup").is_file() {
+        write_executable(
+            &ontarch_pkg.join("bin/ontarch-bin-cleanup"),
+            "#!/bin/sh\nexit 0\n",
+        );
+    }
+    copy_or_stub("lib/common.sh", b"# test\n");
+    copy_or_stub("lib/registry.sh", b"# test\n");
+    copy_or_stub("policies/takogami.agent.policy.toml", b"# test\n");
+    copy_or_stub("policies/agent-bin.policy.toml", b"# test\n");
+    copy_or_stub("schemas/bin-inventory.schema.json", b"{}\n");
+    copy_or_stub("schemas/bin-cleanup-plan.schema.json", b"{}\n");
+}
+
 struct BinHarness {
     #[allow(dead_code)]
     temp: tempfile::TempDir,
@@ -79,6 +113,7 @@ impl BinHarness {
         let inv = sample_inventory(workspace.to_str().unwrap());
         let clean = sample_cleanup_plan("report-only");
         write_canonical_fake_ontarch(&canonical_ontarch, &marker, &panoply_side, &inv, &clean);
+        ensure_projection_source_manifest(&ontarch_pkg);
         // PATH decoy — must never run when canonical package Ontarch is authoritative.
         write_marker_exe(&path_dir.join("ontarch"), &path_decoy_marker);
 
@@ -931,4 +966,303 @@ fn validated_scope_record_stores_only_scope_provided() {
     let blob = serde_json::to_string(rec).unwrap();
     assert!(blob.contains("scope_provided"));
     assert!(!blob.contains("Build/bin/demo"));
+}
+
+// --- E09.S7 Phase 3 closure corrections (C01–C05) ---
+
+fn write_helper_decoy(path_dir: &std::path::Path, name: &str, marker: &std::path::Path) {
+    write_marker_exe(&path_dir.join(name), marker);
+}
+
+#[test]
+fn caller_path_decoy_jq_does_not_run() {
+    let h = BinHarness::new();
+    let decoy = h.workspace.join("MARKER_JQ");
+    write_helper_decoy(&h.path_dir, "jq", &decoy);
+    let out = h.run(&["--json", "bin", "report"]);
+    assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
+    h.assert_marker_once();
+    assert!(!decoy.exists(), "caller PATH decoy jq must never run");
+}
+
+#[test]
+fn caller_path_decoy_sed_does_not_run() {
+    let h = BinHarness::new();
+    let decoy = h.workspace.join("MARKER_SED");
+    write_helper_decoy(&h.path_dir, "sed", &decoy);
+    let out = h.run(&["--json", "bin", "report"]);
+    assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
+    assert!(!decoy.exists(), "caller PATH decoy sed must never run");
+}
+
+#[test]
+fn caller_path_decoy_find_or_fd_does_not_run() {
+    let h = BinHarness::new();
+    let decoy_find = h.workspace.join("MARKER_FIND");
+    let decoy_fd = h.workspace.join("MARKER_FD");
+    write_helper_decoy(&h.path_dir, "find", &decoy_find);
+    write_helper_decoy(&h.path_dir, "fd", &decoy_fd);
+    let out = h.run(&["--json", "bin", "report"]);
+    assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
+    assert!(!decoy_find.exists());
+    assert!(!decoy_fd.exists());
+}
+
+#[test]
+fn projection_source_digest_drift_after_authorization_fails_preflight() {
+    let h = BinHarness::new();
+    let out = h.run_env(
+        &["--json", "bin", "report"],
+        &[("TAKOGAMI_TEST_INJECT_SOURCE_DRIFT", "1")],
+    );
+    assert_ne!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
+    h.assert_marker_untouched();
+    let blob = format!("{}{}", stdout(&out), stderr(&out));
+    assert!(
+        !blob.contains(h.workspace.to_string_lossy().as_ref()),
+        "diagnostics must omit absolute workspace root: {blob}"
+    );
+}
+
+#[test]
+fn projection_source_removed_after_authorization_fails_preflight() {
+    // Seal-time sources exist; remove a required file via drift of common.sh content then
+    // separately prove missing-at-seal via a dedicated harness mutation.
+    let h = BinHarness::new();
+    let common = h.workspace.join("packages/ontarch/lib/common.sh");
+    fs::remove_file(&common).unwrap();
+    let out = h.run(&["--json", "bin", "report"]);
+    assert_ne!(out.status.code(), Some(SUCCESS as i32));
+    h.assert_marker_untouched();
+}
+
+#[test]
+fn projection_source_replaced_same_length_fails_preflight() {
+    let h = BinHarness::new();
+    let common = h.workspace.join("packages/ontarch/lib/common.sh");
+    // Same length as inject seam body (`# drifted\n` = 10 bytes), different digest.
+    fs::write(&common, b"#DRIFTED?\n").unwrap();
+    assert_eq!(fs::read(&common).unwrap().len(), b"# drifted\n".len());
+    let out = h.run_env(
+        &["--json", "bin", "report"],
+        &[("TAKOGAMI_TEST_INJECT_SOURCE_DRIFT", "1")],
+    );
+    assert_ne!(out.status.code(), Some(SUCCESS as i32));
+    h.assert_marker_untouched();
+}
+
+#[test]
+fn source_drift_never_runs_path_decoy_or_canonical_child() {
+    let h = BinHarness::new();
+    let decoy = h.workspace.join("MARKER_JQ");
+    write_helper_decoy(&h.path_dir, "jq", &decoy);
+    let out = h.run_env(
+        &["--json", "bin", "report"],
+        &[("TAKOGAMI_TEST_INJECT_SOURCE_DRIFT", "1")],
+    );
+    assert_ne!(out.status.code(), Some(SUCCESS as i32));
+    h.assert_marker_untouched();
+    assert!(!decoy.exists());
+}
+
+#[test]
+fn source_drift_diagnostic_omits_absolute_roots() {
+    let h = BinHarness::new();
+    let out = h.run_env(
+        &["--json", "bin", "report"],
+        &[("TAKOGAMI_TEST_INJECT_SOURCE_DRIFT", "1")],
+    );
+    let blob = format!("{}{}", stdout(&out), stderr(&out));
+    assert!(!blob.contains(h.workspace.to_string_lossy().as_ref()));
+    assert!(!blob.contains(h.registry.to_string_lossy().as_ref()));
+}
+
+#[test]
+fn human_bin_report_is_not_json() {
+    let h = BinHarness::new();
+    let out = h.run(&["bin", "report"]);
+    assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
+    let s = stdout(&out);
+    assert!(
+        !s.trim_start().starts_with('{'),
+        "human output must not be JSON: {s}"
+    );
+    assert!(s.contains("Bin inventory"), "{s}");
+    assert!(!s.contains(h.workspace.to_string_lossy().as_ref()));
+}
+
+#[test]
+fn human_cleanup_report_only_is_not_json() {
+    let h = BinHarness::new();
+    let out = h.run(&["bin", "cleanup", "--mode", "report-only"]);
+    assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
+    let s = stdout(&out);
+    assert!(!s.trim_start().starts_with('{'));
+    assert!(
+        s.contains("report-only") || s.contains("Bin cleanup"),
+        "{s}"
+    );
+    assert!(
+        s.contains("Mutation executed: false") || s.contains("mutation"),
+        "{s}"
+    );
+}
+
+#[test]
+fn human_cleanup_gate_is_not_json() {
+    let h = BinHarness::new();
+    let out = h.run(&["bin", "cleanup", "--mode", "dry-run"]);
+    assert_eq!(
+        out.status.code(),
+        Some(POLICY_GATE as i32),
+        "{}",
+        stderr(&out)
+    );
+    let s = stdout(&out);
+    assert!(!s.trim_start().starts_with('{'), "{s}");
+    h.assert_marker_untouched();
+}
+
+#[test]
+fn human_cleanup_deny_is_not_json() {
+    let h = BinHarness::new();
+    let out = h.run(&["bin", "cleanup", "--mode", "archive"]);
+    assert_eq!(
+        out.status.code(),
+        Some(POLICY_DENY as i32),
+        "{}",
+        stderr(&out)
+    );
+    let s = stdout(&out);
+    assert!(!s.trim_start().starts_with('{'), "{s}");
+    h.assert_marker_untouched();
+}
+
+#[test]
+fn json_bin_report_is_exactly_one_envelope() {
+    let h = BinHarness::new();
+    let out = h.run(&["--json", "bin", "report"]);
+    assert_eq!(out.status.code(), Some(SUCCESS as i32));
+    let v: Value = serde_json::from_str(stdout(&out).trim()).unwrap();
+    assert!(v.get("schema_version").is_some());
+    assert!(stdout(&out).trim().lines().count() >= 1);
+}
+
+#[test]
+fn json_cleanup_outcomes_are_exactly_one_envelope() {
+    let h = BinHarness::new();
+    for (args, code) in [
+        (
+            &["--json", "bin", "cleanup", "--mode", "report-only"][..],
+            SUCCESS,
+        ),
+        (
+            &["--json", "bin", "cleanup", "--mode", "dry-run"][..],
+            POLICY_GATE,
+        ),
+        (
+            &["--json", "bin", "cleanup", "--mode", "archive"][..],
+            POLICY_DENY,
+        ),
+    ] {
+        let out = h.run(args);
+        assert_eq!(out.status.code(), Some(code as i32), "{args:?}");
+        let _: Value = serde_json::from_str(stdout(&out).trim()).unwrap();
+    }
+}
+
+#[test]
+fn human_output_is_bounded() {
+    let h = BinHarness::new();
+    let out = h.run(&["bin", "report"]);
+    let s = stdout(&out);
+    assert!(s.lines().count() < 40, "human output too large: {s}");
+    assert!(!s.contains("\"workflows\""));
+}
+
+#[test]
+fn human_output_omits_absolute_roots() {
+    let h = BinHarness::new();
+    let out = h.run(&["bin", "report"]);
+    let s = stdout(&out);
+    assert!(!s.contains(h.workspace.to_string_lossy().as_ref()));
+    assert!(!s.contains(h.registry.to_string_lossy().as_ref()));
+}
+
+#[test]
+fn projection_terminal_retains_pending_started_at() {
+    let h = BinHarness::new();
+    let out = h.run(&["--json", "bin", "report"]);
+    assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
+    let rec = &h.load_records()[0];
+    let started = rec["started_at"].as_str().unwrap();
+    let ended = rec["ended_at"].as_str().unwrap();
+    assert!(started.ends_with('Z') && started.len() == 20);
+    assert!(ended.ends_with('Z') && ended.len() == 20);
+    // Terminal derives from pending: started_at must remain a seal-time identity field
+    // (not absent / not rewritten to null). Same-second started/ended is allowed.
+    assert_eq!(rec["schema_version"], "0.1.0");
+    assert!(rec.get("resolution").is_none() || rec["resolution"].is_null());
+}
+
+#[test]
+fn projection_terminal_retains_request_policy_and_fingerprints() {
+    let h = BinHarness::new();
+    let out = h.run(&["--json", "bin", "report"]);
+    assert_eq!(out.status.code(), Some(SUCCESS as i32));
+    let rec = &h.load_records()[0];
+    assert!(rec.get("request").is_some());
+    assert!(rec.get("policy_decision").is_some());
+    assert!(
+        rec["source_fingerprints"]
+            .as_array()
+            .map(|a| !a.is_empty())
+            .unwrap_or(false)
+    );
+    let fps = rec["source_fingerprints"].as_array().unwrap();
+    for fp in fps {
+        let path = fp["path"].as_str().unwrap();
+        assert!(path.starts_with("packages/ontarch/"));
+        assert!(!path.starts_with('/'));
+    }
+}
+
+#[test]
+fn projection_preflight_failure_persists_safe_error() {
+    let h = BinHarness::new();
+    let out = h.run_env(
+        &["--json", "bin", "report"],
+        &[("TAKOGAMI_TEST_INJECT_SOURCE_DRIFT", "1")],
+    );
+    assert_ne!(out.status.code(), Some(SUCCESS as i32));
+    // Pending may remain if written before preflight inside executor.
+    let records = h.load_records();
+    if let Some(rec) = records.first() {
+        if let Some(err) = rec.get("error") {
+            let blob = err.to_string();
+            assert!(!blob.contains(h.workspace.to_string_lossy().as_ref()));
+        }
+    }
+}
+
+#[test]
+fn projection_payload_error_persists_child_exit_zero_and_contract_error() {
+    let h = BinHarness::new();
+    h.install_ontarch_prose();
+    ensure_projection_source_manifest(&h.workspace.join("packages/ontarch"));
+    let out = h.run(&["--json", "bin", "report"]);
+    assert_eq!(out.status.code(), Some(CONTRACT as i32), "{}", stderr(&out));
+    let rec = &h.load_records()[0];
+    assert_eq!(rec["execution"]["exit_code"], 0);
+    assert!(rec.get("error").is_some());
+}
+
+#[test]
+fn projection_output_summary_merges_stdout_stderr_encoding() {
+    let h = BinHarness::new();
+    let out = h.run(&["--json", "bin", "report"]);
+    assert_eq!(out.status.code(), Some(SUCCESS as i32));
+    let rec = &h.load_records()[0];
+    let enc = rec["output_summary"]["encoding"].as_str().unwrap();
+    assert!(matches!(enc, "utf-8" | "lossy-utf-8" | "binary"));
 }

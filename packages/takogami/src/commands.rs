@@ -12,7 +12,9 @@ use crate::contracts::{
 };
 use crate::doctor::{self, DoctorInputs};
 use crate::error::{ControllerError, ExecutionDeferredDetails, PolicyOutcomeDetails};
-use crate::execution::{ExecutionMode, ExecutionOptions, Executor, TokioExecutor};
+use crate::execution::{
+    ExecutionMode, ExecutionOptions, Executor, ProjectionExecutor, TokioExecutor,
+};
 use crate::output::OutputSink;
 use crate::registry::{
     ExternalAdapters, Freshness, ProcessAdapters, ProfileSelection, RefreshKind, RegistryAccess,
@@ -1063,7 +1065,10 @@ fn writeln_human(line: &str) -> Result<(), ControllerError> {
 mod tests {
     use super::*;
     use crate::contracts::{RegistryGeneration, fingerprint_file};
-    use crate::execution::{ExecutionReport, SpyExecutor, UnavailableExecutor};
+    use crate::execution::{
+        ExecutionReport, ProjectionExecutor, SpyExecutor, SpyProjectionExecutor,
+        UnavailableExecutor,
+    };
     use crate::exit_codes::{
         CONTRACT, NOT_IMPLEMENTED, POLICY_DENY, POLICY_GATE, RESOLUTION, SUCCESS,
     };
@@ -1759,6 +1764,217 @@ adapter = "direct""#,
         assert_eq!(executor.calls.load(std::sync::atomic::Ordering::SeqCst), 1);
         fx.assert_marker_untouched();
     }
+
+    /// Minimal packages/ontarch layout for projection store-fault injection.
+    struct BinFaultFixture {
+        _temp: tempfile::TempDir,
+        _workspace: PathBuf,
+        _registry: PathBuf,
+        state_home: PathBuf,
+        _guard: std::sync::MutexGuard<'static, ()>,
+    }
+
+    impl BinFaultFixture {
+        fn new() -> Self {
+            let guard = env_lock()
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let temp = tempfile::tempdir().unwrap();
+            let workspace = temp.path().join("ws");
+            let ontarch = workspace.join("packages/ontarch");
+            let registry = ontarch.join("registry");
+            let state_home = temp.path().join("state");
+            fs::create_dir_all(&registry).unwrap();
+            fs::create_dir_all(&state_home).unwrap();
+            let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures/resolution/registry");
+            copy_tree(&fixture, &registry);
+            // Required sources
+            let write_exe = |path: &Path| {
+                fs::create_dir_all(path.parent().unwrap()).unwrap();
+                fs::write(path, b"#!/bin/sh\nexit 0\n").unwrap();
+                use std::os::unix::fs::PermissionsExt;
+                let mut perms = fs::metadata(path).unwrap().permissions();
+                perms.set_mode(0o755);
+                fs::set_permissions(path, perms).unwrap();
+            };
+            write_exe(&ontarch.join("bin/ontarch"));
+            write_exe(&ontarch.join("bin/ontarch-bin-report"));
+            write_exe(&ontarch.join("bin/ontarch-bin-cleanup"));
+            fs::create_dir_all(ontarch.join("lib")).unwrap();
+            fs::write(ontarch.join("lib/common.sh"), b"#\n").unwrap();
+            fs::write(ontarch.join("lib/registry.sh"), b"#\n").unwrap();
+            fs::create_dir_all(ontarch.join("policies")).unwrap();
+            fs::write(ontarch.join("policies/takogami.agent.policy.toml"), b"#\n").unwrap();
+            fs::write(ontarch.join("policies/agent-bin.policy.toml"), b"#\n").unwrap();
+            fs::create_dir_all(ontarch.join("schemas")).unwrap();
+            fs::write(ontarch.join("schemas/bin-inventory.schema.json"), b"{}\n").unwrap();
+            fs::write(
+                ontarch.join("schemas/bin-cleanup-plan.schema.json"),
+                b"{}\n",
+            )
+            .unwrap();
+            unsafe {
+                std::env::set_var("TAKOGAMI_ONTARCH_REGISTRY", registry.display().to_string());
+                std::env::set_var("TAKOGAMI_WORKSPACE_ROOT", workspace.display().to_string());
+                std::env::set_var("TAKOGAMI_STATE_HOME", state_home.display().to_string());
+                std::env::remove_var("TAKOGAMI_PROFILE");
+            }
+            Self {
+                _temp: temp,
+                _workspace: workspace,
+                _registry: registry,
+                state_home,
+                _guard: guard,
+            }
+        }
+
+        fn load_records(&self) -> Vec<serde_json::Value> {
+            let mut out = Vec::new();
+            if !self.state_home.exists() {
+                return out;
+            }
+            for entry in fs::read_dir(&self.state_home).unwrap() {
+                let path = entry.unwrap().path();
+                let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                if name.starts_with('.') || !name.ends_with(".json") {
+                    continue;
+                }
+                out.push(serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap());
+            }
+            out
+        }
+    }
+
+    async fn run_bin_with(
+        sub: BinCommand,
+        executor: &dyn ProjectionExecutor,
+        open_store: &StoreFactory,
+        state_home: &Path,
+    ) -> Result<u8, ControllerError> {
+        let sink = OutputSink {
+            json: true,
+            no_color: true,
+        };
+        run_bin(&sink, &sub, None, Some(state_home), executor, open_store).await
+    }
+
+    #[tokio::test]
+    async fn projection_initial_pending_failure_zero_executor_calls() {
+        let fx = BinFaultFixture::new();
+        let spy = SpyProjectionExecutor::default();
+        let factory = faulty_factory(FaultPoint::InitialPending);
+        let result = run_bin_with(BinCommand::Report, &spy, &factory, &fx.state_home).await;
+        assert_state_io_error(&result);
+        assert_eq!(spy.calls(), 0);
+    }
+
+    #[tokio::test]
+    async fn projection_gate_terminal_failure_zero_spawn() {
+        let fx = BinFaultFixture::new();
+        let spy = SpyProjectionExecutor::default();
+        let factory = faulty_factory(FaultPoint::TerminalUnlocked);
+        let result = run_bin_with(
+            BinCommand::Cleanup {
+                mode: BinCleanupMode::DryRun,
+                scope: None,
+            },
+            &spy,
+            &factory,
+            &fx.state_home,
+        )
+        .await;
+        assert_state_io_error(&result);
+        assert_eq!(spy.calls(), 0);
+    }
+
+    #[tokio::test]
+    async fn projection_deny_terminal_failure_zero_spawn() {
+        let fx = BinFaultFixture::new();
+        let spy = SpyProjectionExecutor::default();
+        let factory = faulty_factory(FaultPoint::TerminalUnlocked);
+        let result = run_bin_with(
+            BinCommand::Cleanup {
+                mode: BinCleanupMode::Archive,
+                scope: None,
+            },
+            &spy,
+            &factory,
+            &fx.state_home,
+        )
+        .await;
+        assert_state_io_error(&result);
+        assert_eq!(spy.calls(), 0);
+    }
+
+    /// Reports a successful spawn without running a child (store-transition matrix).
+    struct FakeSpawnProjectionExecutor {
+        calls: AtomicU32,
+    }
+
+    impl Default for FakeSpawnProjectionExecutor {
+        fn default() -> Self {
+            Self {
+                calls: AtomicU32::new(0),
+            }
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl ProjectionExecutor for FakeSpawnProjectionExecutor {
+        async fn execute_projection(
+            &self,
+            _plan: &crate::policy::AuthorizedProjectionPlan,
+            _options: &crate::execution::ExecutionOptions,
+        ) -> ExecutionReport {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            let mut report = ExecutionReport::idle("completed");
+            report.spawned = true;
+            report.pid = Some(4242);
+            report.exit_code = Some(0);
+            report.outcome = "completed".into();
+            report.stdout.encoding = "utf-8".into();
+            report.stderr.encoding = "utf-8".into();
+            // Invalid payload so terminal path still finalizes with controller_error.
+            report.stdout.bytes = b"not-json".to_vec();
+            report.stdout.total_bytes = 8;
+            report
+        }
+    }
+
+    #[tokio::test]
+    async fn projection_pid_bearing_pending_failure_child_attempted() {
+        let fx = BinFaultFixture::new();
+        let exe = FakeSpawnProjectionExecutor::default();
+        let factory = faulty_factory(FaultPoint::FirstFinal);
+        let result = run_bin_with(BinCommand::Report, &exe, &factory, &fx.state_home).await;
+        assert_state_io_error(&result);
+        assert_eq!(exe.calls.load(Ordering::SeqCst), 1);
+        let listed = fx.load_records();
+        assert!(
+            listed
+                .iter()
+                .any(|r| r["execution"]["outcome"] == "pending"),
+            "initial pending must remain after PID-bearing write fault"
+        );
+    }
+
+    #[tokio::test]
+    async fn projection_terminal_failure_pid_bearing_remains() {
+        let fx = BinFaultFixture::new();
+        let exe = FakeSpawnProjectionExecutor::default();
+        let factory = faulty_factory(FaultPoint::SecondFinal);
+        let result = run_bin_with(BinCommand::Report, &exe, &factory, &fx.state_home).await;
+        assert_state_io_error(&result);
+        assert_eq!(exe.calls.load(Ordering::SeqCst), 1);
+        let listed = fx.load_records();
+        assert!(
+            listed
+                .iter()
+                .any(|r| { r["execution"]["started"] == true && r["execution"]["pid"] == 4242 }),
+            "PID-bearing pending must remain after terminal write fault: {listed:?}"
+        );
+    }
 }
 
 async fn run_bin(
@@ -1766,7 +1982,7 @@ async fn run_bin(
     sub: &BinCommand,
     cli_profile: Option<&str>,
     cli_state_home: Option<&Path>,
-    executor: &TokioExecutor,
+    executor: &dyn ProjectionExecutor,
     open_store: &StoreFactory,
 ) -> Result<u8, ControllerError> {
     use crate::bin_projection::{CleanupMode, decode_cleanup_plan, decode_inventory};
@@ -1834,7 +2050,6 @@ async fn run_bin(
         .canonicalize()
         .map_err(|e| ControllerError::contract(format!("cannot canonicalize policy root: {e}")))?;
 
-    let approved_path = std::env::var("PATH").ok();
     let sealed = SealedProjectionPlan::seal(
         operation,
         &paths.registry_root,
@@ -1843,7 +2058,6 @@ async fn run_bin(
         session_id.clone(),
         selected.profile.id.clone(),
         selected.policy_ids.clone(),
-        approved_path.as_deref(),
     )
     .map_err(|e| ControllerError::ExecutionIo {
         message: e.message(),
@@ -1946,6 +2160,14 @@ async fn run_bin(
             } else {
                 "denied"
             };
+            let diagnostics = if rejected.deferred_unavailable() {
+                vec![DiagnosticRecord {
+                    code: "deferred_unavailable".into(),
+                    message: "archive/delete-approved remain deferred; no child spawn".into(),
+                }]
+            } else {
+                vec![]
+            };
             let envelope = crate::contracts::CommandEnvelope {
                 schema_version: SCHEMA_VERSION.into(),
                 command: command_name.into(),
@@ -1954,22 +2176,18 @@ async fn run_bin(
                 exit_code: exit,
                 data: Some(data),
                 explanation: None,
-                diagnostics: if rejected.deferred_unavailable() {
-                    vec![DiagnosticRecord {
-                        code: "deferred_unavailable".into(),
-                        message: "archive/delete-approved remain deferred; no child spawn".into(),
-                    }]
-                } else {
-                    vec![]
-                },
+                diagnostics: diagnostics.clone(),
                 child: None,
                 metrics: None,
             };
-            match sink.emit_envelope(&envelope) {
-                Ok(()) => Ok(exit),
-                Err(e) if crate::output::is_broken_pipe(&e) => Ok(exit),
-                Err(e) => Err(ControllerError::internal(e.to_string())),
-            }
+            emit_bin_outcome(sink, exit, &envelope, || {
+                crate::output::render_bin_policy_human(
+                    command_name,
+                    status,
+                    rejected.deferred_unavailable(),
+                    rejected.plan().safe_scope().map(|s| s.as_str()),
+                )
+            })
         }
         ProjectionEvaluationResult::Authorized(authorized) => {
             let plan = authorized.plan();
@@ -2066,24 +2284,30 @@ async fn run_bin(
                 outcome = report.outcome;
             }
 
-            let terminal = projection_terminal_record(
-                plan,
-                authorized.policy_decision().clone(),
-                &outcome,
-                report.spawned,
-                report.pid,
-                report.exit_code,
-                report.signal.clone(),
-            );
-            let mut terminal = terminal;
+            // Derive terminal from last successfully installed record identity.
+            let mut terminal = pending;
+            if report.spawned {
+                terminal.execution.started = true;
+                terminal.execution.pid = report.pid;
+            }
+            terminal.execution.started = report.spawned;
+            terminal.execution.pid = report.pid;
+            terminal.execution.exit_code = report.exit_code;
+            terminal.execution.signal = report.signal.clone();
+            terminal.execution.outcome = outcome.clone();
+            terminal.ended_at = Some(utc_now_rfc3339());
             terminal.output_summary = OutputSummary {
                 stdout_bytes: report.stdout.total_bytes,
                 stderr_bytes: report.stderr.total_bytes,
                 truncated: report.stdout.truncated || report.stderr.truncated,
-                encoding: report.stdout.encoding.clone(),
+                encoding: merge_encoding(&report.stdout.encoding, &report.stderr.encoding),
                 compressor: report.compressor.clone(),
             };
-            terminal.error = controller_error;
+            if controller_error.is_some() {
+                terminal.error = controller_error;
+            } else if let Some(diag) = diagnostics.first() {
+                terminal.error = Some(diag.clone());
+            }
             if let Err(e) = store.write_final(&terminal, &lock) {
                 drop(lock);
                 return Err(ControllerError::StateIo {
@@ -2113,18 +2337,46 @@ async fn run_bin(
                 session_id: Some(plan.session_id().into()),
                 status: status.into(),
                 exit_code: exit,
-                data: Some(data),
+                data: Some(data.clone()),
                 explanation: None,
                 diagnostics,
                 child: None,
                 metrics: None,
             };
-            match sink.emit_envelope(&envelope) {
-                Ok(()) => Ok(exit),
-                Err(e) if crate::output::is_broken_pipe(&e) => Ok(exit),
-                Err(e) => Err(ControllerError::internal(e.to_string())),
-            }
+            let payload_for_human = data.get("payload").cloned();
+            emit_bin_outcome(sink, exit, &envelope, || {
+                crate::output::render_bin_allow_human(
+                    operation,
+                    plan.safe_scope().map(|s| s.as_str()),
+                    payload_for_human.as_ref(),
+                    exit,
+                )
+            })
         }
+    }
+}
+
+fn emit_bin_outcome(
+    sink: &OutputSink,
+    exit: u8,
+    envelope: &crate::contracts::CommandEnvelope,
+    human: impl FnOnce() -> Vec<String>,
+) -> Result<u8, ControllerError> {
+    let result = if sink.json {
+        sink.emit_envelope(envelope)
+    } else {
+        let mut out = String::new();
+        for line in human() {
+            out.push_str(&line);
+            out.push('\n');
+        }
+        use std::io::Write;
+        write!(std::io::stdout(), "{out}")
+    };
+    match result {
+        Ok(()) => Ok(exit),
+        Err(e) if crate::output::is_broken_pipe(&e) => Ok(exit),
+        Err(e) => Err(ControllerError::internal(e.to_string())),
     }
 }
 

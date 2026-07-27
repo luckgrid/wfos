@@ -81,6 +81,36 @@ pub fn snapshot_env(keys: &[String]) -> Result<EnvSnapshot, EnvError> {
     Ok(EnvSnapshot { pairs, diagnostics })
 }
 
+/// Validate a controller-built PATH: absolute directories only, no empty/relative components.
+pub fn validate_controller_path(path: &str) -> Result<(), String> {
+    if path.is_empty() {
+        return Err("PATH must not be empty".into());
+    }
+    let mut seen = BTreeMap::new();
+    for part in path.split(':') {
+        if part.is_empty() {
+            return Err("PATH must not contain empty components".into());
+        }
+        let p = std::path::Path::new(part);
+        if !p.is_absolute() {
+            return Err("PATH components must be absolute".into());
+        }
+        if part.contains("/./")
+            || part.contains("/../")
+            || part.ends_with("/.")
+            || part.ends_with("/..")
+            || part == "."
+            || part == ".."
+        {
+            return Err("PATH must not contain relative components".into());
+        }
+        if seen.insert(part.to_string(), ()).is_some() {
+            return Err("PATH must not contain duplicate directories".into());
+        }
+    }
+    Ok(())
+}
+
 /// Build a child environment from controller-fixed pairs plus approved inherited keys.
 ///
 /// Fixed values always win. Caller values never override fixed keys. Secret-like inherited
@@ -99,6 +129,13 @@ pub fn build_child_env(
             if k != "PANOPLY_AGENT" && k != "NO_COLOR" && k != "WS_ROOT" && k != "PATH" {
                 return Err(EnvError::SecretKeyName { key: k.clone() });
             }
+        }
+        if k == "PATH"
+            && let Err(msg) = validate_controller_path(v)
+        {
+            return Err(EnvError::Conflict {
+                key: format!("PATH ({msg})"),
+            });
         }
         let _ = v;
     }

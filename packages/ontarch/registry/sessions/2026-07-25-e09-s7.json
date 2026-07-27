@@ -22,7 +22,7 @@
     "baseline_test_count": 280,
     "baseline_gate": {
       "takogami_build": "PASS",
-      "takogami_test": "PASS on re-run (280); first parallel run flaked once on signal_forwarding_reaches_descendant_in_the_same_process_group (grandchild PID marker timeout) \u2014 classified as timing flake, passed 3/3 alone and on full re-run",
+      "takogami_test": "PASS on re-run (280); first parallel run flaked once on signal_forwarding_reaches_descendant_in_the_same_process_group (grandchild PID marker timeout) — classified as timing flake, passed 3/3 alone and on full re-run",
       "takogami_lint": "PASS",
       "takogami_format_check": "PASS",
       "ontarch_sync": "PASS",
@@ -32,7 +32,7 @@
       "panoply_validate_substrate": "PASS",
       "git_diff_check": "PASS"
     },
-    "historical_secrets_scan": "ontarch:secrets-scan still reports pre-existing age-secret-key in git history (commit a3a4978, 2026-06-24; redacted in HEAD) \u2014 external/non-gating for E09"
+    "historical_secrets_scan": "ontarch:secrets-scan still reports pre-existing age-secret-key in git history (commit a3a4978, 2026-06-24; redacted in HEAD) — external/non-gating for E09"
   },
   "locked_decisions": [
     "Ontarch owns graph/bin generation; Takogami owns projection and routing only.",
@@ -93,6 +93,76 @@
   ],
   "progress": [
     {
+      "phase": "3-closure-corrections",
+      "title": "Phase 3 closure corrections (C01–C06)",
+      "status": "done",
+      "addendum": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-3-implementation-review-closure-corrections-addendum.md",
+      "baseline_reviewed_implementation": "3c95aa1ca07955304999f204f202bce7434f3d56",
+      "corrections": [
+        "C01 controller-built helper PATH (no caller PATH)",
+        "C02 closed per-op source manifest + pre-spawn rehash",
+        "C03 human vs JSON bin output",
+        "C04 strict payload semantics (UTC/bounds/retention/combos/categories)",
+        "C05 pending→terminal transition identity + durable diagnostics",
+        "C06 ProjectionExecutor/StoreFactory fault matrix + dual-platform evidence"
+      ],
+      "preserved": [
+        "D9 Option B done",
+        "dual-Allow authorization",
+        "Gate dry-run / Deny archive-delete no-spawn",
+        "schema 0.1.0",
+        "no Phase 4 / E10"
+      ],
+      "gate": {
+        "macos": {
+          "takogami_focused_and_regression_tests": "PASS",
+          "takogami_build_lint_format_check": "PASS",
+          "ontarch_sync_scan_validate": "PASS",
+          "panoply_gen_check_validate_substrate": "PASS",
+          "git_diff_check": "PASS",
+          "direct_human_json_bin_behavior": "PASS"
+        },
+        "linux_lima_wfos_s61_alpine": {
+          "takogami_bin_cli_and_lib": "PASS",
+          "takogami_clippy_D_warnings": "PASS",
+          "ontarch_validate_with_AGENTS_HOME": "PASS",
+          "panoply_gen_check_validate_substrate": "PASS",
+          "direct_human_json_gate_deny_behavior": "PASS",
+          "moon": "unavailable in guest; direct cargo/ontarch/panoply used"
+        },
+        "github_actions_status_checks": "absent"
+      },
+      "expected_red_remaining": [
+        "Phase 4 graph E2E fixture debt"
+      ],
+      "next": "E09.S7 Phase 4 E2E graph fixture / MVP hardening",
+      "completed_at": "2026-07-27T05:58:00Z"
+    },
+    {
+      "phase": "3-implementation-review",
+      "title": "Phase 3 implementation review",
+      "status": "changes-required",
+      "reviewed_implementation_commit": "3c95aa1ca07955304999f204f202bce7434f3d56",
+      "reviewed_workstreams_head": "fb24a6db1b6091500b71fc442bf30865823fafba",
+      "addendum": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-3-implementation-review-closure-corrections-addendum.md",
+      "accepted": [
+        "D9 Option B",
+        "projection architecture",
+        "dual-Allow authorization",
+        "Gate/Deny no-spawn posture"
+      ],
+      "blockers": [
+        "caller-controlled helper PATH",
+        "open and non-revalidated source fingerprint set",
+        "missing human bin output",
+        "incomplete payload semantic validation",
+        "projection record transition gaps",
+        "incomplete store-fault and Linux evidence"
+      ],
+      "next": "E09.S7 Phase 3 closure corrections",
+      "completed_at": "2026-07-27T05:00:00Z"
+    },
+    {
       "phase": 3,
       "title": "Projection authorization and bin routing",
       "status": "done",
@@ -105,7 +175,7 @@
         "status": "done",
         "rule": "explicit --scope requires namespace/bin/segment+; omitted scope is workspace-wide non-mutating; Phase 1 Ontarch schema not widened"
       },
-      "summary": "Sealed s7-projection-v1 plans; evaluator-owned AuthorizedProjectionPlan dual-Allow; fixed+inherited env with PANOPLY_AGENT=1 and WS_ROOT; report/report-only Allow pending\u2192spawn\u2192validate\u2192terminal; dry-run Gate and archive/delete Deny+deferred zero-spawn; D9 ValidatedBinScope; Command::Bin implemented. Lifecycle digest remains s4.1-v1. Phase 4 graph E2E fixture debt remains expected-red.",
+      "summary": "Sealed s7-projection-v1 plans; evaluator-owned AuthorizedProjectionPlan dual-Allow; fixed+inherited env with PANOPLY_AGENT=1 and WS_ROOT; report/report-only Allow pending→spawn→validate→terminal; dry-run Gate and archive/delete Deny+deferred zero-spawn; D9 ValidatedBinScope; Command::Bin implemented. Lifecycle digest remains s4.1-v1. Phase 4 graph E2E fixture debt remains expected-red.",
       "limits_preserved": [
         "no fabricated lifecycle ResolvedCommand for bin",
         "resolution omitted on bin records; schema 0.1.0",
@@ -153,7 +223,7 @@
           "cli_smoke": "17 passed",
           "resolution_cli": "27 passed",
           "session_cli": "12 passed",
-          "e2e_mvp": "5 passed; 1 failed (e2e_mvp_path_includes_graph_projection \u2014 Phase 4 expected-red); bin path green",
+          "e2e_mvp": "5 passed; 1 failed (e2e_mvp_path_includes_graph_projection — Phase 4 expected-red); bin path green",
           "takogami_build": "PASS",
           "takogami_lint": "PASS",
           "takogami_format_check": "PASS",
@@ -199,7 +269,7 @@
       "expected_red_remaining": [
         "e2e_mvp_path_includes_graph_projection (Phase 4 mixed-registry graph overlay / fixture debt)"
       ],
-      "next": "E09.S7 Phase 4 \u2014 stop; do not start in this session",
+      "next": "E09.S7 Phase 4 — stop; do not start in this session",
       "completed_at": "2026-07-27T04:54:40Z"
     },
     {
@@ -209,7 +279,7 @@
       "spec": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-3-projection-authorization-bin-routing-implementation-spec.md",
       "baseline_wfos": "d0aefaf4c7d85c8f5b1b90d9345f862076860338",
       "baseline_lg_workstreams": "288d13a3fa35c056e5610f0c125d76462e9c6bae",
-      "d9_decision": "Option B \u2014 explicit scope requires namespace/bin/segment+; omitted scope is workspace-wide",
+      "d9_decision": "Option B — explicit scope requires namespace/bin/segment+; omitted scope is workspace-wide",
       "phase_2": "complete",
       "phase_4": "not started",
       "toolchain": {
@@ -227,19 +297,19 @@
       "expected_red": {
         "bin_cli": 27,
         "e2e_bin_path": "expected red until Command::Bin lands",
-        "e2e_graph_path": "Phase 4 fixture debt \u2014 not Phase 3"
+        "e2e_graph_path": "Phase 4 fixture debt — not Phase 3"
       },
       "completed_note": "superseded by phase 3 completion progress entry"
     },
     {
       "phase": "2-final-evidence-follow-up",
-      "title": "Phase 2 final evidence follow-up (E01\u2013E04)",
+      "title": "Phase 2 final evidence follow-up (E01–E04)",
       "status": "done",
       "addendum": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-2-final-closure-evidence-follow-up-addendum.md",
       "production_disposition": "accepted",
       "accepted_production_commit": "7473a94854a9906862ca8cd203fb82d8b6747735",
       "evidence_follow_up_commit": "9f0a9093980a9f105190f6612d62f67587c25e25",
-      "summary": "Closed E01\u2013E04: complete byte-identical outcome matrix; authored Io injection + capability-probed CLI permission tests; writable Linux sync/scan/validate + post-sync graph hit; expected-red split Phase 3 vs Phase 4. No production redesign.",
+      "summary": "Closed E01–E04: complete byte-identical outcome matrix; authored Io injection + capability-probed CLI permission tests; writable Linux sync/scan/validate + post-sync graph hit; expected-red split Phase 3 vs Phase 4. No production redesign.",
       "findings_closed": [
         "E01",
         "E02",
@@ -316,7 +386,7 @@
           "graph_cli::bin_still_not_implemented": "expected green"
         },
         "expected_red_phase_4": {
-          "e2e_mvp_path_includes_graph_projection": "stale/red (exit 4) \u2014 resolution registry overlay lacks coherent upstream (e.g. skills.json); goldens remain in graph_cli",
+          "e2e_mvp_path_includes_graph_projection": "stale/red (exit 4) — resolution registry overlay lacks coherent upstream (e.g. skills.json); goldens remain in graph_cli",
           "note": "Phase 4 hermetic MVP fixture completion; not Phase 3 bin routing"
         }
       },
@@ -395,7 +465,7 @@
       "expected_red_phase_3": {
         "bin_cli": "1 passed; 26 failed (assert_not_still_unimplemented)",
         "e2e_mvp_path_includes_bin_report_and_gated_cleanup": "expected red (exit 10)",
-        "e2e_mvp_path_includes_graph_projection": "stale/red (exit 4) \u2014 mixed-registry overlay; goldens live in graph_cli",
+        "e2e_mvp_path_includes_graph_projection": "stale/red (exit 4) — mixed-registry overlay; goldens live in graph_cli",
         "graph_cli::bin_still_not_implemented": "expected green",
         "other_e2e_mvp": "4 passed of 6 (2 expected red above)",
         "note": "Do not claim moon run takogami:test or full cargo test PASS"
@@ -407,12 +477,12 @@
     },
     {
       "phase": "2-final-correction",
-      "title": "Phase 2 final closure corrections (F01\u2013F06)",
+      "title": "Phase 2 final closure corrections (F01–F06)",
       "status": "done",
       "addendum": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-2-closure-follow-up-review-final-corrections-addendum.md",
       "based_on_follow_up_review_head": "caca4291f8496b05754218eae54e5cd8a2ff2b03",
       "correction_commit": "7473a94854a9906862ca8cd203fb82d8b6747735",
-      "summary": "Closed F01\u2013F06: SecureFileError with logical display labels (no absolute path leakage); dangling graph symlink \u2192 graph_contract_invalid/exit 3; present-regular open/read/hash I/O \u2192 contract not stale; complete FIFO/missing/units 32MiB matrix; byte-identical SnapshotEntry harness; truthful dual-platform Phase 2 gates. Command::Bin remains unimplemented; D9 open; Phase 3 blocked.",
+      "summary": "Closed F01–F06: SecureFileError with logical display labels (no absolute path leakage); dangling graph symlink → graph_contract_invalid/exit 3; present-regular open/read/hash I/O → contract not stale; complete FIFO/missing/units 32MiB matrix; byte-identical SnapshotEntry harness; truthful dual-platform Phase 2 gates. Command::Bin remains unimplemented; D9 open; Phase 3 blocked.",
       "findings_closed": [
         "F01",
         "F02",
@@ -430,9 +500,9 @@
       ],
       "mapping": {
         "graph_missing": "SecureFileError::Missing only",
-        "dangling_symlink": "Symlink \u2192 graph_contract_invalid",
-        "present_regular_io": "Io \u2192 graph_contract_invalid (not stale)",
-        "units_oversize": "Limit \u2192 graph_limit_exceeded"
+        "dangling_symlink": "Symlink → graph_contract_invalid",
+        "present_regular_io": "Io → graph_contract_invalid (not stale)",
+        "units_oversize": "Limit → graph_limit_exceeded"
       }
     },
     {
@@ -452,12 +522,12 @@
     },
     {
       "phase": "2-closure",
-      "title": "Phase 2 closure corrections (C01\u2013C08)",
+      "title": "Phase 2 closure corrections (C01–C08)",
       "status": "done",
       "addendum": "Build/bin/wfos/2026-07-26-wfos-e09-s7-phase-2-implementation-review-closure-corrections-addendum.md",
       "based_on_review_head": "04a4acf1b4cc0740c1f8ef6b3b2d4ce62f2302d5",
       "based_on_implementation_commit": "48c1ff98e8173f7bd21ea796a580214459098a1e",
-      "summary": "Closed C01\u2013C08: Layer-1 registry_root resolve_graph_upstream; GraphRegistryGeneration/GraphSourceFingerprint deny_unknown_fields; graph/io nofollow+O_NONBLOCK+post-open regular+streaming sha256; strict require_graph_utc_seconds; Unicode-safe truncate_id; broken-pipe SUCCESS for all graph surfaces; standalone+embedded topology tests; operator docs; D9 preserved open.",
+      "summary": "Closed C01–C08: Layer-1 registry_root resolve_graph_upstream; GraphRegistryGeneration/GraphSourceFingerprint deny_unknown_fields; graph/io nofollow+O_NONBLOCK+post-open regular+streaming sha256; strict require_graph_utc_seconds; Unicode-safe truncate_id; broken-pipe SUCCESS for all graph surfaces; standalone+embedded topology tests; operator docs; D9 preserved open.",
       "production_changed_paths": [
         "packages/takogami/src/graph/io.rs",
         "packages/takogami/src/graph/types.rs",
@@ -547,7 +617,7 @@
         "layout": "embedded Workstreams",
         "TAKOGAMI_WORKSPACE_ROOT": "/Users/dvz/Workstreams",
         "TAKOGAMI_ONTARCH_REGISTRY": "Build/src/workspaces/wfos/packages/ontarch/registry",
-        "observed": "graph_stale \u2014 Layer 1 resolved registry/*.json under workspace_root instead of registry_root"
+        "observed": "graph_stale — Layer 1 resolved registry/*.json under workspace_root instead of registry_root"
       }
     },
     {
@@ -556,7 +626,7 @@
       "status": "done",
       "addendum": "Build/bin/wfos/2026-07-26-wfos-e09-s7-phase-2-readiness-review-and-implementation-acceptance-addendum.md",
       "based_on_phase_1_head": "b9d2c51026d152e6d76ccfd705de379e4d66e200",
-      "summary": "Phase 2 graph-only: closed GraphDocument types; no-follow bounded load_graph (8 MiB/20k/100k/512); layered freshness (policies\u2192profiles\u2192skills\u2192units + units.registry_generation); typed graph_* exits; text/DOT/JSON renderers; Command::Graph wired only (Bin stays exit 10); zero-spawn/no-record proofs; repaired e2e fixture + byte-compared goldens; D9 Phase 3 scope conflict recorded deferred.",
+      "summary": "Phase 2 graph-only: closed GraphDocument types; no-follow bounded load_graph (8 MiB/20k/100k/512); layered freshness (policies→profiles→skills→units + units.registry_generation); typed graph_* exits; text/DOT/JSON renderers; Command::Graph wired only (Bin stays exit 10); zero-spawn/no-record proofs; repaired e2e fixture + byte-compared goldens; D9 Phase 3 scope conflict recorded deferred.",
       "limits": {
         "file_bytes": 8388608,
         "nodes": 20000,
@@ -637,7 +707,7 @@
     },
     {
       "phase": "1-final-closure",
-      "title": "Phase 1 final closure corrections (follow-up review F01\u2013F08)",
+      "title": "Phase 1 final closure corrections (follow-up review F01–F08)",
       "status": "done",
       "addendum": "Build/bin/wfos/2026-07-26-wfos-e09-s7-phase-1-closure-follow-up-review-final-corrections.md",
       "based_on_closure_commit": "fc99ae20230d1c5d1a48ea6edccecd7506c3ce55",
@@ -646,7 +716,7 @@
         "phase_1_closure_iteration": "fc99ae20230d1c5d1a48ea6edccecd7506c3ce55",
         "phase_1_final_correction": "1b186da904da1614ef52becfb58c8239e0c5fce0"
       },
-      "summary": "Closed F01\u2013F08: pair-install tracks had_a/had_b with checked restore/remove and generated_pair:rollback_failed; locked path grammar across schema/shell/scope/Rust; ontarch_validate_manifest_doc before archive/delete classification; cleanup combo_ok matrix + schema if/then; agent archive/delete refuse after option/scope parse before inventory; human report-only honors scope; graph no_ctrl rejects DEL with stable control_character_id; first-install DOT rollback; invalid-workflow report retains prior pair; E2E digest recomputation test; ontarch-validate cleanup negatives complete.",
+      "summary": "Closed F01–F08: pair-install tracks had_a/had_b with checked restore/remove and generated_pair:rollback_failed; locked path grammar across schema/shell/scope/Rust; ontarch_validate_manifest_doc before archive/delete classification; cleanup combo_ok matrix + schema if/then; agent archive/delete refuse after option/scope parse before inventory; human report-only honors scope; graph no_ctrl rejects DEL with stable control_character_id; first-install DOT rollback; invalid-workflow report retains prior pair; E2E digest recomputation test; ontarch-validate cleanup negatives complete.",
       "production_changed_paths": [
         "packages/ontarch/lib/registry.sh",
         "packages/ontarch/bin/ontarch-bin-cleanup",
@@ -839,11 +909,11 @@
     },
     {
       "phase": "0-review-follow-up",
-      "title": "Phase 0 acceptance-map corrections (pre\u2013Phase 1)",
+      "title": "Phase 0 acceptance-map corrections (pre–Phase 1)",
       "status": "done",
       "addendum": "Build/bin/wfos/2026-07-25-wfos-e09-s7-phase-0-review-phase-1-corrections-addendum.md",
       "reviewed_commit_note": "Reviewed acceptance-map commit 4b64b64 was mislabeled 'phase 1' in the commit message; session numbering remains Phase 0. No history rewrite.",
-      "summary": "Resolved P0 S7-R01..R04 and \u00a78 correction criteria without production schema/emitter/--json work. Hermetic Ontarch fixture copies scripts into a temp Workstreams layout. Direct Ontarch tests moved to ontarch_*_contract.rs. Bin/E2E harnesses use packages/ontarch/bin/ontarch (PATH decoy ignored). Payloads match plan inventory/cleanup shapes. Graph DOT printable escape vs control-char rejection split; global JSON locks structured data.graph. Scope/deferred/record/UTF-8/stderr fixtures tightened. Expected outputs marked pending. Baseline 280 green. Checkout registry proven untouched.",
+      "summary": "Resolved P0 S7-R01..R04 and §8 correction criteria without production schema/emitter/--json work. Hermetic Ontarch fixture copies scripts into a temp Workstreams layout. Direct Ontarch tests moved to ontarch_*_contract.rs. Bin/E2E harnesses use packages/ontarch/bin/ontarch (PATH decoy ignored). Payloads match plan inventory/cleanup shapes. Graph DOT printable escape vs control-char rejection split; global JSON locks structured data.graph. Scope/deferred/record/UTF-8/stderr fixtures tightened. Expected outputs marked pending. Baseline 280 green. Checkout registry proven untouched.",
       "corrections": [
         "S7-R01 hermetic copied Ontarch package",
         "S7-R02 canonical package Ontarch not PATH authority",
@@ -879,10 +949,10 @@
       "phase": 0,
       "title": "Baseline, contract inventory, and failing acceptance map",
       "status": "done",
-      "summary": "Froze advanced HEADs under pinned rustc 1.96 / Moon 2.3.2. Baseline 280 green after classifying one process-group signal flake. Inventory confirms graph/bin exit 10 not_implemented; graph.json lacks registry_generation; Ontarch bin scripts ignore --json and emit prose/files. Landed 52 named acceptance tests (20 graph + 26 bin + 6 e2e) with e2e fixture skeleton; no production behavior changed. Stop for \u00a7\u00a714\u201315 review before Phase 1.",
+      "summary": "Froze advanced HEADs under pinned rustc 1.96 / Moon 2.3.2. Baseline 280 green after classifying one process-group signal flake. Inventory confirms graph/bin exit 10 not_implemented; graph.json lacks registry_generation; Ontarch bin scripts ignore --json and emit prose/files. Landed 52 named acceptance tests (20 graph + 26 bin + 6 e2e) with e2e fixture skeleton; no production behavior changed. Stop for §§14–15 review before Phase 1.",
       "inventory": {
-        "takogami_graph": "is_implemented=false \u2192 exit 10 not_implemented (human + --json envelope)",
-        "takogami_bin_report": "is_implemented=false \u2192 exit 10",
+        "takogami_graph": "is_implemented=false → exit 10 not_implemented (human + --json envelope)",
+        "takogami_bin_report": "is_implemented=false → exit 10",
         "takogami_bin_cleanup_modes": "dry-run/archive/delete-approved all exit 10 (CLI parses; handlers absent)",
         "graph_json_keys": [
           "generated_at",
@@ -921,10 +991,10 @@
     "Build/bin/wfos/2026-07-26-wfos-e09-s7-phase-1-closure-follow-up-review-final-corrections.md",
     "Build/bin/wfos/2026-07-26-wfos-e09-s7-phase-2-readiness-review-and-implementation-acceptance-addendum.md"
   ],
-  "next": "E09.S7 Phase 3 bin routing (READY FOR KICKOFF; D9 open \u2014 decide before Phase 3)",
+  "next": "E09.S7 Phase 4 E2E graph fixture / MVP hardening",
   "blockers": [
     "D9 Phase 3 bin --scope grammar conflict (open / decide-before-Phase-3)",
     "Phase 3 Command::Bin not implemented (expected)"
   ],
-  "token_note": "Phase 2 COMPLETE after E01\u2013E04 evidence follow-up; Phase 3 ready for kickoff; stop before Phase 3/E10 without explicit go-ahead"
+  "token_note": "Phase 2 COMPLETE after E01–E04 evidence follow-up; Phase 3 ready for kickoff; stop before Phase 3/E10 without explicit go-ahead"
 }

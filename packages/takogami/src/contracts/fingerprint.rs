@@ -31,6 +31,50 @@ pub fn fingerprint_file(path: &Path, display_path: &str) -> io::Result<SourceFin
     Ok(fp)
 }
 
+/// Fingerprint a no-follow regular file via streaming SHA-256.
+///
+/// Rejects missing paths, symlinks, directories, and other non-regular files.
+/// `display_path` is the stable logical label stored on the fingerprint (never an absolute root).
+pub fn fingerprint_regular_file_nofollow(
+    path: &Path,
+    display_path: &str,
+) -> io::Result<SourceFingerprint> {
+    use std::io::Read;
+    let meta = fs::symlink_metadata(path)?;
+    if meta.file_type().is_symlink() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "source must not be a symlink",
+        ));
+    }
+    if !meta.is_file() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "source must be a regular file",
+        ));
+    }
+    let mut file = fs::File::open(path)?;
+    let mut hasher = Sha256::new();
+    let mut buf = [0u8; 8192];
+    loop {
+        let n = file.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    let digest = hasher
+        .finalize()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
+    Ok(SourceFingerprint {
+        path: display_path.to_string(),
+        algorithm: "sha256".to_string(),
+        digest,
+    })
+}
+
 fn hex_digest(data: &[u8]) -> String {
     let hash = Sha256::digest(data);
     hash.iter().map(|b| format!("{b:02x}")).collect()

@@ -36,9 +36,9 @@ impl Executor for TokioExecutor {
     }
 }
 
-impl TokioExecutor {
-    /// Execute an evaluator-authorized projection plan (no second process runner).
-    pub async fn execute_projection(
+#[async_trait]
+impl super::ProjectionExecutor for TokioExecutor {
+    async fn execute_projection(
         &self,
         authorized: &AuthorizedProjectionPlan,
         options: &ExecutionOptions,
@@ -175,6 +175,16 @@ async fn execute_projection_inner(
     apply_projection_test_drift(sealed.executable_path(), sealed.cwd_path())?;
 
     sealed.preflight_identities().map_err(|e| ExecFailure {
+        outcome: "failed_to_spawn".into(),
+        diagnostics: vec![DiagnosticRecord {
+            code: e.code().into(),
+            message: e.message(),
+        }],
+        spawned: false,
+        pid: None,
+    })?;
+
+    sealed.preflight_sources().map_err(|e| ExecFailure {
         outcome: "failed_to_spawn".into(),
         diagnostics: vec![DiagnosticRecord {
             code: e.code().into(),

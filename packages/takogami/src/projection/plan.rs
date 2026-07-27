@@ -11,7 +11,7 @@ use sha2::{Digest, Sha256};
 use super::op::ProjectionOperation;
 use super::scope::ValidatedBinScope;
 use crate::contracts::types::RequestRecord;
-use crate::contracts::{SourceFingerprint, fingerprint_file};
+use crate::contracts::{SourceFingerprint, fingerprint_regular_file_nofollow};
 
 const DIGEST_PAYLOAD_VERSION: &str = "s7-projection-v1";
 
@@ -25,6 +25,8 @@ pub(crate) struct SealedProjectionPlan {
     fixed_env: BTreeMap<String, String>,
     inherited_env_keys: Vec<String>,
     source_fingerprints: Vec<SourceFingerprint>,
+    /// Absolute paths parallel to `source_fingerprints` for pre-spawn rehash (never logged).
+    source_abs_paths: Vec<PathBuf>,
     safe_request: RequestRecord,
     safe_scope: Option<ValidatedBinScope>,
     session_id: String,
@@ -43,6 +45,7 @@ pub(crate) enum ProjectionSealError {
     CwdNotDir,
     Fingerprint(String),
     Identity(String),
+    ToolPath(String),
 }
 
 impl ProjectionSealError {
@@ -55,6 +58,7 @@ impl ProjectionSealError {
             Self::CwdMissing | Self::CwdNotDir => "projection_contract_changed",
             Self::Fingerprint(_) => "projection_contract_changed",
             Self::Identity(_) => "projection_contract_changed",
+            Self::ToolPath(_) => "execution_contract",
         }
     }
 
@@ -66,7 +70,7 @@ impl ProjectionSealError {
             Self::OntarchNotExecutable => "canonical Ontarch is not executable".into(),
             Self::CwdMissing => "sealed workspace cwd missing".into(),
             Self::CwdNotDir => "sealed workspace cwd is not a directory".into(),
-            Self::Fingerprint(m) | Self::Identity(m) => m.clone(),
+            Self::Fingerprint(m) | Self::Identity(m) | Self::ToolPath(m) => m.clone(),
         }
     }
 }
@@ -81,7 +85,6 @@ impl SealedProjectionPlan {
         session_id: String,
         profile_id: String,
         policy_ids: Vec<String>,
-        approved_tool_path: Option<&str>,
     ) -> Result<Self, ProjectionSealError> {
         let ontarch_pkg = registry_root
             .parent()
@@ -98,18 +101,13 @@ impl SealedProjectionPlan {
             "WS_ROOT".into(),
             workspace_root.to_string_lossy().into_owned(),
         );
-        // Approved tool dirs first; system bins last so Ontarch shell helpers (sed/jq/…) resolve
-        // without inheriting the caller's complete PATH wholesale.
-        let mut path = String::from("/usr/bin:/bin:/usr/sbin:/sbin");
-        if let Some(extra) = approved_tool_path
-            && !extra.is_empty()
-        {
-            path = format!("{extra}:{path}");
-        }
+        let path = build_controller_tool_path()?;
+        crate::execution::validate_controller_path(&path).map_err(ProjectionSealError::ToolPath)?;
         fixed_env.insert("PATH".into(), path);
 
         let inherited_env_keys: Vec<String> = Vec::new();
-        let source_fingerprints = fingerprint_projection_sources(ontarch_pkg)?;
+        let (source_fingerprints, source_abs_paths) =
+            fingerprint_projection_sources(operation, ontarch_pkg)?;
 
         let mut flags = Vec::new();
         if let Some(mode) = operation.mode_flag() {
@@ -152,6 +150,7 @@ impl SealedProjectionPlan {
             fixed_env,
             inherited_env_keys,
             source_fingerprints,
+            source_abs_paths,
             safe_request,
             safe_scope: scope,
             session_id,
@@ -207,6 +206,74 @@ impl SealedProjectionPlan {
         preflight_path_identity(&self.cwd_path, false)?;
         Ok(())
     }
+
+    /// Re-open and re-hash every bound source immediately before spawn.
+    pub(crate) fn preflight_sources(&self) -> Result<(), ProjectionSealError> {
+        if self.source_fingerprints.len() != self.source_abs_paths.len() {
+            return Err(ProjectionSealError::Fingerprint(
+                "source fingerprint set length mismatch".into(),
+            ));
+        }
+        for (fp, abs) in self
+            .source_fingerprints
+            .iter()
+            .zip(self.source_abs_paths.iter())
+        {
+            let fresh = fingerprint_regular_file_nofollow(abs, &fp.path).map_err(|e| {
+                ProjectionSealError::Fingerprint(format!("source preflight {}: {e}", fp.path))
+            })?;
+            if fresh.digest != fp.digest || fresh.algorithm != fp.algorithm {
+                return Err(ProjectionSealError::Fingerprint(format!(
+                    "source digest drifted: {}",
+                    fp.path
+                )));
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Build a controller-owned PATH from closed absolute platform directories.
+/// Does not read or inherit the caller's PATH.
+pub(crate) fn build_controller_tool_path() -> Result<String, ProjectionSealError> {
+    let candidates: &[&str] = &[
+        "/usr/bin",
+        "/bin",
+        "/usr/sbin",
+        "/sbin",
+        "/opt/homebrew/bin",
+        "/usr/local/bin",
+    ];
+    let mut dirs: Vec<String> = Vec::new();
+    for cand in candidates {
+        let p = Path::new(cand);
+        if !p.is_absolute() {
+            continue;
+        }
+        let Ok(meta) = fs::symlink_metadata(p) else {
+            continue;
+        };
+        if meta.file_type().is_symlink() {
+            // Follow only to confirm directory existence; store the absolute candidate string.
+            let Ok(meta2) = fs::metadata(p) else {
+                continue;
+            };
+            if !meta2.is_dir() {
+                continue;
+            }
+        } else if !meta.is_dir() {
+            continue;
+        }
+        if !dirs.iter().any(|d| d == cand) {
+            dirs.push((*cand).to_string());
+        }
+    }
+    if dirs.is_empty() {
+        return Err(ProjectionSealError::ToolPath(
+            "no approved absolute tool directories available".into(),
+        ));
+    }
+    Ok(dirs.join(":"))
 }
 
 fn resolve_and_seal_ontarch(ontarch_pkg: &Path) -> Result<PathBuf, ProjectionSealError> {
@@ -268,39 +335,51 @@ fn preflight_path_identity(path: &Path, must_be_file: bool) -> Result<(), Projec
     Ok(())
 }
 
-fn fingerprint_projection_sources(
-    ontarch_pkg: &Path,
-) -> Result<Vec<SourceFingerprint>, ProjectionSealError> {
-    let rels = [
-        "bin/ontarch",
-        "bin/ontarch-bin-report",
-        "bin/ontarch-bin-cleanup",
-        "lib/common.sh",
-        "lib/registry.sh",
-        "policies/takogami.agent.policy.toml",
-        "policies/agent-bin.policy.toml",
-        "schemas/bin-inventory.schema.json",
-        "schemas/bin-cleanup-plan.schema.json",
-    ];
-    let mut out = Vec::new();
-    for rel in rels {
-        let abs = ontarch_pkg.join(rel);
-        if !abs.is_file() {
-            continue;
-        }
-        let display = format!("packages/ontarch/{rel}");
-        let fp = fingerprint_file(&abs, &display)
-            .map_err(|e| ProjectionSealError::Fingerprint(format!("fingerprint {rel}: {e}")))?;
-        out.push(fp);
+fn required_source_rels(operation: ProjectionOperation) -> &'static [&'static str] {
+    match operation {
+        ProjectionOperation::BinReport => &[
+            "bin/ontarch",
+            "bin/ontarch-bin-report",
+            "lib/common.sh",
+            "lib/registry.sh",
+            "policies/takogami.agent.policy.toml",
+            "policies/agent-bin.policy.toml",
+            "schemas/bin-inventory.schema.json",
+        ],
+        ProjectionOperation::BinCleanupReportOnly
+        | ProjectionOperation::BinCleanupDryRun
+        | ProjectionOperation::BinCleanupArchive
+        | ProjectionOperation::BinCleanupDeleteApproved => &[
+            "bin/ontarch",
+            "bin/ontarch-bin-report",
+            "bin/ontarch-bin-cleanup",
+            "lib/common.sh",
+            "lib/registry.sh",
+            "policies/takogami.agent.policy.toml",
+            "policies/agent-bin.policy.toml",
+            "schemas/bin-inventory.schema.json",
+            "schemas/bin-cleanup-plan.schema.json",
+        ],
     }
-    out.sort_by(|a, b| {
-        a.path
-            .cmp(&b.path)
-            .then(a.algorithm.cmp(&b.algorithm))
-            .then(a.digest.cmp(&b.digest))
-    });
-    out.dedup();
-    Ok(out)
+}
+
+fn fingerprint_projection_sources(
+    operation: ProjectionOperation,
+    ontarch_pkg: &Path,
+) -> Result<(Vec<SourceFingerprint>, Vec<PathBuf>), ProjectionSealError> {
+    let mut out = Vec::new();
+    let mut abs_paths = Vec::new();
+    for rel in required_source_rels(operation) {
+        let abs = ontarch_pkg.join(rel);
+        let display = format!("packages/ontarch/{rel}");
+        let fp = fingerprint_regular_file_nofollow(&abs, &display).map_err(|e| {
+            ProjectionSealError::Fingerprint(format!("required source {display}: {e}"))
+        })?;
+        out.push(fp);
+        abs_paths.push(abs);
+    }
+    // Stable order for digest (already manifest order); keep abs parallel.
+    Ok((out, abs_paths))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -385,18 +464,28 @@ mod tests {
         fs::set_permissions(path, perms).unwrap();
     }
 
-    fn fixture() -> (tempfile::TempDir, PathBuf, PathBuf) {
-        let temp = tempdir().unwrap();
-        let ws = temp.path().join("ws");
-        let pkg = ws.join("packages/ontarch");
-        let registry = pkg.join("registry");
-        fs::create_dir_all(&registry).unwrap();
+    fn write_required_sources(pkg: &Path) {
         write_exe(&pkg.join("bin/ontarch"));
         write_exe(&pkg.join("bin/ontarch-bin-report"));
         write_exe(&pkg.join("bin/ontarch-bin-cleanup"));
         fs::create_dir_all(pkg.join("lib")).unwrap();
         fs::write(pkg.join("lib/common.sh"), b"#\n").unwrap();
         fs::write(pkg.join("lib/registry.sh"), b"#\n").unwrap();
+        fs::create_dir_all(pkg.join("policies")).unwrap();
+        fs::write(pkg.join("policies/takogami.agent.policy.toml"), b"#\n").unwrap();
+        fs::write(pkg.join("policies/agent-bin.policy.toml"), b"#\n").unwrap();
+        fs::create_dir_all(pkg.join("schemas")).unwrap();
+        fs::write(pkg.join("schemas/bin-inventory.schema.json"), b"{}\n").unwrap();
+        fs::write(pkg.join("schemas/bin-cleanup-plan.schema.json"), b"{}\n").unwrap();
+    }
+
+    fn fixture() -> (tempfile::TempDir, PathBuf, PathBuf) {
+        let temp = tempdir().unwrap();
+        let ws = temp.path().join("ws");
+        let pkg = ws.join("packages/ontarch");
+        let registry = pkg.join("registry");
+        fs::create_dir_all(&registry).unwrap();
+        write_required_sources(&pkg);
         (temp, registry, ws)
     }
 
@@ -411,7 +500,6 @@ mod tests {
             "sess-1".into(),
             "workspace-dev".into(),
             vec!["takogami.agent".into(), "agent-bin".into()],
-            Some("/approved/bin"),
         )
         .unwrap();
         let b = SealedProjectionPlan::seal(
@@ -422,11 +510,16 @@ mod tests {
             "sess-1".into(),
             "workspace-dev".into(),
             vec!["agent-bin".into(), "takogami.agent".into()],
-            Some("/approved/bin"),
         )
         .unwrap();
         assert_eq!(a.plan_digest(), b.plan_digest());
         assert!(a.plan_digest().starts_with("sha256:"));
+        let path = a.fixed_env().get("PATH").unwrap();
+        assert!(!path.contains("::"));
+        for part in path.split(':') {
+            assert!(Path::new(part).is_absolute());
+            assert!(!part.is_empty());
+        }
     }
 
     #[test]
@@ -440,7 +533,6 @@ mod tests {
             "sess-1".into(),
             "workspace-dev".into(),
             vec!["takogami.agent".into()],
-            None,
         )
         .unwrap();
         let scoped = SealedProjectionPlan::seal(
@@ -451,7 +543,6 @@ mod tests {
             "sess-1".into(),
             "workspace-dev".into(),
             vec!["takogami.agent".into()],
-            None,
         )
         .unwrap();
         assert_ne!(none.plan_digest(), scoped.plan_digest());
@@ -471,9 +562,59 @@ mod tests {
             "s".into(),
             "p".into(),
             vec![],
-            None,
         )
         .unwrap_err();
         assert_eq!(err.code(), "projection_tool_unavailable");
+    }
+
+    #[test]
+    fn missing_required_projection_source_fails_seal() {
+        let (_t, registry, ws) = fixture();
+        let pkg = registry.parent().unwrap();
+        fs::remove_file(pkg.join("schemas/bin-inventory.schema.json")).unwrap();
+        let err = SealedProjectionPlan::seal(
+            ProjectionOperation::BinReport,
+            &registry,
+            &ws,
+            None,
+            "s".into(),
+            "p".into(),
+            vec![],
+        )
+        .unwrap_err();
+        assert_eq!(err.code(), "projection_contract_changed");
+        assert!(err.message().contains("packages/ontarch/"));
+        assert!(!err.message().contains(pkg.to_string_lossy().as_ref()));
+    }
+
+    #[test]
+    fn symlink_projection_source_fails_seal() {
+        let (_t, registry, ws) = fixture();
+        let pkg = registry.parent().unwrap();
+        let target = pkg.join("lib/common.sh");
+        let link = pkg.join("lib/common.sh.link");
+        fs::rename(&target, &link).unwrap();
+        std::os::unix::fs::symlink(&link, &target).unwrap();
+        let err = SealedProjectionPlan::seal(
+            ProjectionOperation::BinReport,
+            &registry,
+            &ws,
+            None,
+            "s".into(),
+            "p".into(),
+            vec![],
+        )
+        .unwrap_err();
+        assert_eq!(err.code(), "projection_contract_changed");
+    }
+
+    #[test]
+    fn sealed_tool_path_contains_only_approved_absolute_directories() {
+        let path = build_controller_tool_path().unwrap();
+        crate::execution::validate_controller_path(&path).unwrap();
+        for part in path.split(':') {
+            assert!(Path::new(part).is_absolute());
+            assert!(fs::metadata(part).unwrap().is_dir());
+        }
     }
 }

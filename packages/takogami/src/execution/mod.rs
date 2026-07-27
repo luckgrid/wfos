@@ -5,7 +5,9 @@ mod process;
 mod signals;
 mod streams;
 
-pub use environment::{EnvError, EnvSnapshot, build_child_env, snapshot_env};
+pub use environment::{
+    EnvError, EnvSnapshot, build_child_env, snapshot_env, validate_controller_path,
+};
 pub use process::TokioExecutor;
 pub use signals::{NullSignalSource, ProcessGroupGuard, SignalSource, UnixSignalSource};
 pub use streams::{
@@ -147,6 +149,17 @@ pub trait Executor: Send + Sync {
     ) -> ExecutionReport;
 }
 
+/// Projection-capable executor seam (bin report/cleanup). Separate from lifecycle [`Executor`]
+/// so tests can inject call-count spies and fault wrappers without spawning.
+#[async_trait]
+pub trait ProjectionExecutor: Send + Sync {
+    async fn execute_projection(
+        &self,
+        plan: &crate::policy::AuthorizedProjectionPlan,
+        options: &ExecutionOptions,
+    ) -> ExecutionReport;
+}
+
 /// Production stand-in that never starts a child (kept for plan-only / test injection).
 #[derive(Debug, Default, Clone, Copy)]
 pub struct UnavailableExecutor;
@@ -185,6 +198,30 @@ impl SpyExecutor {
         self.calls.load(Ordering::SeqCst) > 0
     }
 
+    pub fn calls(&self) -> u32 {
+        self.calls.load(Ordering::SeqCst)
+    }
+}
+
+/// Test spy that counts projection reachability without spawning.
+#[derive(Debug, Default)]
+pub struct SpyProjectionExecutor {
+    pub calls: AtomicU32,
+}
+
+#[async_trait]
+impl ProjectionExecutor for SpyProjectionExecutor {
+    async fn execute_projection(
+        &self,
+        _plan: &crate::policy::AuthorizedProjectionPlan,
+        _options: &ExecutionOptions,
+    ) -> ExecutionReport {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        ExecutionReport::idle("spy_reached")
+    }
+}
+
+impl SpyProjectionExecutor {
     pub fn calls(&self) -> u32 {
         self.calls.load(Ordering::SeqCst)
     }

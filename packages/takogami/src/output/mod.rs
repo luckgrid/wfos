@@ -633,6 +633,88 @@ fn policy_explanation_from_error(error: &ControllerError) -> Option<&PolicyEvalu
     }
 }
 
+/// Concise human lines for Gate/Deny bin outcomes (no JSON, no absolute roots).
+pub(crate) fn render_bin_policy_human(
+    command: &str,
+    status: &str,
+    deferred: bool,
+    scope: Option<&str>,
+) -> Vec<String> {
+    let mut lines = vec![format!("Bin: {command}"), format!("Status: {status}")];
+    match scope {
+        Some(s) => lines.push(format!("Scope: {s}")),
+        None => lines.push("Scope: workspace-wide".into()),
+    }
+    if deferred {
+        lines.push("Detail: deferred_unavailable (no child spawn)".into());
+    }
+    lines
+}
+
+/// Concise human lines for Allow bin outcomes. Never dumps inventory rows or absolute roots.
+pub(crate) fn render_bin_allow_human(
+    operation: crate::projection::ProjectionOperation,
+    scope: Option<&str>,
+    payload: Option<&serde_json::Value>,
+    exit: u8,
+) -> Vec<String> {
+    use crate::projection::ProjectionOperation;
+    let mut lines = Vec::new();
+    match operation {
+        ProjectionOperation::BinReport => {
+            lines.push("Bin inventory".into());
+            if let Some(p) = payload {
+                if let Some(ts) = p.get("generated_at").and_then(|v| v.as_str()) {
+                    lines.push(format!("Generated: {ts}"));
+                }
+                if let Some(summary) = p.get("summary") {
+                    let total = summary.get("total").and_then(|v| v.as_u64()).unwrap_or(0);
+                    let with = summary
+                        .get("with_manifest")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0);
+                    lines.push(format!("Workflows: {total}"));
+                    lines.push(format!("With manifests: {with}"));
+                }
+            } else if exit != 0 {
+                lines.push(format!("Status: error (exit {exit})"));
+            }
+        }
+        ProjectionOperation::BinCleanupReportOnly => {
+            lines.push("Bin cleanup (report-only)".into());
+            lines.push("Mode: report-only".into());
+            match scope {
+                Some(s) => lines.push(format!("Scope: {s}")),
+                None => lines.push("Scope: workspace-wide".into()),
+            }
+            if let Some(p) = payload
+                && let Some(summary) = p.get("summary")
+            {
+                for key in [
+                    "total",
+                    "advisory",
+                    "would_archive",
+                    "would_delete",
+                    "blocked",
+                ] {
+                    if let Some(n) = summary.get(key).and_then(|v| v.as_u64()) {
+                        lines.push(format!("{key}: {n}"));
+                    }
+                }
+            }
+            lines.push("Mutation executed: false".into());
+            if exit != 0 {
+                lines.push(format!("Status: error (exit {exit})"));
+            }
+        }
+        _ => {
+            lines.push(format!("Bin: {}", operation.request_command_name()));
+            lines.push(format!("Status: exit {exit}"));
+        }
+    }
+    lines
+}
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct DoctorCheck {
     pub name: String,

@@ -3,8 +3,19 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 
-use super::types::{BinCleanupPlan, BinInventory, CleanupDisposition, CleanupMode, CleanupReason};
+use super::types::{
+    BinCleanupPlan, BinInventory, CleanupDisposition, CleanupEntry, CleanupMode, CleanupReason,
+};
+use crate::contracts::parse_rfc3339_utc_seconds;
 use crate::projection::ValidatedBinScope;
+
+pub const MAX_SUMMARY_COUNT: u64 = 100_000;
+pub const MAX_SIZE_BYTES: u64 = 1_099_511_627_776;
+pub const MAX_FILE_COUNT: u64 = 10_000_000;
+pub const MAX_AGE_DAYS: u64 = 365_000;
+pub const MAX_MANIFEST_COUNT: u64 = 100_000;
+pub const MAX_PATH_LEN: usize = 512;
+pub const MAX_RETENTION_LEN: usize = 512;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PayloadError {
@@ -103,6 +114,16 @@ pub fn validate_inventory(
             "inventory root does not match expected workspace root".into(),
         ));
     }
+    if doc.summary.total > MAX_SUMMARY_COUNT || doc.summary.with_manifest > MAX_SUMMARY_COUNT {
+        return Err(PayloadError::Inventory(
+            "inventory summary count exceeds maximum".into(),
+        ));
+    }
+    if doc.workflows.len() as u64 > MAX_SUMMARY_COUNT {
+        return Err(PayloadError::Inventory(
+            "inventory workflow count exceeds maximum".into(),
+        ));
+    }
     if doc.summary.total as usize != doc.workflows.len() {
         return Err(PayloadError::Inventory(
             "inventory summary.total does not match workflows length".into(),
@@ -117,7 +138,37 @@ pub fn validate_inventory(
     let mut seen = BTreeSet::new();
     let mut prev: Option<&str> = None;
     for w in &doc.workflows {
-        validate_workflow_path(&w.path)?;
+        validate_workflow_path(&w.path, false)?;
+        if w.path.len() > MAX_PATH_LEN {
+            return Err(PayloadError::Inventory(
+                "workflow path exceeds length limit".into(),
+            ));
+        }
+        if w.size_bytes > MAX_SIZE_BYTES {
+            return Err(PayloadError::Inventory("size_bytes exceeds maximum".into()));
+        }
+        if w.file_count > MAX_FILE_COUNT {
+            return Err(PayloadError::Inventory("file_count exceeds maximum".into()));
+        }
+        if w.manifest_count > MAX_MANIFEST_COUNT {
+            return Err(PayloadError::Inventory(
+                "manifest_count exceeds maximum".into(),
+            ));
+        }
+        if let Some(d) = w.oldest_file_age_days
+            && d > MAX_AGE_DAYS
+        {
+            return Err(PayloadError::Inventory(
+                "oldest_file_age_days exceeds maximum".into(),
+            ));
+        }
+        if let Some(d) = w.newest_file_age_days
+            && d > MAX_AGE_DAYS
+        {
+            return Err(PayloadError::Inventory(
+                "newest_file_age_days exceeds maximum".into(),
+            ));
+        }
         if !seen.insert(w.path.as_str()) {
             return Err(PayloadError::Inventory("duplicate workflow path".into()));
         }
@@ -164,6 +215,24 @@ pub(crate) fn validate_cleanup_plan(
             "mutation_executed must be false".into(),
         ));
     }
+    for c in [
+        doc.summary.total,
+        doc.summary.advisory,
+        doc.summary.would_archive,
+        doc.summary.would_delete,
+        doc.summary.blocked,
+    ] {
+        if c > MAX_SUMMARY_COUNT {
+            return Err(PayloadError::Cleanup(
+                "cleanup summary count exceeds maximum".into(),
+            ));
+        }
+    }
+    if doc.entries.len() as u64 > MAX_SUMMARY_COUNT {
+        return Err(PayloadError::Cleanup(
+            "cleanup entry count exceeds maximum".into(),
+        ));
+    }
     if doc.summary.total as usize != doc.entries.len() {
         return Err(PayloadError::Cleanup(
             "cleanup summary.total does not match entries".into(),
@@ -173,7 +242,19 @@ pub(crate) fn validate_cleanup_plan(
     let mut seen = BTreeSet::new();
     let mut prev: Option<&str> = None;
     for e in &doc.entries {
-        validate_workflow_path(&e.path)?;
+        validate_workflow_path(&e.path, true)?;
+        if e.path.len() > MAX_PATH_LEN {
+            return Err(PayloadError::Cleanup(
+                "cleanup path exceeds length limit".into(),
+            ));
+        }
+        if let Some(r) = &e.retention
+            && r.len() > MAX_RETENTION_LEN
+        {
+            return Err(PayloadError::Cleanup(
+                "retention exceeds length limit".into(),
+            ));
+        }
         if !seen.insert(e.path.as_str()) {
             return Err(PayloadError::Cleanup("duplicate cleanup path".into()));
         }
@@ -211,73 +292,119 @@ pub(crate) fn validate_cleanup_plan(
     Ok(())
 }
 
-fn validate_disposition_combo(e: &super::types::CleanupEntry) -> Result<(), PayloadError> {
-    match e.disposition {
+/// Validated retention wrapper: closed grammar matching Ontarch producer.
+pub fn validate_retention(retention: Option<&str>) -> Result<(), String> {
+    match retention {
+        None => Ok(()),
+        Some("review-before-delete") | Some("permanent") | Some("session-exports") => Ok(()),
+        Some(s) if is_auto_archive(s) => Ok(()),
+        Some(_) => Err("retention fails closed grammar".into()),
+    }
+}
+
+fn is_auto_archive(s: &str) -> bool {
+    let Some(rest) = s.strip_prefix("auto-archive-after:") else {
+        return false;
+    };
+    let Some(days) = rest.strip_suffix('d') else {
+        return false;
+    };
+    !days.is_empty() && days.bytes().all(|b| b.is_ascii_digit())
+}
+
+fn validate_disposition_combo(e: &CleanupEntry) -> Result<(), PayloadError> {
+    validate_retention(e.retention.as_deref()).map_err(PayloadError::Cleanup)?;
+    let ok = match e.disposition {
         CleanupDisposition::WouldDelete => {
-            if !matches!(e.reason, CleanupReason::Approved)
-                || e.approved_to_matches != Some(true)
-                || e.retention.as_deref() == Some("permanent")
-                || e.retention.is_none()
-            {
-                return Err(PayloadError::Cleanup(
-                    "invalid would_delete disposition combination".into(),
-                ));
-            }
+            matches!(e.reason, CleanupReason::Approved)
+                && e.approved_to_matches == Some(true)
+                && e.retention.is_some()
+                && e.retention.as_deref() != Some("permanent")
+                && validate_retention(e.retention.as_deref()).is_ok()
         }
         CleanupDisposition::WouldArchive => {
-            if !matches!(e.reason, CleanupReason::Stale) || e.approved_to_matches.is_some() {
-                return Err(PayloadError::Cleanup(
-                    "invalid would_archive disposition combination".into(),
-                ));
-            }
+            matches!(e.reason, CleanupReason::Stale)
+                && e.approved_to_matches.is_none()
+                && e.retention.as_deref().is_some_and(is_auto_archive)
         }
-        CleanupDisposition::Advisory | CleanupDisposition::Blocked => {}
+        CleanupDisposition::Blocked => match e.reason {
+            CleanupReason::ApprovedToNull | CleanupReason::ApprovedToMismatch => {
+                e.approved_to_matches == Some(false)
+            }
+            CleanupReason::RetentionPermanent => e.retention.as_deref() == Some("permanent"),
+            CleanupReason::NoManifest
+            | CleanupReason::MultipleManifests
+            | CleanupReason::InvalidManifest
+            | CleanupReason::LibOrSrc
+            | CleanupReason::OutsideScope
+            | CleanupReason::ScopeRequired => e.approved_to_matches.is_none(),
+            _ => false,
+        },
+        CleanupDisposition::Advisory => match e.reason {
+            CleanupReason::RetentionReviewRequired => {
+                matches!(
+                    e.retention.as_deref(),
+                    Some("review-before-delete") | Some("session-exports")
+                ) && e.approved_to_matches.is_none()
+            }
+            CleanupReason::Stale => {
+                e.retention.as_deref().is_some_and(is_auto_archive)
+                    && e.approved_to_matches.is_none()
+            }
+            CleanupReason::Current => {
+                e.approved_to_matches.is_none()
+                    && validate_retention(e.retention.as_deref()).is_ok()
+            }
+            CleanupReason::NoManifest => e.retention.is_none() && e.approved_to_matches.is_none(),
+            _ => false,
+        },
+    };
+    if !ok {
+        return Err(PayloadError::Cleanup(format!(
+            "invalid {} disposition combination",
+            e.disposition.as_str()
+        )));
     }
     Ok(())
 }
 
-fn validate_workflow_path(path: &str) -> Result<(), PayloadError> {
+fn validate_workflow_path(path: &str, as_cleanup: bool) -> Result<(), PayloadError> {
+    let err = |m: String| {
+        if as_cleanup {
+            PayloadError::Cleanup(m)
+        } else {
+            PayloadError::Inventory(m)
+        }
+    };
     if ValidatedBinScope::parse(path).is_err() {
-        return Err(PayloadError::Inventory(
-            "path fails workflow/subtree grammar".into(),
-        ));
+        return Err(err("path fails workflow/subtree grammar".into()));
     }
     if path.split('/').any(|s| s == "lib" || s == "src") {
-        return Err(PayloadError::Inventory(
-            "lib/src paths are forbidden".into(),
-        ));
+        return Err(err("lib/src paths are forbidden".into()));
     }
     Ok(())
 }
 
 fn require_utc_seconds(ts: &str) -> Result<(), String> {
-    // YYYY-MM-DDTHH:MM:SSZ
-    let b = ts.as_bytes();
-    if b.len() != 20 || b[19] != b'Z' || b[10] != b'T' {
+    // Exact lexical form YYYY-MM-DDTHH:MM:SSZ, then calendar-valid parse (Phase 2 reuse).
+    let lexical = ts.len() == 20
+        && ts.as_bytes().get(4) == Some(&b'-')
+        && ts.as_bytes().get(7) == Some(&b'-')
+        && ts.as_bytes().get(10) == Some(&b'T')
+        && ts.as_bytes().get(13) == Some(&b':')
+        && ts.as_bytes().get(16) == Some(&b':')
+        && ts.ends_with('Z')
+        && ts[..4].bytes().all(|b| b.is_ascii_digit())
+        && ts[5..7].bytes().all(|b| b.is_ascii_digit())
+        && ts[8..10].bytes().all(|b| b.is_ascii_digit())
+        && ts[11..13].bytes().all(|b| b.is_ascii_digit())
+        && ts[14..16].bytes().all(|b| b.is_ascii_digit())
+        && ts[17..19].bytes().all(|b| b.is_ascii_digit());
+    if !lexical {
         return Err("timestamp must be exact UTC seconds (...Z)".into());
     }
-    let digit = |i: usize| b[i].is_ascii_digit();
-    let ok = digit(0)
-        && digit(1)
-        && digit(2)
-        && digit(3)
-        && b[4] == b'-'
-        && digit(5)
-        && digit(6)
-        && b[7] == b'-'
-        && digit(8)
-        && digit(9)
-        && digit(11)
-        && digit(12)
-        && b[13] == b':'
-        && digit(14)
-        && digit(15)
-        && b[16] == b':'
-        && digit(17)
-        && digit(18);
-    if !ok {
-        return Err("timestamp must be exact UTC seconds (...Z)".into());
-    }
+    parse_rfc3339_utc_seconds(ts)
+        .map_err(|_| String::from("timestamp is not calendar-valid UTC"))?;
     Ok(())
 }
 
@@ -292,7 +419,7 @@ fn roots_equivalent(reported: &str, expected: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::bin_projection::types::{CleanupSummary, InventorySummary};
+    use crate::bin_projection::types::{CleanupSummary, InventorySummary, InventoryWorkflow};
 
     #[test]
     fn rejects_trailing_prose_and_multi_doc() {
@@ -344,5 +471,136 @@ mod tests {
         };
         let p = Path::new("/tmp/x");
         let _ = validate_inventory(&inv, p);
+    }
+
+    #[test]
+    fn inventory_calendar_invalid_timestamp_rejected() {
+        let inv = BinInventory {
+            generated_at: "2026-99-99T99:99:99Z".into(),
+            root: "/tmp/x".into(),
+            summary: InventorySummary {
+                total: 0,
+                with_manifest: 0,
+            },
+            workflows: vec![],
+        };
+        let err = validate_inventory(&inv, Path::new("/tmp/x")).unwrap_err();
+        assert_eq!(err.code(), "bin_inventory_invalid");
+    }
+
+    #[test]
+    fn non_leap_feb_29_rejected() {
+        assert!(require_utc_seconds("2025-02-29T00:00:00Z").is_err());
+    }
+
+    #[test]
+    fn fractional_and_offset_timestamps_rejected() {
+        assert!(require_utc_seconds("2026-07-25T00:00:00.123Z").is_err());
+        assert!(require_utc_seconds("2026-07-25T00:00:00+00:00").is_err());
+    }
+
+    #[test]
+    fn cleanup_invalid_entry_path_uses_cleanup_diagnostic() {
+        let plan = BinCleanupPlan {
+            generated_at: "2026-07-25T00:00:00Z".into(),
+            mode: CleanupMode::ReportOnly,
+            scope: None,
+            inventory_generated_at: "2026-07-25T00:00:00Z".into(),
+            inventory_refreshed: false,
+            summary: CleanupSummary {
+                total: 1,
+                advisory: 1,
+                would_archive: 0,
+                would_delete: 0,
+                blocked: 0,
+            },
+            entries: vec![CleanupEntry {
+                path: "Plan/bin".into(),
+                disposition: CleanupDisposition::Advisory,
+                reason: CleanupReason::Current,
+                retention: None,
+                approved_to_matches: None,
+            }],
+            mutation_executed: false,
+        };
+        let err = validate_cleanup_plan(&plan, CleanupMode::ReportOnly, None).unwrap_err();
+        assert_eq!(err.code(), "bin_cleanup_plan_invalid");
+    }
+
+    #[test]
+    fn would_archive_requires_auto_archive_retention() {
+        let e = CleanupEntry {
+            path: "Build/bin/wfos".into(),
+            disposition: CleanupDisposition::WouldArchive,
+            reason: CleanupReason::Stale,
+            retention: Some("permanent".into()),
+            approved_to_matches: None,
+        };
+        assert!(validate_disposition_combo(&e).is_err());
+        let e2 = CleanupEntry {
+            retention: Some("auto-archive-after:30d".into()),
+            ..e
+        };
+        assert!(validate_disposition_combo(&e2).is_ok());
+    }
+
+    #[test]
+    fn would_delete_rejects_arbitrary_retention() {
+        let e = CleanupEntry {
+            path: "Build/bin/wfos".into(),
+            disposition: CleanupDisposition::WouldDelete,
+            reason: CleanupReason::Approved,
+            retention: Some("foo".into()),
+            approved_to_matches: Some(true),
+        };
+        assert!(validate_disposition_combo(&e).is_err());
+    }
+
+    #[test]
+    fn inventory_numeric_bounds_enforced() {
+        let mut inv = BinInventory {
+            generated_at: "2026-07-25T00:00:00Z".into(),
+            root: "/tmp/x".into(),
+            summary: InventorySummary {
+                total: 1,
+                with_manifest: 0,
+            },
+            workflows: vec![InventoryWorkflow {
+                path: "Build/bin/wfos".into(),
+                size_bytes: MAX_SIZE_BYTES,
+                file_count: MAX_FILE_COUNT,
+                oldest_file_age_days: Some(MAX_AGE_DAYS),
+                newest_file_age_days: Some(0),
+                manifest_present: false,
+                manifest_count: 0,
+            }],
+        };
+        assert!(validate_inventory(&inv, Path::new("/tmp/x")).is_ok());
+        inv.workflows[0].size_bytes = MAX_SIZE_BYTES + 1;
+        assert!(validate_inventory(&inv, Path::new("/tmp/x")).is_err());
+    }
+
+    #[test]
+    fn path_and_retention_string_bounds_enforced() {
+        let long = "a".repeat(MAX_PATH_LEN + 1);
+        let inv = BinInventory {
+            generated_at: "2026-07-25T00:00:00Z".into(),
+            root: "/tmp/x".into(),
+            summary: InventorySummary {
+                total: 1,
+                with_manifest: 0,
+            },
+            workflows: vec![InventoryWorkflow {
+                path: format!("Build/bin/{long}"),
+                size_bytes: 0,
+                file_count: 0,
+                oldest_file_age_days: None,
+                newest_file_age_days: None,
+                manifest_present: false,
+                manifest_count: 0,
+            }],
+        };
+        // Grammar may fail first; either way reject.
+        assert!(validate_inventory(&inv, Path::new("/tmp/x")).is_err());
     }
 }

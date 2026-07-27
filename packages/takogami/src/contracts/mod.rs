@@ -10,7 +10,9 @@ pub mod timestamp;
 pub mod types;
 
 pub use entrypoint::{LegacyEntrypoint, LegacyParseError, parse_legacy_entrypoint};
-pub use fingerprint::{SourceFingerprint, fingerprint_bytes, fingerprint_file};
+pub use fingerprint::{
+    SourceFingerprint, fingerprint_bytes, fingerprint_file, fingerprint_regular_file_nofollow,
+};
 pub use state::{
     StateHomeInputs, ensure_state_home, resolve_session_state_home, validate_state_home,
 };
