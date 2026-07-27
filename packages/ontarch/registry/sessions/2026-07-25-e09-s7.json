@@ -148,7 +148,8 @@
       },
       "d9": "open / decide-before-Phase-3",
       "phase_boundary": "Phase 1 COMPLETE; Phase 2 COMPLETE; Phase 3 blocked until explicit go-ahead; Command::Bin unimplemented",
-      "note": "This session-record commit is the Phase 2 final evidence head; correction_commit is the production fix SHA."
+      "note": "This session-record commit is the Phase 2 final evidence head; correction_commit is the production fix SHA.",
+      "evidence_commit": "0a632027c4e9f6a676452e0eaccdba5e962b3eaf"
     },
     {
       "phase": "2-final-correction",
