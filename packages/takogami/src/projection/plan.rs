@@ -282,6 +282,14 @@ impl SealedProjectionPlan {
 
     /// Re-validate sealed helper identities immediately before spawn.
     pub(crate) fn preflight_helpers(&self) -> Result<(), ProjectionSealError> {
+        let path = self
+            .fixed_env
+            .get("PATH")
+            .ok_or_else(|| ProjectionSealError::ToolPath("sealed PATH missing".into()))?;
+        crate::execution::validate_controller_path(path).map_err(ProjectionSealError::ToolPath)?;
+        let path_dirs = parse_sealed_path_dirs(path)?;
+        // First-match PATH selection must still bind to the sealed lookup identity.
+        prove_helpers_are_path_first_match(&self.helper_identities, &path_dirs)?;
         for helper in &self.helper_identities {
             // Lookup path must still resolve to the sealed canonical identity.
             let resolved = helper.lookup_path.canonicalize().map_err(|_| {
@@ -307,11 +315,6 @@ impl SealedProjectionPlan {
                 )));
             }
         }
-        let path = self
-            .fixed_env
-            .get("PATH")
-            .ok_or_else(|| ProjectionSealError::ToolPath("sealed PATH missing".into()))?;
-        crate::execution::validate_controller_path(path).map_err(ProjectionSealError::ToolPath)?;
         Ok(())
     }
 
@@ -353,6 +356,33 @@ fn controller_search_dirs() -> Vec<PathBuf> {
 thread_local! {
     static TEST_SEARCH_DIRS: std::cell::RefCell<Option<Vec<PathBuf>>> =
         const { std::cell::RefCell::new(None) };
+}
+
+/// Test-only override of controller helper search directories (thread-local).
+#[cfg(test)]
+pub(crate) fn with_test_search_dirs<R>(dirs: Vec<PathBuf>, f: impl FnOnce() -> R) -> R {
+    TEST_SEARCH_DIRS.with(|c| {
+        *c.borrow_mut() = Some(dirs);
+        let out = f();
+        *c.borrow_mut() = None;
+        out
+    })
+}
+
+/// Install test search dirs that remain until [`clear_test_search_dirs`] (for async tests).
+#[cfg(test)]
+pub(crate) fn install_test_search_dirs(dirs: Vec<PathBuf>) {
+    TEST_SEARCH_DIRS.with(|c| {
+        *c.borrow_mut() = Some(dirs);
+    });
+}
+
+/// Clear test search-dir override installed by [`install_test_search_dirs`].
+#[cfg(test)]
+pub(crate) fn clear_test_search_dirs() {
+    TEST_SEARCH_DIRS.with(|c| {
+        *c.borrow_mut() = None;
+    });
 }
 
 /// Resolve canonical non-symlink search directories from the controller candidate list.
@@ -444,23 +474,106 @@ fn resolve_helper_authority(
         })?;
     helpers.push(lookup);
 
+    // Child PATH directories follow controller search-directory authority order, not helper-name
+    // lexicographic order. Deduplicate without reordering.
+    let path_dirs = build_child_path_dirs(&search_dirs, &helpers)?;
+    let path = path_dirs
+        .iter()
+        .map(|d| d.to_string_lossy().into_owned())
+        .collect::<Vec<_>>()
+        .join(":");
+
+    // Prove shell-style first-match over the constructed PATH selects each sealed lookup_path.
+    prove_helpers_are_path_first_match(&helpers, &path_dirs)?;
+
+    // Helper identities may be sorted for deterministic digest serialization only.
     helpers.sort_by(|a, b| a.name.cmp(&b.name));
-    let mut path_dirs: Vec<String> = Vec::new();
-    for helper in &helpers {
+    Ok((helpers, path))
+}
+
+/// Build child PATH directories from selected helper lookup parents, preserving controller order.
+fn build_child_path_dirs(
+    search_dirs: &[PathBuf],
+    helpers: &[HelperIdentity],
+) -> Result<Vec<PathBuf>, ProjectionSealError> {
+    let mut selected_parents: Vec<PathBuf> = Vec::new();
+    for helper in helpers {
         let parent = helper
             .lookup_path
             .parent()
             .ok_or_else(|| ProjectionSealError::ToolPath("helper missing parent directory".into()))?
             .to_path_buf();
-        // PATH must expose the lookup directory (where the command name appears), not only
-        // the canonical target parent (busybox lives in /bin while applets live in /usr/bin).
-        let parent_str = parent.to_string_lossy().into_owned();
-        if !path_dirs.iter().any(|d| d == &parent_str) {
-            path_dirs.push(parent_str);
+        if !selected_parents.iter().any(|d| d == &parent) {
+            selected_parents.push(parent);
         }
     }
-    let path = path_dirs.join(":");
-    Ok((helpers, path))
+    let mut path_dirs: Vec<PathBuf> = Vec::new();
+    for dir in search_dirs {
+        if selected_parents.iter().any(|p| p == dir) && !path_dirs.iter().any(|d| d == dir) {
+            path_dirs.push(dir.clone());
+        }
+    }
+    // Any sealed lookup parent not present in search_dirs (should not happen) is appended
+    // after authority order so PATH still exposes the command name.
+    for parent in selected_parents {
+        if !path_dirs.iter().any(|d| d == &parent) {
+            path_dirs.push(parent);
+        }
+    }
+    Ok(path_dirs)
+}
+
+fn parse_sealed_path_dirs(path: &str) -> Result<Vec<PathBuf>, ProjectionSealError> {
+    let mut dirs = Vec::new();
+    for part in path.split(':') {
+        if part.is_empty() {
+            return Err(ProjectionSealError::ToolPath(
+                "sealed PATH contains empty component".into(),
+            ));
+        }
+        let dir = PathBuf::from(part);
+        if !dir.is_absolute() {
+            return Err(ProjectionSealError::ToolPath(
+                "sealed PATH component must be absolute".into(),
+            ));
+        }
+        dirs.push(dir);
+    }
+    Ok(dirs)
+}
+
+/// Pure-Rust first-match resolver over ordered PATH directories (no shell / which / command -v).
+fn resolve_helper_first_match(
+    name: &str,
+    path_dirs: &[PathBuf],
+) -> Result<HelperIdentity, ProjectionSealError> {
+    for dir in path_dirs {
+        let candidate = dir.join(name);
+        match try_seal_helper_candidate(name, &candidate) {
+            Ok(id) => return Ok(id),
+            Err(ProjectionSealError::ToolPath(_)) => continue,
+            Err(e) => return Err(e),
+        }
+    }
+    Err(ProjectionSealError::Identity(format!(
+        "helper {name} has no executable first-match under sealed PATH"
+    )))
+}
+
+fn prove_helpers_are_path_first_match(
+    helpers: &[HelperIdentity],
+    path_dirs: &[PathBuf],
+) -> Result<(), ProjectionSealError> {
+    for helper in helpers {
+        let matched = resolve_helper_first_match(&helper.name, path_dirs)?;
+        if matched.lookup_path != helper.lookup_path {
+            return Err(ProjectionSealError::Identity(format!(
+                "helper {} PATH first-match diverged from sealed lookup",
+                helper.name
+            )));
+        }
+    }
+    Ok(())
 }
 
 fn resolve_named_helper(
@@ -833,12 +946,284 @@ mod tests {
     }
 
     fn with_search_dirs<R>(dirs: Vec<PathBuf>, f: impl FnOnce() -> R) -> R {
-        TEST_SEARCH_DIRS.with(|c| {
-            *c.borrow_mut() = Some(dirs);
-            let out = f();
-            *c.borrow_mut() = None;
-            out
+        with_test_search_dirs(dirs, f)
+    }
+
+    /// Split fake helpers so an earlier PATH directory is selected (authority order) while
+    /// most helpers live in a later directory — enabling post-seal shadow injection tests.
+    fn write_split_fake_helpers(early: &Path, late: &Path) {
+        fs::create_dir_all(early).unwrap();
+        fs::create_dir_all(late).unwrap();
+        write_fake_helpers(late);
+        // Anchor early in the sealed PATH by placing bash there (first search hit).
+        write_exe(&early.join("bash"));
+    }
+
+    fn seal_bin_report_with_dirs(
+        dirs: Vec<PathBuf>,
+        registry: &Path,
+        ws: &Path,
+    ) -> SealedProjectionPlan {
+        with_search_dirs(dirs, || {
+            SealedProjectionPlan::seal(
+                ProjectionOperation::BinReport,
+                registry,
+                ws,
+                None,
+                "s".into(),
+                "p".into(),
+                vec![],
+            )
+            .unwrap()
         })
+    }
+
+    #[test]
+    fn sealed_path_order_matches_controller_search_order() {
+        let temp = tempdir().unwrap();
+        let early = temp.path().join("early");
+        let late = temp.path().join("late");
+        write_split_fake_helpers(&early, &late);
+        let (_t, registry, ws) = fixture();
+        let early_c = early.canonicalize().unwrap();
+        let late_c = late.canonicalize().unwrap();
+        let plan = seal_bin_report_with_dirs(vec![early.clone(), late.clone()], &registry, &ws);
+        let path = plan.fixed_env().get("PATH").unwrap();
+        let dirs: Vec<&str> = path.split(':').collect();
+        let early_s = early_c.to_str().unwrap();
+        let late_s = late_c.to_str().unwrap();
+        let early_i = dirs
+            .iter()
+            .position(|d| *d == early_s)
+            .expect("early in PATH");
+        let late_i = dirs
+            .iter()
+            .position(|d| *d == late_s)
+            .expect("late in PATH");
+        assert!(
+            early_i < late_i,
+            "PATH must preserve controller search order, got {path}"
+        );
+        // Helper identities are sorted by name for digest, but PATH must not follow that order.
+        assert_ne!(
+            path.as_str(),
+            format!("{late_s}:{early_s}"),
+            "PATH must not be derived from helper-name sort alone"
+        );
+    }
+
+    #[test]
+    fn sealed_path_first_match_equals_every_helper_lookup_path() {
+        let temp = tempdir().unwrap();
+        let early = temp.path().join("early");
+        let late = temp.path().join("late");
+        write_split_fake_helpers(&early, &late);
+        let (_t, registry, ws) = fixture();
+        let plan = seal_bin_report_with_dirs(vec![early.clone(), late.clone()], &registry, &ws);
+        let path = plan.fixed_env().get("PATH").unwrap();
+        let path_dirs = parse_sealed_path_dirs(path).unwrap();
+        for helper in plan.helper_identities() {
+            let matched = resolve_helper_first_match(&helper.name, &path_dirs).unwrap();
+            assert_eq!(
+                matched.lookup_path, helper.lookup_path,
+                "first-match must equal sealed lookup for {}",
+                helper.name
+            );
+        }
+        let early_c = early.canonicalize().unwrap();
+        let late_c = late.canonicalize().unwrap();
+        let bash = plan
+            .helper_identities()
+            .iter()
+            .find(|h| h.name == "bash")
+            .unwrap();
+        assert_eq!(bash.lookup_path, early_c.join("bash"));
+        let jq = plan
+            .helper_identities()
+            .iter()
+            .find(|h| h.name == "jq")
+            .unwrap();
+        assert_eq!(jq.lookup_path, late_c.join("jq"));
+    }
+
+    #[test]
+    fn helper_shadow_inserted_in_earlier_path_dir_fails_preflight() {
+        let temp = tempdir().unwrap();
+        let early = temp.path().join("early");
+        let late = temp.path().join("late");
+        write_split_fake_helpers(&early, &late);
+        let (_t, registry, ws) = fixture();
+        let plan = seal_bin_report_with_dirs(vec![early.clone(), late.clone()], &registry, &ws);
+        write_exe(&early.join("jq"));
+        let err = plan.preflight_helpers().unwrap_err();
+        assert_eq!(err.code(), "projection_contract_changed");
+        assert!(err.message().contains("jq"));
+        assert!(!err.message().contains(early.to_str().unwrap()));
+        assert!(!err.message().contains(late.to_str().unwrap()));
+    }
+
+    #[test]
+    fn helper_shadow_same_bytes_in_earlier_path_dir_still_fails_preflight() {
+        let temp = tempdir().unwrap();
+        let early = temp.path().join("early");
+        let late = temp.path().join("late");
+        write_split_fake_helpers(&early, &late);
+        let (_t, registry, ws) = fixture();
+        let plan = seal_bin_report_with_dirs(vec![early.clone(), late.clone()], &registry, &ws);
+        let jq = plan
+            .helper_identities()
+            .iter()
+            .find(|h| h.name == "jq")
+            .unwrap();
+        let bytes = fs::read(&jq.lookup_path).unwrap();
+        fs::write(early.join("jq"), &bytes).unwrap();
+        let mut perms = fs::metadata(early.join("jq")).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(early.join("jq"), perms).unwrap();
+        let err = plan.preflight_helpers().unwrap_err();
+        assert_eq!(err.code(), "projection_contract_changed");
+        assert!(err.message().contains("jq"));
+    }
+
+    #[test]
+    fn helper_shadow_symlink_in_earlier_path_dir_fails_preflight() {
+        let temp = tempdir().unwrap();
+        let early = temp.path().join("early");
+        let late = temp.path().join("late");
+        write_split_fake_helpers(&early, &late);
+        let (_t, registry, ws) = fixture();
+        let plan = seal_bin_report_with_dirs(vec![early.clone(), late.clone()], &registry, &ws);
+        let jq = plan
+            .helper_identities()
+            .iter()
+            .find(|h| h.name == "jq")
+            .unwrap();
+        // Same canonical target via a different lookup path must still fail.
+        symlink(&jq.lookup_path, early.join("jq")).unwrap();
+        let err = plan.preflight_helpers().unwrap_err();
+        assert_eq!(err.code(), "projection_contract_changed");
+        assert!(err.message().contains("jq"));
+    }
+
+    #[test]
+    fn unrelated_new_executable_in_path_dir_does_not_fail() {
+        let temp = tempdir().unwrap();
+        let early = temp.path().join("early");
+        let late = temp.path().join("late");
+        write_split_fake_helpers(&early, &late);
+        let (_t, registry, ws) = fixture();
+        let plan = seal_bin_report_with_dirs(vec![early.clone(), late.clone()], &registry, &ws);
+        write_exe(&early.join("unrelated-tool"));
+        write_exe(&late.join("another-unrelated"));
+        plan.preflight_helpers()
+            .expect("unrelated executables must not fail");
+    }
+
+    #[test]
+    fn busybox_applet_first_match_remains_supported() {
+        let temp = tempdir().unwrap();
+        let bin = temp.path().join("bin");
+        let usr_bin = temp.path().join("usr_bin");
+        fs::create_dir_all(&bin).unwrap();
+        fs::create_dir_all(&usr_bin).unwrap();
+        // Fake busybox: real binary in bin/, applet symlink in usr_bin/.
+        write_exe(&bin.join("busybox"));
+        let mut names: Vec<&str> = REPORT_HELPERS.to_vec();
+        names.extend_from_slice(CLEANUP_EXTRA_HELPERS);
+        names.push("fd");
+        for name in names {
+            if name == "bash" {
+                // bash as regular file in usr_bin to keep PATH simple for other helpers
+                write_exe(&usr_bin.join(name));
+                continue;
+            }
+            symlink(bin.join("busybox"), usr_bin.join(name)).unwrap();
+        }
+        let (_t, registry, ws) = fixture();
+        let plan = seal_bin_report_with_dirs(vec![usr_bin.clone(), bin.clone()], &registry, &ws);
+        let usr_c = usr_bin.canonicalize().unwrap();
+        let jq = plan
+            .helper_identities()
+            .iter()
+            .find(|h| h.name == "jq")
+            .unwrap();
+        assert_eq!(jq.lookup_path, usr_c.join("jq"));
+        assert_eq!(
+            jq.canonical_path,
+            bin.join("busybox").canonicalize().unwrap()
+        );
+        plan.preflight_helpers()
+            .expect("busybox applet first-match must remain valid");
+    }
+
+    #[test]
+    fn world_writable_helper_directory_rejected() {
+        let temp = tempdir().unwrap();
+        let tools = temp.path().join("tools");
+        write_fake_helpers(&tools);
+        let mut perms = fs::metadata(&tools).unwrap().permissions();
+        perms.set_mode(0o777);
+        fs::set_permissions(&tools, perms).unwrap();
+        let (_t, registry, ws) = fixture();
+        let err = with_search_dirs(vec![tools], || {
+            SealedProjectionPlan::seal(
+                ProjectionOperation::BinReport,
+                &registry,
+                &ws,
+                None,
+                "s".into(),
+                "p".into(),
+                vec![],
+            )
+        })
+        .unwrap_err();
+        // World-writable search dirs are skipped; with none left, seal fails closed.
+        assert!(
+            err.code() == "execution_contract" || err.code() == "projection_tool_unavailable",
+            "unexpected code {}",
+            err.code()
+        );
+    }
+
+    #[test]
+    fn world_writable_helper_target_rejected() {
+        let temp = tempdir().unwrap();
+        let tools = temp.path().join("tools");
+        write_fake_helpers(&tools);
+        let jq = tools.join("jq");
+        let mut perms = fs::metadata(&jq).unwrap().permissions();
+        perms.set_mode(0o757); // world-writable + executable
+        fs::set_permissions(&jq, perms).unwrap();
+        let err = try_seal_helper_candidate("jq", &jq).unwrap_err();
+        assert_eq!(err.code(), "execution_contract");
+        assert!(err.message().contains("world-writable"));
+    }
+
+    #[test]
+    fn non_world_writable_developer_tool_directory_allowed_with_identity_binding() {
+        let temp = tempdir().unwrap();
+        // Simulate a developer-managed tool directory (Homebrew-like): owner-writable, not
+        // world-writable, accepted with exact lookup/canonical/digest binding.
+        let brewish = temp.path().join("opt_homebrew_bin");
+        write_fake_helpers(&brewish);
+        let mut perms = fs::metadata(&brewish).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&brewish, perms).unwrap();
+        let (_t, registry, ws) = fixture();
+        let plan = seal_bin_report_with_dirs(vec![brewish.clone()], &registry, &ws);
+        assert!(!plan.helper_identities().is_empty());
+        let brew_c = brewish.canonicalize().unwrap();
+        for helper in plan.helper_identities() {
+            assert!(
+                helper.lookup_path.starts_with(&brew_c),
+                "{:?} not under {:?}",
+                helper.lookup_path,
+                brew_c
+            );
+            assert!(!helper.digest.is_empty());
+            assert_eq!(helper.algorithm, "sha256");
+        }
+        plan.preflight_helpers().unwrap();
     }
 
     #[test]

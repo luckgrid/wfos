@@ -303,6 +303,55 @@ fn apply_projection_test_drift(exe: &Path, cwd: &Path) -> Result<(), ExecFailure
             }
         }
     }
+    // Post-authorization helper shadow: insert an executable into an earlier sealed PATH
+    // directory so first-match diverges from the sealed lookup_path. Only writes into the
+    // explicit test-provided directory (never system locations).
+    if std::env::var_os("TAKOGAMI_TEST_INJECT_HELPER_SHADOW").is_some() {
+        let Ok(dir) = std::env::var("TAKOGAMI_TEST_HELPER_SHADOW_DIR") else {
+            return Ok(());
+        };
+        let Ok(name) = std::env::var("TAKOGAMI_TEST_HELPER_SHADOW_NAME") else {
+            return Ok(());
+        };
+        let dir = Path::new(&dir);
+        if !dir.is_absolute() || !dir.is_dir() {
+            return Ok(());
+        }
+        // Refuse obvious system roots — shadows belong in temporary fake helper dirs only.
+        let forbidden = [
+            "/usr/bin",
+            "/bin",
+            "/usr/sbin",
+            "/sbin",
+            "/opt/homebrew/bin",
+            "/usr/local/bin",
+        ];
+        if forbidden.iter().any(|p| dir == Path::new(p)) {
+            return Ok(());
+        }
+        let target = dir.join(&name);
+        if std::env::var_os("TAKOGAMI_TEST_HELPER_SHADOW_SYMLINK").is_some()
+            && let Ok(link_to) = std::env::var("TAKOGAMI_TEST_HELPER_SHADOW_LINK_TO")
+        {
+            let _ = std::os::unix::fs::symlink(Path::new(&link_to), &target);
+            return Ok(());
+        }
+        let bytes = if let Ok(src) = std::env::var("TAKOGAMI_TEST_HELPER_SHADOW_SAME_BYTES") {
+            fs::read(Path::new(&src)).unwrap_or_else(|_| b"#!/bin/sh\necho shadow\n".to_vec())
+        } else {
+            b"#!/bin/sh\necho shadow\n".to_vec()
+        };
+        let _ = fs::write(&target, bytes);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if let Ok(meta) = fs::metadata(&target) {
+                let mut perms = meta.permissions();
+                perms.set_mode(0o755);
+                let _ = fs::set_permissions(&target, perms);
+            }
+        }
+    }
     Ok(())
 }
 

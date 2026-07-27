@@ -2494,6 +2494,148 @@ adapter = "direct""#,
         assert_eq!(exe.calls.load(Ordering::SeqCst), 1);
     }
 
+    fn write_exe_file(path: &Path) {
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, b"#!/bin/sh\nexit 0\n").unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(path, perms).unwrap();
+    }
+
+    fn write_split_projection_helpers(early: &Path, late: &Path) {
+        fs::create_dir_all(early).unwrap();
+        fs::create_dir_all(late).unwrap();
+        let names = [
+            "bash", "jq", "dirname", "basename", "readlink", "date", "du", "awk", "wc", "tr",
+            "stat", "mkdir", "mktemp", "rm", "cat", "cp", "mv", "grep", "sed", "head", "fd",
+            "find",
+        ];
+        for name in names {
+            write_exe_file(&late.join(name));
+        }
+        write_exe_file(&early.join("bash"));
+    }
+
+    async fn run_bin_with_helper_shadow(
+        early: &Path,
+        late: &Path,
+        state_home: &Path,
+        same_bytes: bool,
+    ) -> (
+        Result<u8, ControllerError>,
+        std::sync::Arc<ObservingRecordWriter>,
+        u32,
+    ) {
+        let sink = std::sync::Arc::new(std::sync::Mutex::new(None));
+        let factory = observing_factory(sink.clone());
+        let exe = crate::execution::TokioExecutor;
+        let late_jq = late.join("jq");
+        unsafe {
+            std::env::set_var("TAKOGAMI_TEST_INJECT_HELPER_SHADOW", "1");
+            std::env::set_var(
+                "TAKOGAMI_TEST_HELPER_SHADOW_DIR",
+                early.display().to_string(),
+            );
+            std::env::set_var("TAKOGAMI_TEST_HELPER_SHADOW_NAME", "jq");
+            if same_bytes {
+                std::env::set_var(
+                    "TAKOGAMI_TEST_HELPER_SHADOW_SAME_BYTES",
+                    late_jq.display().to_string(),
+                );
+            } else {
+                std::env::remove_var("TAKOGAMI_TEST_HELPER_SHADOW_SAME_BYTES");
+            }
+            std::env::remove_var("TAKOGAMI_TEST_HELPER_SHADOW_SYMLINK");
+        }
+        crate::projection::install_test_search_dirs(vec![early.to_path_buf(), late.to_path_buf()]);
+        let result = run_bin_with(BinCommand::Report, &exe, &factory, state_home).await;
+        crate::projection::clear_test_search_dirs();
+        unsafe {
+            std::env::remove_var("TAKOGAMI_TEST_INJECT_HELPER_SHADOW");
+            std::env::remove_var("TAKOGAMI_TEST_HELPER_SHADOW_DIR");
+            std::env::remove_var("TAKOGAMI_TEST_HELPER_SHADOW_NAME");
+            std::env::remove_var("TAKOGAMI_TEST_HELPER_SHADOW_SAME_BYTES");
+        }
+        let observer = sink.lock().unwrap().clone().expect("observer installed");
+        // Authorization writes pending before executor; one executor entry => snapshots >= 1.
+        let calls = u32::from(!observer.snapshots().is_empty());
+        (result, observer, calls)
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn post_authorization_helper_shadow_is_terminal_no_spawn() {
+        let fx = BinFaultFixture::new();
+        let early = fx.workspace.join("helper-early");
+        let late = fx.workspace.join("helper-late");
+        write_split_projection_helpers(&early, &late);
+        let (result, observer, calls) =
+            run_bin_with_helper_shadow(&early, &late, &fx.state_home, false).await;
+        assert_eq!(result.unwrap(), crate::exit_codes::EXECUTION_IO);
+        assert_eq!(
+            calls, 1,
+            "executor must be entered once after authorization"
+        );
+        let snaps = observer.snapshots();
+        assert_eq!(snaps.len(), 2, "pending then terminal only (no PID)");
+        assert_eq!(snaps[0].execution.outcome, "pending");
+        let terminal = &snaps[1];
+        assert_eq!(terminal.execution.outcome, "failed_to_spawn");
+        assert!(!terminal.execution.started);
+        assert!(terminal.execution.pid.is_none());
+        let err = terminal.error.as_ref().expect("terminal error required");
+        assert_eq!(err.code, "projection_contract_changed");
+        assert_immutable_fields_byte_identical(&snaps[0], terminal);
+        assert!(!err.message.contains(early.to_string_lossy().as_ref()));
+        assert!(!err.message.contains(late.to_string_lossy().as_ref()));
+        assert!(!early.join("jq").exists() || early.join("jq").is_file());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn post_authorization_same_byte_helper_shadow_is_terminal_no_spawn() {
+        let fx = BinFaultFixture::new();
+        let early = fx.workspace.join("helper-early");
+        let late = fx.workspace.join("helper-late");
+        write_split_projection_helpers(&early, &late);
+        let (result, observer, calls) =
+            run_bin_with_helper_shadow(&early, &late, &fx.state_home, true).await;
+        assert_eq!(result.unwrap(), crate::exit_codes::EXECUTION_IO);
+        assert_eq!(calls, 1);
+        let snaps = observer.snapshots();
+        assert_eq!(snaps.len(), 2);
+        let terminal = &snaps[1];
+        assert_eq!(terminal.execution.outcome, "failed_to_spawn");
+        assert!(!terminal.execution.started);
+        assert!(terminal.execution.pid.is_none());
+        assert_eq!(
+            terminal.error.as_ref().unwrap().code,
+            "projection_contract_changed"
+        );
+        assert_immutable_fields_byte_identical(&snaps[0], terminal);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn helper_shadow_diagnostic_omits_absolute_roots() {
+        let fx = BinFaultFixture::new();
+        let early = fx.workspace.join("helper-early");
+        let late = fx.workspace.join("helper-late");
+        write_split_projection_helpers(&early, &late);
+        let (result, observer, _) =
+            run_bin_with_helper_shadow(&early, &late, &fx.state_home, false).await;
+        assert_eq!(result.unwrap(), crate::exit_codes::EXECUTION_IO);
+        let terminal = &observer.snapshots()[1];
+        let msg = &terminal.error.as_ref().unwrap().message;
+        assert!(!msg.contains(early.to_string_lossy().as_ref()));
+        assert!(!msg.contains(late.to_string_lossy().as_ref()));
+        assert!(!msg.contains("/usr/bin"));
+        assert!(!msg.contains("/opt/homebrew"));
+        let listed = fx.load_records();
+        let rec = &listed[0];
+        let dumped = serde_json::to_string(rec).unwrap();
+        assert!(!dumped.contains(early.to_string_lossy().as_ref()));
+        assert!(!dumped.contains(late.to_string_lossy().as_ref()));
+    }
+
     #[tokio::test]
     async fn projection_preflight_failure_observer_requires_safe_terminal() {
         let fx = BinFaultFixture::new();
