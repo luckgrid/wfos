@@ -100,6 +100,159 @@
   ],
   "progress": [
     {
+      "phase": "3-i04-path-candidate-classification",
+      "title": "E09.S7 Phase 3 i04 PATH candidate classification corrections (J01\u2013J02)",
+      "status": "done",
+      "addendum": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-3-i04-addendum.md",
+      "reviewed_addendum_workstreams_commit": "e03213d40711b4ce4f4458a887ed756398b092bc",
+      "starting_commit": "42a5729301a302f07763b926f89e1b1321858038",
+      "final_candidate_commit": "ded30ca9b004e8ff104611ba32c4f5a655c816dd",
+      "findings_addressed": [
+        "J01",
+        "J02"
+      ],
+      "corrections": [
+        "J01: typed HelperCandidate classification (NoShellMatch / Trusted / Untrusted); fail closed on executable-but-untrusted PATH first match at seal and preflight",
+        "J01: fd/find fallback propagates Identity trust failures instead of falling through to find",
+        "J02: CountingProjectionExecutor wraps TokioExecutor and measures execute_projection entry count directly",
+        "J02: BinFaultFixture child-spawn marker provides direct zero-spawn evidence (not inferred from pid==null)",
+        "J02: TAKOGAMI_TEST_HELPER_SHADOW_MODE enables world-writable post-authorization shadow injection in temp dirs only"
+      ],
+      "tests_added": [
+        "earlier_world_writable_executable_blocks_later_trusted_helper_at_seal",
+        "earlier_world_writable_executable_blocks_later_trusted_helper_at_preflight",
+        "earlier_symlink_to_world_writable_target_blocks_later_trusted_helper",
+        "non_executable_earlier_candidate_allows_later_trusted_helper",
+        "missing_earlier_candidate_allows_later_trusted_helper",
+        "trusted_first_match_remains_accepted",
+        "untrusted_first_match_diagnostic_omits_absolute_paths",
+        "untrusted_executable_first_match_is_never_skipped",
+        "world_writable_same_byte_first_match_still_fails_preflight",
+        "world_writable_fd_first_match_is_not_replaced_by_find",
+        "post_authorization_untrusted_helper_first_match_is_terminal_no_spawn",
+        "post_authorization_untrusted_helper_executor_called_exactly_once",
+        "post_authorization_untrusted_helper_child_spawn_count_zero",
+        "post_authorization_untrusted_helper_preserves_record_identity",
+        "post_authorization_world_writable_helper_shadow_is_terminal_no_spawn",
+        "post_authorization_world_writable_symlink_target_is_terminal_no_spawn",
+        "world_writable_helper_shadow_diagnostic_omits_absolute_roots"
+      ],
+      "deliberate_omissions": [
+        "CLI-level world-writable first-match injection not added: bin_cli cannot override CONTROLLER_SEARCH_DIRS without an env-var trust bypass; coverage remains at lib/coordinator level; caller_path_decoy_* CLI tests preserved"
+      ],
+      "changed_paths": [
+        "packages/takogami/src/projection/plan.rs",
+        "packages/takogami/src/execution/process.rs",
+        "packages/takogami/src/commands.rs",
+        "packages/ontarch/registry/sessions/2026-07-25-e09-s7.json"
+      ],
+      "commits": {
+        "test_classification_lock": "4eef6874600e64948fd1e32da1626a31cf331d1b",
+        "fix_fail_closed": "1f1104315e5795a2f2182b80e3ace02838fc7a83",
+        "test_executor_count": "239ca796816ebe633d2073eae69e10e23cd31b5b",
+        "style_rustfmt": "ded30ca9b004e8ff104611ba32c4f5a655c816dd",
+        "final_candidate": "ded30ca9b004e8ff104611ba32c4f5a655c816dd"
+      },
+      "gate": {
+        "macos": {
+          "platform": "macOS-aarch64 Darwin 25.5.0",
+          "toolchain": "rustc 1.96.0 / cargo 1.96.0 / moon 2.3.2",
+          "wfos_commit": "ded30ca9b004e8ff104611ba32c4f5a655c816dd",
+          "cargo_build": "PASS",
+          "cargo_check_tests": "PASS",
+          "cargo_lib": "PASS 252",
+          "bin_cli": "PASS",
+          "policy_cli": "PASS",
+          "execution_cli": "PASS",
+          "contracts_roundtrip": "PASS",
+          "session_store": "PASS",
+          "graph_cli": "PASS",
+          "ontarch_graph_contract": "PASS",
+          "ontarch_bin_contract": "PASS",
+          "cli_smoke": "PASS",
+          "resolution_cli": "PASS",
+          "session_cli": "PASS",
+          "clippy_all_targets_D_warnings": "PASS",
+          "cargo_fmt_check": "PASS",
+          "moon_takogami_build": "PASS",
+          "moon_takogami_lint": "PASS",
+          "moon_takogami_format_check": "PASS",
+          "moon_ontarch_sync": "PASS",
+          "moon_ontarch_scan": "PASS",
+          "moon_ontarch_validate": "PASS",
+          "moon_panoply_gen_check": "PASS",
+          "moon_panoply_validate_substrate": "PASS",
+          "git_diff_check": "PASS",
+          "github_actions_status_checks": "absent"
+        },
+        "linux_lima_wfos_s61_alpine": {
+          "platform": "Lima Linux aarch64 (wfos-s61-alpine musl)",
+          "toolchain": "rustc 1.96.0 / cargo 1.96.0",
+          "moon": "unavailable in guest; package-cwd cargo + packages/*/bin equivalents used",
+          "wfos_commit": "ded30ca9b004e8ff104611ba32c4f5a655c816dd",
+          "writable_copy": "/tmp/ws-i04 (rsync of host Workstreams tree excluding target/.git; CARGO_TARGET_DIR=/tmp/wfos-target-i04c)",
+          "host_mount_limitation": "host virtiofs /Users/dvz is read-only; AppleDouble ._* from macOS tar must be stripped; ontarch validate requires bin-report regeneration against copy root (host-path inventory causes bin_inventory:root_mismatch until refreshed)",
+          "cargo_build": "PASS",
+          "cargo_check_tests": "PASS",
+          "cargo_lib": "PASS 252",
+          "bin_cli": "PASS",
+          "policy_cli": "PASS",
+          "execution_cli": "PASS",
+          "contracts_roundtrip": "PASS",
+          "session_store": "PASS",
+          "graph_cli": "PASS",
+          "ontarch_graph_contract": "PASS",
+          "ontarch_bin_contract": "PASS",
+          "cli_smoke": "PASS",
+          "resolution_cli": "PASS",
+          "session_cli": "PASS",
+          "clippy_all_targets_D_warnings": "PASS",
+          "cargo_fmt_check": "PASS",
+          "ontarch_sync_direct": "PASS (packages/ontarch/bin/ontarch sync)",
+          "ontarch_scan_direct": "PASS (packages/ontarch/bin/ontarch scan)",
+          "ontarch_validate_direct": "PASS after packages/ontarch/bin/ontarch bin-report on writable copy (packages/ontarch/bin/ontarch validate)",
+          "panoply_gen_check_direct": "PASS (packages/panoply/bin/panoply gen brewfile --check)",
+          "panoply_validate_substrate_direct": "PASS (packages/panoply/bin/validate-substrate.sh)",
+          "git_diff_check": "PASS recorded on macOS host checkout (writable copy has no .git authority)",
+          "direct_human_json_bin_report": "PASS",
+          "direct_human_json_cleanup_report_only": "PASS",
+          "direct_dry_run_gate_no_spawn": "PASS exit 6",
+          "direct_archive_deny_deferred_no_spawn": "PASS exit 5",
+          "direct_delete_approved_deny_deferred_no_spawn": "PASS exit 5",
+          "helper_world_writable_first_match_unit": "PASS",
+          "caller_path_decoy": "PASS",
+          "post_authorization_untrusted_helper_coordinator": "PASS",
+          "github_actions_status_checks": "absent"
+        }
+      },
+      "expected_red_remaining": [
+        "e2e_mvp_path_includes_graph_projection (Phase 4 fixture debt \u2014 incoherent registry overlay; do not weaken graph freshness)"
+      ],
+      "github_actions_evidence": "absent",
+      "preserved": {
+        "phase1": "COMPLETE",
+        "phase2": "COMPLETE",
+        "C01_C06": "accepted",
+        "F01_F04": "accepted",
+        "H01_H03": "accepted",
+        "D9_option_B": "done",
+        "schema": "0.1.0",
+        "phase4": "not started",
+        "E10": "not started"
+      },
+      "final_disposition": {
+        "phase1": "COMPLETE",
+        "phase2": "COMPLETE",
+        "phase3": "COMPLETE",
+        "phase4": "READY FOR KICKOFF",
+        "E09_S7": "IN PROGRESS",
+        "M4": "IN PROGRESS"
+      },
+      "next": "E09.S7 Phase 4 hermetic E2E fixture and M4 closure",
+      "completed_at": "2026-07-27T23:47:25Z",
+      "notes": "Phase 3 i04 closed J01\u2013J02. Do not mark E09/M4 complete. GitHub Actions evidence: absent. Phase 4 and E10 remain unimplemented."
+    },
+    {
       "phase": "3-final-helper-resolution",
       "title": "E09.S7 Phase 3 final helper-resolution and evidence closure (H01\u2013H03)",
       "status": "done",
@@ -1215,5 +1368,5 @@
     "ontarch:secrets-scan still reports pre-existing age-secret-key in git history (commit a3a4978) \u2014 unrelated to S7",
     "Phase 4 graph E2E fixture debt remains expected-red"
   ],
-  "token_note": "Phase 3 H01\u2013H03 closed; stop before Phase 4/E10; do not mark E09/M4 complete; GHA absent"
+  "token_note": "Phase 3 i04 J01\u2013J02 closed; stop before Phase 4/E10; do not mark E09/M4 complete; GHA absent"
 }
