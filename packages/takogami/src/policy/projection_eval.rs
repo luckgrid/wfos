@@ -444,6 +444,5 @@ mod non_forgeability {
     fn authorized_projection_has_no_public_constructor() {
         // Compile-time posture: AuthorizedProjectionPlan::from_dual_allow is private.
         // External crates/tests cannot mint authorization without DualAllowProof.
-        assert!(true);
     }
 }

@@ -1,209 +1,26 @@
 //! Race-safe no-follow regular-file reads for graph freshness and load.
 //!
-//! Helpers return [`SecureFileError`] with logical display labels only — never
-//! put physical absolute paths into public diagnostics.
+//! Thin wrappers over [`crate::contracts::secure_file`] that preserve graph-local
+//! types (`GraphSourceFingerprint`) and `pub(super)` visibility for validate.
 
-use std::fs;
-use std::io::{Read, Write};
-use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
 
-use sha2::{Digest, Sha256};
-
 use super::types::GraphSourceFingerprint;
+use crate::contracts::secure_file::sha256_hex_regular_nofollow;
 
-/// Operation that failed during a secure file access.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum SecureFileOperation {
-    Open,
-    Fstat,
-    Read,
-    Hash,
-}
-
-impl SecureFileOperation {
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::Open => "open",
-            Self::Fstat => "fstat",
-            Self::Read => "read",
-            Self::Hash => "hash",
-        }
-    }
-}
-
-/// Typed secure-file failure. Physical paths stay out of Display/mapping text.
-#[derive(Debug)]
-pub(super) enum SecureFileError {
-    Missing,
-    Symlink,
-    NonRegular,
-    Limit {
-        limit: u64,
-    },
-    Io {
-        operation: SecureFileOperation,
-        display: String,
-        #[allow(dead_code)]
-        source: std::io::Error,
-    },
-}
-
-impl SecureFileError {
-    pub(super) fn io(
-        operation: SecureFileOperation,
-        display: &str,
-        source: std::io::Error,
-    ) -> Self {
-        Self::Io {
-            operation,
-            display: display.to_string(),
-            source,
-        }
-    }
-
-    /// Stable public message fragment using the logical display label only.
-    pub(super) fn public_message(&self) -> String {
-        match self {
-            Self::Missing => "missing path".into(),
-            Self::Symlink => "path must not be a symlink".into(),
-            Self::NonRegular => "path must be a regular non-symlink file".into(),
-            Self::Limit { limit } => format!("exceeds {limit} byte limit"),
-            Self::Io {
-                operation, display, ..
-            } => {
-                format!("cannot {} {display}", operation.as_str())
-            }
-        }
-    }
-}
+pub(super) use crate::contracts::secure_file::{SecureFileError, read_bounded_nofollow};
 
 #[cfg(test)]
-type OpenOverrideFn = fn(&Path, &str) -> Result<fs::File, SecureFileError>;
-
-#[cfg(test)]
-thread_local! {
-    // Test seam: when set, open_regular_nofollow delegates to this override.
-    static OPEN_OVERRIDE: std::cell::Cell<Option<OpenOverrideFn>> =
-        const { std::cell::Cell::new(None) };
-}
-
-#[cfg(test)]
-pub(super) fn set_open_override(f: Option<OpenOverrideFn>) {
-    OPEN_OVERRIDE.with(|c| c.set(f));
-}
-
-/// Open a path read-only without following symlinks; require a regular file.
-///
-/// Unix flags: `O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK`.
-pub(super) fn open_regular_nofollow(
-    physical: &Path,
-    display: &str,
-) -> Result<fs::File, SecureFileError> {
-    #[cfg(test)]
-    if let Some(f) = OPEN_OVERRIDE.with(|c| c.get()) {
-        return f(physical, display);
-    }
-
-    match std::fs::symlink_metadata(physical) {
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Err(SecureFileError::Missing),
-        Err(e) => return Err(SecureFileError::io(SecureFileOperation::Open, display, e)),
-        Ok(meta) => {
-            let ft = meta.file_type();
-            if ft.is_symlink() {
-                return Err(SecureFileError::Symlink);
-            }
-            if ft.is_dir() || !ft.is_file() {
-                return Err(SecureFileError::NonRegular);
-            }
-        }
-    }
-
-    let file = fs::OpenOptions::new()
-        .read(true)
-        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK)
-        .open(physical)
-        .map_err(|e| classify_open_err(physical, display, e))?;
-
-    let meta = file
-        .metadata()
-        .map_err(|e| SecureFileError::io(SecureFileOperation::Fstat, display, e))?;
-    let ft = meta.file_type();
-    if ft.is_symlink() {
-        return Err(SecureFileError::Symlink);
-    }
-    if ft.is_dir() || !ft.is_file() {
-        return Err(SecureFileError::NonRegular);
-    }
-    Ok(file)
-}
-
-fn classify_open_err(physical: &Path, display: &str, e: std::io::Error) -> SecureFileError {
-    if e.kind() == std::io::ErrorKind::NotFound {
-        return SecureFileError::Missing;
-    }
-    // After O_NOFOLLOW failure, re-stat without following to distinguish symlink.
-    if let Ok(meta) = std::fs::symlink_metadata(physical) {
-        let ft = meta.file_type();
-        if ft.is_symlink() {
-            return SecureFileError::Symlink;
-        }
-        if ft.is_dir() || !ft.is_file() {
-            return SecureFileError::NonRegular;
-        }
-    } else if e.kind() == std::io::ErrorKind::NotFound {
-        return SecureFileError::Missing;
-    }
-    SecureFileError::io(SecureFileOperation::Open, display, e)
-}
-
-/// Read at most `limit` bytes (+1 sentinel) from a no-follow regular file.
-pub(super) fn read_bounded_nofollow(
-    physical: &Path,
-    display: &str,
-    limit: u64,
-) -> Result<Vec<u8>, SecureFileError> {
-    let mut file = open_regular_nofollow(physical, display)?;
-    if let Ok(opened) = file.metadata()
-        && opened.len() > limit
-    {
-        return Err(SecureFileError::Limit { limit });
-    }
-    let mut buf = Vec::new();
-    let take_limit = limit.saturating_add(1);
-    let mut take = (&mut file).take(take_limit);
-    take.read_to_end(&mut buf)
-        .map_err(|e| SecureFileError::io(SecureFileOperation::Read, display, e))?;
-    if (buf.len() as u64) > limit {
-        return Err(SecureFileError::Limit { limit });
-    }
-    Ok(buf)
-}
+pub(super) use crate::contracts::secure_file::{
+    SecureFileOperation, open_regular_nofollow, set_open_override,
+};
 
 /// Stream SHA-256 of a no-follow regular file without full-file allocation.
 pub(super) fn sha256_regular_nofollow(
     physical: &Path,
     display: &str,
 ) -> Result<GraphSourceFingerprint, SecureFileError> {
-    let mut file = open_regular_nofollow(physical, display)?;
-    let mut hasher = Sha256::new();
-    let mut chunk = [0u8; 64 * 1024];
-    loop {
-        let n = file
-            .read(&mut chunk)
-            .map_err(|e| SecureFileError::io(SecureFileOperation::Hash, display, e))?;
-        if n == 0 {
-            break;
-        }
-        hasher
-            .write_all(&chunk[..n])
-            .map_err(|e| SecureFileError::io(SecureFileOperation::Hash, display, e))?;
-    }
-    let digest = hasher
-        .finalize()
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect();
+    let digest = sha256_hex_regular_nofollow(physical, display)?;
     Ok(GraphSourceFingerprint {
         path: display.to_string(),
         algorithm: "sha256".into(),
@@ -214,6 +31,7 @@ pub(super) fn sha256_regular_nofollow(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
     use std::os::unix::fs::symlink;
     use tempfile::tempdir;
 

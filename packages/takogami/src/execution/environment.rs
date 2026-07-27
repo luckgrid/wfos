@@ -81,8 +81,11 @@ pub fn snapshot_env(keys: &[String]) -> Result<EnvSnapshot, EnvError> {
     Ok(EnvSnapshot { pairs, diagnostics })
 }
 
-/// Validate a controller-built PATH: absolute directories only, no empty/relative components.
+/// Validate a controller-built PATH: absolute non-symlink directories only.
+///
+/// Rejects empty/relative components and duplicate *canonical* directory identities.
 pub fn validate_controller_path(path: &str) -> Result<(), String> {
+    use std::fs;
     if path.is_empty() {
         return Err("PATH must not be empty".into());
     }
@@ -104,7 +107,19 @@ pub fn validate_controller_path(path: &str) -> Result<(), String> {
         {
             return Err("PATH must not contain relative components".into());
         }
-        if seen.insert(part.to_string(), ()).is_some() {
+        let meta = fs::symlink_metadata(p)
+            .map_err(|_| "PATH component must be an existing directory".to_string())?;
+        if meta.file_type().is_symlink() {
+            return Err("PATH must not contain symlink directory aliases".into());
+        }
+        if !meta.is_dir() {
+            return Err("PATH components must be directories".into());
+        }
+        let canonical = p
+            .canonicalize()
+            .map_err(|_| "PATH component must canonicalize".to_string())?;
+        let key = canonical.to_string_lossy().into_owned();
+        if seen.insert(key, ()).is_some() {
             return Err("PATH must not contain duplicate directories".into());
         }
     }
@@ -216,5 +231,23 @@ mod tests {
                 .map(|(_, v)| v.as_str()),
             Some("1")
         );
+    }
+
+    #[test]
+    fn validate_controller_path_rejects_symlink_and_relative() {
+        use std::fs;
+        use std::os::unix::fs::symlink;
+        use tempfile::tempdir;
+        assert!(validate_controller_path("").is_err());
+        assert!(validate_controller_path("relative").is_err());
+        assert!(validate_controller_path("/usr/bin::/bin").is_err());
+        let temp = tempdir().unwrap();
+        let real = temp.path().join("real");
+        let alias = temp.path().join("alias");
+        fs::create_dir(&real).unwrap();
+        symlink(&real, &alias).unwrap();
+        let err = validate_controller_path(alias.to_str().unwrap()).unwrap_err();
+        assert!(err.contains("symlink"));
+        validate_controller_path(real.canonicalize().unwrap().to_str().unwrap()).unwrap();
     }
 }

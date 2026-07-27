@@ -5,6 +5,7 @@
 
 pub mod entrypoint;
 pub mod fingerprint;
+pub(crate) mod secure_file;
 pub mod state;
 pub mod timestamp;
 pub mod types;

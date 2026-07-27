@@ -184,6 +184,16 @@ async fn execute_projection_inner(
         pid: None,
     })?;
 
+    sealed.preflight_helpers().map_err(|e| ExecFailure {
+        outcome: "failed_to_spawn".into(),
+        diagnostics: vec![DiagnosticRecord {
+            code: e.code().into(),
+            message: e.message(),
+        }],
+        spawned: false,
+        pid: None,
+    })?;
+
     sealed.preflight_sources().map_err(|e| ExecFailure {
         outcome: "failed_to_spawn".into(),
         diagnostics: vec![DiagnosticRecord {
@@ -233,12 +243,63 @@ fn apply_projection_test_drift(exe: &Path, cwd: &Path) -> Result<(), ExecFailure
         let bogey = cwd.with_extension("drifted");
         let _ = fs::rename(cwd, &bogey);
     }
+    let common = exe
+        .parent()
+        .and_then(|pkg_bin| pkg_bin.parent())
+        .map(|pkg| pkg.join("lib/common.sh"));
+    let Some(common) = common else {
+        return Ok(());
+    };
     if std::env::var_os("TAKOGAMI_TEST_INJECT_SOURCE_DRIFT").is_some() {
-        // Touch a bound source script if present beside the executable.
-        if let Some(pkg_bin) = exe.parent() {
-            let common = pkg_bin.parent().map(|p| p.join("lib/common.sh"));
-            if let Some(path) = common {
-                let _ = fs::write(&path, b"# drifted\n");
+        let _ = fs::write(&common, b"# drifted\n");
+    }
+    if std::env::var_os("TAKOGAMI_TEST_INJECT_SOURCE_REMOVED").is_some() {
+        let _ = fs::remove_file(&common);
+    }
+    if std::env::var_os("TAKOGAMI_TEST_INJECT_SOURCE_SYMLINK").is_some() {
+        let backup = common.with_extension("bak");
+        let _ = fs::rename(&common, &backup);
+        let _ = std::os::unix::fs::symlink(&backup, &common);
+    }
+    if std::env::var_os("TAKOGAMI_TEST_INJECT_SOURCE_DANGLING_SYMLINK").is_some() {
+        let _ = fs::remove_file(&common);
+        let _ = std::os::unix::fs::symlink(common.with_extension("missing"), &common);
+    }
+    if std::env::var_os("TAKOGAMI_TEST_INJECT_SOURCE_FIFO").is_some() {
+        let _ = fs::remove_file(&common);
+        let _ = std::process::Command::new("/usr/bin/mkfifo")
+            .arg(&common)
+            .status();
+    }
+    if std::env::var_os("TAKOGAMI_TEST_INJECT_SOURCE_DIRECTORY").is_some() {
+        let _ = fs::remove_file(&common);
+        let _ = fs::create_dir(&common);
+    }
+    if std::env::var_os("TAKOGAMI_TEST_INJECT_SOURCE_SAME_LENGTH").is_some() {
+        // Same length as a typical short common.sh stub, different bytes.
+        let original = fs::read(&common).unwrap_or_else(|_| b"#\n".to_vec());
+        let mut replacement = vec![b'X'; original.len()];
+        if let Some(last) = replacement.last_mut() {
+            *last = b'\n';
+        }
+        let _ = fs::write(&common, replacement);
+    }
+    if std::env::var_os("TAKOGAMI_TEST_INJECT_HELPER_DRIFT").is_some() {
+        // Best-effort: mutate a sealed helper only when it lives under the workspace
+        // (unit tests with fake tool dirs). System helpers are left untouched.
+        if let Ok(path) = std::env::var("TAKOGAMI_TEST_HELPER_PATH") {
+            let p = Path::new(&path);
+            if p.is_file() {
+                let _ = fs::write(p, b"#!/bin/sh\necho drifted-helper\n");
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    if let Ok(meta) = fs::metadata(p) {
+                        let mut perms = meta.permissions();
+                        perms.set_mode(0o755);
+                        let _ = fs::set_permissions(p, perms);
+                    }
+                }
             }
         }
     }

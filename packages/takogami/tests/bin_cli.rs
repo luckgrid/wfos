@@ -1025,30 +1025,139 @@ fn projection_source_digest_drift_after_authorization_fails_preflight() {
 }
 
 #[test]
-fn projection_source_removed_after_authorization_fails_preflight() {
-    // Seal-time sources exist; remove a required file via drift of common.sh content then
-    // separately prove missing-at-seal via a dedicated harness mutation.
+fn post_authorization_source_removal_is_terminal_no_spawn() {
+    let h = BinHarness::new();
+    let out = h.run_env(
+        &["--json", "bin", "report"],
+        &[("TAKOGAMI_TEST_INJECT_SOURCE_REMOVED", "1")],
+    );
+    assert_eq!(
+        out.status.code(),
+        Some(EXECUTION_IO as i32),
+        "{}",
+        stderr(&out)
+    );
+    h.assert_marker_untouched();
+    let rec = &h.load_records()[0];
+    assert_eq!(rec["execution"]["outcome"], "failed_to_spawn");
+    assert_eq!(rec["execution"]["started"], false);
+    assert!(rec["execution"]["pid"].is_null());
+    assert_eq!(rec["error"]["code"], "projection_contract_changed");
+    let blob = format!("{}{}{}", stdout(&out), stderr(&out), rec);
+    assert!(!blob.contains(h.workspace.to_string_lossy().as_ref()));
+}
+
+#[test]
+fn post_authorization_source_symlink_is_terminal_no_spawn() {
+    let h = BinHarness::new();
+    let out = h.run_env(
+        &["--json", "bin", "report"],
+        &[("TAKOGAMI_TEST_INJECT_SOURCE_SYMLINK", "1")],
+    );
+    assert_eq!(
+        out.status.code(),
+        Some(EXECUTION_IO as i32),
+        "{}",
+        stderr(&out)
+    );
+    h.assert_marker_untouched();
+    let rec = &h.load_records()[0];
+    assert_eq!(rec["execution"]["outcome"], "failed_to_spawn");
+    assert_eq!(rec["error"]["code"], "projection_contract_changed");
+}
+
+#[test]
+fn post_authorization_source_dangling_symlink_is_terminal_no_spawn() {
+    let h = BinHarness::new();
+    let out = h.run_env(
+        &["--json", "bin", "report"],
+        &[("TAKOGAMI_TEST_INJECT_SOURCE_DANGLING_SYMLINK", "1")],
+    );
+    assert_eq!(
+        out.status.code(),
+        Some(EXECUTION_IO as i32),
+        "{}",
+        stderr(&out)
+    );
+    h.assert_marker_untouched();
+    let rec = &h.load_records()[0];
+    assert_eq!(rec["execution"]["outcome"], "failed_to_spawn");
+}
+
+#[test]
+fn post_authorization_source_fifo_is_terminal_no_spawn() {
+    let h = BinHarness::new();
+    let start = std::time::Instant::now();
+    let out = h.run_env(
+        &["--json", "bin", "report"],
+        &[("TAKOGAMI_TEST_INJECT_SOURCE_FIFO", "1")],
+    );
+    assert!(
+        start.elapsed() < std::time::Duration::from_secs(5),
+        "FIFO source mutation blocked"
+    );
+    assert_eq!(
+        out.status.code(),
+        Some(EXECUTION_IO as i32),
+        "{}",
+        stderr(&out)
+    );
+    h.assert_marker_untouched();
+    let rec = &h.load_records()[0];
+    assert_eq!(rec["execution"]["outcome"], "failed_to_spawn");
+    assert_eq!(rec["execution"]["started"], false);
+}
+
+#[test]
+fn post_authorization_source_directory_is_terminal_no_spawn() {
+    let h = BinHarness::new();
+    let out = h.run_env(
+        &["--json", "bin", "report"],
+        &[("TAKOGAMI_TEST_INJECT_SOURCE_DIRECTORY", "1")],
+    );
+    assert_eq!(
+        out.status.code(),
+        Some(EXECUTION_IO as i32),
+        "{}",
+        stderr(&out)
+    );
+    h.assert_marker_untouched();
+    let rec = &h.load_records()[0];
+    assert_eq!(rec["execution"]["outcome"], "failed_to_spawn");
+}
+
+#[test]
+fn post_authorization_same_length_source_drift_is_terminal_no_spawn() {
+    let h = BinHarness::new();
+    let out = h.run_env(
+        &["--json", "bin", "report"],
+        &[("TAKOGAMI_TEST_INJECT_SOURCE_SAME_LENGTH", "1")],
+    );
+    assert_eq!(
+        out.status.code(),
+        Some(EXECUTION_IO as i32),
+        "{}",
+        stderr(&out)
+    );
+    h.assert_marker_untouched();
+    let rec = &h.load_records()[0];
+    assert_eq!(rec["execution"]["outcome"], "failed_to_spawn");
+    assert_eq!(rec["error"]["code"], "projection_contract_changed");
+}
+
+#[test]
+fn seal_time_missing_source_fails_before_authorization() {
+    // Contrasts with post-authorization removal: mutation before process start.
     let h = BinHarness::new();
     let common = h.workspace.join("packages/ontarch/lib/common.sh");
     fs::remove_file(&common).unwrap();
     let out = h.run(&["--json", "bin", "report"]);
     assert_ne!(out.status.code(), Some(SUCCESS as i32));
     h.assert_marker_untouched();
-}
-
-#[test]
-fn projection_source_replaced_same_length_fails_preflight() {
-    let h = BinHarness::new();
-    let common = h.workspace.join("packages/ontarch/lib/common.sh");
-    // Same length as inject seam body (`# drifted\n` = 10 bytes), different digest.
-    fs::write(&common, b"#DRIFTED?\n").unwrap();
-    assert_eq!(fs::read(&common).unwrap().len(), b"# drifted\n".len());
-    let out = h.run_env(
-        &["--json", "bin", "report"],
-        &[("TAKOGAMI_TEST_INJECT_SOURCE_DRIFT", "1")],
+    assert!(
+        h.load_records().is_empty(),
+        "seal-time failure must not install a pending record"
     );
-    assert_ne!(out.status.code(), Some(SUCCESS as i32));
-    h.assert_marker_untouched();
 }
 
 #[test]
@@ -1199,10 +1308,22 @@ fn projection_terminal_retains_pending_started_at() {
     let ended = rec["ended_at"].as_str().unwrap();
     assert!(started.ends_with('Z') && started.len() == 20);
     assert!(ended.ends_with('Z') && ended.len() == 20);
-    // Terminal derives from pending: started_at must remain a seal-time identity field
-    // (not absent / not rewritten to null). Same-second started/ended is allowed.
     assert_eq!(rec["schema_version"], "0.1.0");
     assert!(rec.get("resolution").is_none() || rec["resolution"].is_null());
+}
+
+#[test]
+fn caller_path_decoys_remain_unreachable() {
+    let h = BinHarness::new();
+    let decoy_jq = h.workspace.join("MARKER_JQ_DECOY");
+    let decoy_bash = h.workspace.join("MARKER_BASH_DECOY");
+    write_helper_decoy(&h.path_dir, "jq", &decoy_jq);
+    write_helper_decoy(&h.path_dir, "bash", &decoy_bash);
+    let out = h.run(&["--json", "bin", "report"]);
+    assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
+    assert!(!decoy_jq.exists(), "caller PATH jq decoy must not run");
+    assert!(!decoy_bash.exists(), "caller PATH bash decoy must not run");
+    h.assert_marker_once();
 }
 
 #[test]
@@ -1228,21 +1349,33 @@ fn projection_terminal_retains_request_policy_and_fingerprints() {
 }
 
 #[test]
-fn projection_preflight_failure_persists_safe_error() {
+fn projection_preflight_failure_requires_safe_terminal_error() {
     let h = BinHarness::new();
     let out = h.run_env(
         &["--json", "bin", "report"],
         &[("TAKOGAMI_TEST_INJECT_SOURCE_DRIFT", "1")],
     );
-    assert_ne!(out.status.code(), Some(SUCCESS as i32));
-    // Pending may remain if written before preflight inside executor.
+    assert_eq!(
+        out.status.code(),
+        Some(EXECUTION_IO as i32),
+        "{}",
+        stderr(&out)
+    );
     let records = h.load_records();
-    if let Some(rec) = records.first() {
-        if let Some(err) = rec.get("error") {
-            let blob = err.to_string();
-            assert!(!blob.contains(h.workspace.to_string_lossy().as_ref()));
-        }
-    }
+    assert_eq!(
+        records.len(),
+        1,
+        "exactly one durable terminal record required"
+    );
+    let rec = &records[0];
+    assert_eq!(rec["execution"]["outcome"], "failed_to_spawn");
+    assert_eq!(rec["execution"]["started"], false);
+    assert!(rec["execution"]["pid"].is_null());
+    assert_eq!(rec["error"]["code"], "projection_contract_changed");
+    let blob = format!("{}{}{}", stdout(&out), stderr(&out), rec);
+    assert!(!blob.contains(h.workspace.to_string_lossy().as_ref()));
+    assert!(!blob.contains(h.registry.to_string_lossy().as_ref()));
+    h.assert_marker_untouched();
 }
 
 #[test]
