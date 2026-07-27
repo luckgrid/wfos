@@ -9,11 +9,10 @@ use crate::contracts::{fingerprint_bytes, parse_rfc3339_utc_seconds};
 use crate::error::ControllerError;
 use crate::registry::{Freshness, RegistryAccess, RegistryFileKind};
 
-use super::io::{read_bounded_nofollow, sha256_regular_nofollow};
+use super::io::{SecureFileError, read_bounded_nofollow, sha256_regular_nofollow};
 use super::types::{
     GRAPH_EDGE_LIMIT, GRAPH_FILE_LIMIT_BYTES, GRAPH_FRESHNESS_METADATA_LIMIT_BYTES,
     GRAPH_ID_LIMIT_BYTES, GRAPH_NODE_LIMIT, GraphDocument, GraphRegistryGeneration,
-    GraphSourceFingerprint,
 };
 
 /// Canonical Layer-1 fingerprint paths (sorted).
@@ -40,27 +39,10 @@ struct UnitsFreshnessView {
 /// Load, validate, and freshness-check `registry/graph.json` (no-follow, bounded).
 pub fn load_graph(access: &RegistryAccess) -> Result<GraphLoadOutcome, ControllerError> {
     let path = access.file_path(RegistryFileKind::Graph);
-    match std::fs::symlink_metadata(&path) {
-        Ok(_) => {}
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            return Err(ControllerError::graph_missing());
-        }
-        Err(e) => {
-            return Err(ControllerError::graph_contract_invalid(format!(
-                "cannot stat graph.json: {e}"
-            )));
-        }
-    }
-
-    let buf = match read_bounded_nofollow(&path, GRAPH_FILE_LIMIT_BYTES) {
+    const DISPLAY: &str = "registry/graph.json";
+    let buf = match read_bounded_nofollow(&path, DISPLAY, GRAPH_FILE_LIMIT_BYTES) {
         Ok(b) => b,
-        Err(e) if e.diagnostic_code() == "graph_limit_exceeded" => return Err(e),
-        Err(e) => {
-            if !path.exists() {
-                return Err(ControllerError::graph_missing());
-            }
-            return Err(e);
-        }
+        Err(e) => return Err(map_graph_file_err(e)),
     };
 
     let mut doc: GraphDocument = serde_json::from_slice(&buf).map_err(|e| {
@@ -76,6 +58,64 @@ pub fn load_graph(access: &RegistryAccess) -> Result<GraphLoadOutcome, Controlle
             "graph upstream or authored unit fingerprints are stale",
         )),
         Freshness::Miss => Err(ControllerError::graph_missing()),
+    }
+}
+
+fn map_graph_file_err(e: SecureFileError) -> ControllerError {
+    match e {
+        SecureFileError::Missing => ControllerError::graph_missing(),
+        SecureFileError::Limit { limit } => ControllerError::graph_limit_exceeded(format!(
+            "registry/graph.json exceeds {limit} byte limit"
+        )),
+        SecureFileError::Symlink => {
+            ControllerError::graph_contract_invalid("registry/graph.json must not be a symlink")
+        }
+        SecureFileError::NonRegular => ControllerError::graph_contract_invalid(
+            "registry/graph.json must be a regular non-symlink file",
+        ),
+        SecureFileError::Io { .. } => ControllerError::graph_contract_invalid(format!(
+            "registry/graph.json: {}",
+            e.public_message()
+        )),
+    }
+}
+
+/// Map freshness hash errors: Missing ? Ok (caller treats as stale); else contract Err.
+fn map_freshness_hash_err(
+    e: SecureFileError,
+    non_regular_msg: &str,
+) -> Result<(), ControllerError> {
+    match e {
+        SecureFileError::Missing => Ok(()),
+        SecureFileError::Symlink | SecureFileError::NonRegular => {
+            Err(ControllerError::graph_contract_invalid(non_regular_msg))
+        }
+        SecureFileError::Limit { .. } => Err(ControllerError::graph_contract_invalid(format!(
+            "{non_regular_msg}: {}",
+            e.public_message()
+        ))),
+        SecureFileError::Io { .. } => {
+            Err(ControllerError::graph_contract_invalid(e.public_message()))
+        }
+    }
+}
+
+fn map_units_metadata_err(e: SecureFileError) -> Result<Freshness, ControllerError> {
+    match e {
+        SecureFileError::Missing => Ok(Freshness::Stale),
+        SecureFileError::Limit { limit } => Err(ControllerError::graph_limit_exceeded(format!(
+            "registry/units.json exceeds {limit} byte limit"
+        ))),
+        SecureFileError::Symlink => Err(ControllerError::graph_contract_invalid(
+            "registry/units.json must not be a symlink",
+        )),
+        SecureFileError::NonRegular => Err(ControllerError::graph_contract_invalid(
+            "registry/units.json must be a regular non-symlink file",
+        )),
+        SecureFileError::Io { .. } => Err(ControllerError::graph_contract_invalid(format!(
+            "registry/units.json: {}",
+            e.public_message()
+        ))),
     }
 }
 
@@ -234,13 +274,18 @@ pub fn evaluate_graph_freshness(
 ) -> Result<Freshness, ControllerError> {
     for fp in &doc.registry_generation.source_fingerprints {
         let abs = resolve_graph_upstream(&access.paths.registry_root, &fp.path)?;
-        let current = match hash_regular_or_stale(
-            &abs,
-            &fp.path,
-            "upstream fingerprint target must be a regular non-symlink file",
-        )? {
-            Some(c) => c,
-            None => return Ok(Freshness::Stale),
+        let current = match sha256_regular_nofollow(&abs, &fp.path) {
+            Ok(c) => c,
+            Err(e) => {
+                map_freshness_hash_err(
+                    e,
+                    &format!(
+                        "upstream fingerprint target must be a regular non-symlink file ({})",
+                        fp.path
+                    ),
+                )?;
+                return Ok(Freshness::Stale);
+            }
         };
         if current.digest != fp.digest || current.algorithm != fp.algorithm {
             return Ok(Freshness::Stale);
@@ -248,16 +293,13 @@ pub fn evaluate_graph_freshness(
     }
 
     let units_path = access.file_path(RegistryFileKind::Units);
-    let units_bytes = match read_bounded_nofollow(&units_path, GRAPH_FRESHNESS_METADATA_LIMIT_BYTES)
-    {
+    let units_bytes = match read_bounded_nofollow(
+        &units_path,
+        "registry/units.json",
+        GRAPH_FRESHNESS_METADATA_LIMIT_BYTES,
+    ) {
         Ok(b) => b,
-        Err(e) if e.diagnostic_code() == "graph_limit_exceeded" => return Err(e),
-        Err(e) => {
-            if path_is_non_regular(&units_path) {
-                return Err(e);
-            }
-            return Ok(Freshness::Stale);
-        }
+        Err(e) => return map_units_metadata_err(e),
     };
     let units_view: UnitsFreshnessView = serde_json::from_slice(&units_bytes).map_err(|e| {
         ControllerError::graph_contract_invalid(format!("malformed units.json: {e}"))
@@ -279,52 +321,24 @@ pub fn evaluate_graph_freshness(
             ));
         }
         let abs = resolve_confined(&access.paths.workspace_root, &fp.path)?;
-        let current = match hash_regular_or_stale(
-            &abs,
-            &fp.path,
-            "authored source must be a regular non-symlink file",
-        )? {
-            Some(c) => c,
-            None => return Ok(Freshness::Stale),
+        let current = match sha256_regular_nofollow(&abs, &fp.path) {
+            Ok(c) => c,
+            Err(e) => {
+                map_freshness_hash_err(
+                    e,
+                    &format!(
+                        "authored source must be a regular non-symlink file ({})",
+                        fp.path
+                    ),
+                )?;
+                return Ok(Freshness::Stale);
+            }
         };
         if current.digest != fp.digest {
             return Ok(Freshness::Stale);
         }
     }
     Ok(Freshness::Hit)
-}
-
-/// `Ok(None)` = missing -> stale; `Err` = non-regular contract.
-fn hash_regular_or_stale(
-    abs: &Path,
-    display: &str,
-    non_regular_msg: &str,
-) -> Result<Option<GraphSourceFingerprint>, ControllerError> {
-    match sha256_regular_nofollow(abs, display) {
-        Ok(fp) => Ok(Some(fp)),
-        Err(_) => match std::fs::symlink_metadata(abs) {
-            Err(_) => Ok(None),
-            Ok(meta) => {
-                let ft = meta.file_type();
-                if ft.is_symlink() || ft.is_dir() || !ft.is_file() {
-                    return Err(ControllerError::graph_contract_invalid(format!(
-                        "{non_regular_msg} ({display})"
-                    )));
-                }
-                Ok(None)
-            }
-        },
-    }
-}
-
-fn path_is_non_regular(path: &Path) -> bool {
-    match std::fs::symlink_metadata(path) {
-        Ok(meta) => {
-            let ft = meta.file_type();
-            ft.is_symlink() || ft.is_dir() || !ft.is_file()
-        }
-        Err(_) => false,
-    }
 }
 
 fn resolve_confined(workspace_root: &Path, recorded: &str) -> Result<PathBuf, ControllerError> {
@@ -426,7 +440,9 @@ pub fn digest_hex(data: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph::types::{GraphEdge, GraphNode, GraphNodeKind, GraphRelation};
+    use crate::graph::types::{
+        GraphEdge, GraphNode, GraphNodeKind, GraphRelation, GraphSourceFingerprint,
+    };
 
     fn empty_gen() -> GraphRegistryGeneration {
         GraphRegistryGeneration {
@@ -536,5 +552,62 @@ mod tests {
         let t = truncate_id(&id);
         assert!(t.ends_with('\u{2026}'));
         assert!(std::str::from_utf8(t.as_bytes()).is_ok());
+    }
+
+    fn io_open_fail(
+        _physical: &Path,
+        display: &str,
+    ) -> Result<std::fs::File, super::super::io::SecureFileError> {
+        Err(super::super::io::SecureFileError::io(
+            super::super::io::SecureFileOperation::Open,
+            display,
+            std::io::Error::other("injected"),
+        ))
+    }
+
+    #[test]
+    fn present_regular_upstream_io_failure_is_contract_not_stale() {
+        let dir = tempfile::tempdir().unwrap();
+        let registry = dir.path().join("registry");
+        std::fs::create_dir_all(&registry).unwrap();
+        for name in [
+            "policies.json",
+            "profiles.json",
+            "skills.json",
+            "units.json",
+        ] {
+            std::fs::write(registry.join(name), b"{}").unwrap();
+        }
+        let access = crate::registry::RegistryAccess::new(crate::registry::RegistryPaths {
+            registry_root: registry,
+            workspace_root: dir.path().to_path_buf(),
+        });
+        let fps: Vec<GraphSourceFingerprint> = GRAPH_UPSTREAM_PATHS
+            .iter()
+            .map(|p| GraphSourceFingerprint {
+                path: (*p).into(),
+                algorithm: "sha256".into(),
+                digest: "ab".repeat(32),
+            })
+            .collect();
+        let doc = GraphDocument {
+            generated_at: "2026-07-25T00:00:00Z".into(),
+            registry_generation: GraphRegistryGeneration {
+                generated_at: "2026-07-25T00:00:00Z".into(),
+                source_fingerprints: fps,
+            },
+            nodes: vec![],
+            edges: vec![],
+        };
+        super::super::io::set_open_override(Some(io_open_fail));
+        let err = evaluate_graph_freshness(&access, &doc).unwrap_err();
+        super::super::io::set_open_override(None);
+        assert_eq!(err.diagnostic_code(), "graph_contract_invalid");
+        let root = dir.path().to_str().unwrap();
+        assert!(
+            !err.to_string().contains(root),
+            "must not leak physical root: {}",
+            err
+        );
     }
 }
