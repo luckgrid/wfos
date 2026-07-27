@@ -42,7 +42,7 @@ takogami tools        report tools from Panoply / Ontarch projections
 takogami interfaces   validate descriptors, schemas, policies, registry entries
 takogami dev|build|check <unit> [--explain] [--execute]   resolve + policy + optional direct execute
 takogami graph        project metadata-plane graph (read-only; see Graph projection)
-takogami bin report|cleanup   project bin/archive contracts (not yet implemented)
+takogami bin report|cleanup   project bin/archive contracts (sealed helper PATH; dual-Allow)
 takogami session list|show|latest   read command execution records (not work sessions)
 ```
 
@@ -55,7 +55,21 @@ freshness. Upstream fingerprints use Ontarch `registry_root`; authored unit fing
 Hit / miss / stale never trigger an implicit sync. On miss or stale, run
 `moon run ontarch:sync` (or `ontarch sync`) explicitly, then re-query. Graph queries spawn no
 child and write no operational command record. Sibling `graph.dot` is not trusted.
-`takogami bin` remains exit 10 until projection authorization lands.
+
+### Bin projection helper trust
+
+`takogami bin report|cleanup` seals a controller-owned helper PATH for Ontarch child scripts.
+The accepted trust model:
+
+- caller `PATH` has no authority;
+- helper search directories are a closed controller-owned list;
+- world-writable directories and helper targets are rejected;
+- developer-managed directories such as Homebrew or `/usr/local` may be accepted when not
+  world-writable;
+- exact helper lookup path, canonical target, and content digest are sealed;
+- PATH first-match selection is verified before spawn;
+- same-user mutation after the final preflight is not claimed to be atomically impossible;
+- no root-owned or package-manager provenance claim is made.
 
 Lifecycle verbs resolve a sealed plan, then evaluate dual-layer policy (Takogami request +
 child intent) with Deny > Gate > Allow. `--explain` prints resolution and policy provenance;
