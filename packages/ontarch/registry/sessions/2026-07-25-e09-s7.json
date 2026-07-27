@@ -100,6 +100,126 @@
   ],
   "progress": [
     {
+      "phase": "3-final-helper-resolution",
+      "title": "E09.S7 Phase 3 final helper-resolution and evidence closure (H01\u2013H03)",
+      "status": "done",
+      "addendum": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-3-final-closure-helper-resolution-and-evidence-addendum.md",
+      "findings_addressed": [
+        "H01",
+        "H02",
+        "H03"
+      ],
+      "corrections": [
+        "Child PATH directories preserve controller search-directory authority order (not helper-name sort)",
+        "Seal-time and preflight prove PATH first-match equals each sealed helper lookup_path (pure Rust)",
+        "Post-authorization helper-shadow (including same-byte) fails closed as failed_to_spawn / projection_contract_changed with zero child spawn",
+        "Helper trust boundary documented in docs/runtime-controller.md without provenance overclaim",
+        "Complete dual-platform integration matrix recorded individually at final commit"
+      ],
+      "changed_paths": [
+        "packages/takogami/src/projection/plan.rs",
+        "packages/takogami/src/projection/mod.rs",
+        "packages/takogami/src/execution/process.rs",
+        "packages/takogami/src/commands.rs",
+        "docs/runtime-controller.md",
+        "packages/ontarch/registry/sessions/2026-07-25-e09-s7.json"
+      ],
+      "commits": {
+        "fix_helper_first_match": "67d85fce491fa5000fbb57146833448f8561f013",
+        "docs_helper_trust": "a5f82d4c1bdb66b29cec23ec169a8a34d4a3a515",
+        "final_candidate": "a5f82d4c1bdb66b29cec23ec169a8a34d4a3a515"
+      },
+      "gate": {
+        "macos": {
+          "platform": "macOS-aarch64 Darwin",
+          "toolchain": "rustc 1.96.0 / cargo 1.96.0 / moon 2.3.2",
+          "wfos_commit": "a5f82d4c1bdb66b29cec23ec169a8a34d4a3a515",
+          "cargo_build": "PASS",
+          "cargo_check_tests": "PASS",
+          "cargo_lib": "PASS 235",
+          "bin_cli": "PASS",
+          "policy_cli": "PASS",
+          "execution_cli": "PASS",
+          "contracts_roundtrip": "PASS",
+          "session_store": "PASS",
+          "graph_cli": "PASS",
+          "ontarch_graph_contract": "PASS",
+          "ontarch_bin_contract": "PASS",
+          "cli_smoke": "PASS",
+          "resolution_cli": "PASS",
+          "session_cli": "PASS",
+          "clippy_all_targets_D_warnings": "PASS",
+          "cargo_fmt_check": "PASS",
+          "moon_takogami_build": "PASS",
+          "moon_takogami_lint": "PASS",
+          "moon_takogami_format_check": "PASS",
+          "moon_ontarch_sync": "PASS",
+          "moon_ontarch_scan": "PASS",
+          "moon_ontarch_validate": "PASS",
+          "moon_panoply_gen_check": "PASS",
+          "moon_panoply_validate_substrate": "PASS",
+          "git_diff_check": "PASS",
+          "helper_shadow_unit_and_coordinator": "PASS",
+          "github_actions_status_checks": "absent (total_count=0 at final commit)"
+        },
+        "linux_lima_wfos_s61_alpine": {
+          "platform": "Lima Linux aarch64 (wfos-s61-alpine musl)",
+          "toolchain": "rustc 1.96.0 / cargo 1.96.0",
+          "moon": "unavailable in guest; package-cwd cargo + packages/*/bin equivalents used",
+          "wfos_commit": "a5f82d4c1bdb66b29cec23ec169a8a34d4a3a515",
+          "writable_copy": "/tmp/wfos-phase3-h03b (rsync of host tree excluding target/.git; CARGO_TARGET_DIR=/tmp/wfos-target-h03)",
+          "host_mount_limitation": "git archive alone lacked generated registry/profiles; rsync writable copy used for package+direct behavior. Initial git-archive cli_smoke failed session_list until ontarch sync; recorded PASS after sync/rsync.",
+          "cargo_build": "PASS",
+          "cargo_check_tests": "PASS",
+          "cargo_lib": "PASS",
+          "bin_cli": "PASS",
+          "policy_cli": "PASS",
+          "execution_cli": "PASS",
+          "contracts_roundtrip": "PASS",
+          "session_store": "PASS",
+          "graph_cli": "PASS",
+          "ontarch_graph_contract": "PASS",
+          "ontarch_bin_contract": "PASS",
+          "cli_smoke": "PASS (after registry present on writable copy)",
+          "resolution_cli": "PASS",
+          "session_cli": "PASS",
+          "clippy_all_targets_D_warnings": "PASS",
+          "cargo_fmt_check": "PASS",
+          "ontarch_sync_direct": "PASS (packages/ontarch/bin/ontarch sync)",
+          "ontarch_scan_direct": "PASS (packages/ontarch/bin/ontarch scan)",
+          "ontarch_validate_direct": "PASS on writable rsync copy (packages/ontarch/bin/ontarch validate); git-archive tmp validate fails bin_inventory:root_mismatch",
+          "panoply_gen_check_direct": "PASS (packages/panoply/bin/panoply gen brewfile --check)",
+          "panoply_validate_substrate_direct": "PASS (packages/panoply/bin/validate-substrate.sh)",
+          "git_diff_check": "PASS recorded on macOS host checkout (writable archive has no .git)",
+          "direct_human_json_bin_report": "PASS",
+          "direct_human_json_cleanup_report_only": "PASS",
+          "direct_dry_run_gate_no_spawn": "PASS exit 6",
+          "direct_archive_deny_deferred_no_spawn": "PASS exit 5",
+          "direct_delete_approved_deny_deferred_no_spawn": "PASS exit 5",
+          "helper_shadow_unit": "PASS",
+          "caller_path_decoy": "PASS",
+          "post_authorization_source_mutation": "PASS",
+          "github_actions_status_checks": "absent"
+        }
+      },
+      "expected_red_remaining": [
+        "e2e_mvp_path_includes_graph_projection (Phase 4 fixture debt \u2014 incoherent registry overlay; do not weaken graph freshness)"
+      ],
+      "preserved": {
+        "phase1": "COMPLETE",
+        "phase2": "COMPLETE",
+        "C01_C06": "accepted",
+        "F01_F04": "accepted",
+        "D9_option_B": "done",
+        "schema": "0.1.0",
+        "phase4": "not started",
+        "E10": "not started"
+      },
+      "next": "E09.S7 Phase 4 hermetic E2E fixture and M4 closure",
+      "completed_at": "2026-07-27T22:20:00Z",
+      "notes": "Phase 3 finally closed after H01\u2013H03. Do not mark E09/M4 complete. GitHub Actions evidence: absent."
+    },
+    {
       "phase": "3-final-hardening",
       "title": "Phase 3 final hardening (F01\u2013F04)",
       "status": "done",
@@ -1090,10 +1210,10 @@
     "Build/bin/wfos/2026-07-26-wfos-e09-s7-phase-1-closure-follow-up-review-final-corrections.md",
     "Build/bin/wfos/2026-07-26-wfos-e09-s7-phase-2-readiness-review-and-implementation-acceptance-addendum.md"
   ],
-  "next": "E09.S7 Phase 4 READY FOR KICKOFF \u2014 graph E2E fixture / MVP hardening (not started)",
+  "next": "E09.S7 Phase 4 hermetic E2E fixture and M4 closure",
   "blockers": [
     "ontarch:secrets-scan still reports pre-existing age-secret-key in git history (commit a3a4978) \u2014 unrelated to S7",
     "Phase 4 graph E2E fixture debt remains expected-red"
   ],
-  "token_note": "Phase 3 COMPLETE after F01\u2013F04; stop before Phase 4/E10; do not mark E09/M4 complete"
+  "token_note": "Phase 3 H01\u2013H03 closed; stop before Phase 4/E10; do not mark E09/M4 complete; GHA absent"
 }
