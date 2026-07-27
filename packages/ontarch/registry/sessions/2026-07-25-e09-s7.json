@@ -86,6 +86,98 @@
   ],
   "progress": [
     {
+      "phase": "2-final-evidence-follow-up",
+      "title": "Phase 2 final evidence follow-up (E01\u2013E04)",
+      "status": "done",
+      "addendum": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-2-final-closure-evidence-follow-up-addendum.md",
+      "production_disposition": "accepted",
+      "accepted_production_commit": "7473a94854a9906862ca8cd203fb82d8b6747735",
+      "evidence_follow_up_commit": "9f0a9093980a9f105190f6612d62f67587c25e25",
+      "summary": "Closed E01\u2013E04: complete byte-identical outcome matrix; authored Io injection + capability-probed CLI permission tests; writable Linux sync/scan/validate + post-sync graph hit; expected-red split Phase 3 vs Phase 4. No production redesign.",
+      "findings_closed": [
+        "E01",
+        "E02",
+        "E03",
+        "E04"
+      ],
+      "test_changed_paths": [
+        "packages/takogami/tests/graph_cli.rs",
+        "packages/takogami/src/graph/validate.rs",
+        "packages/takogami/src/graph/io.rs",
+        "packages/takogami/tests/bin_cli.rs"
+      ],
+      "gate": {
+        "toolchain": {
+          "rustc": "1.96.0",
+          "moon": "2.3.2"
+        },
+        "platform_macos": {
+          "arch": "aarch64-apple-darwin",
+          "graph_cli": "89 passed",
+          "lib_graph": "20 passed",
+          "phase2_green_set": "PASS",
+          "clippy_all_targets": "PASS",
+          "fmt_check": "PASS",
+          "takogami_build": "PASS",
+          "ontarch_sync": "PASS",
+          "ontarch_scan": "PASS",
+          "ontarch_validate": "PASS",
+          "panoply_gen_check": "PASS",
+          "panoply_validate_substrate": "PASS",
+          "git_diff_check": "PASS"
+        },
+        "platform_linux": {
+          "vm": "lima wfos-s61-alpine",
+          "arch": "aarch64-unknown-linux-musl",
+          "cargo_target_dir": "/tmp/wfos-target",
+          "checkout": "writable cp -a /tmp/wfos-phase2-final at 9f0a9093980a9f105190f6612d62f67587c25e25",
+          "moon": "unavailable (host macOS binary); package bins used",
+          "lib": "171 passed",
+          "graph_cli": "89 passed",
+          "ontarch_graph_contract": "27 passed",
+          "ontarch_bin_contract": "26 passed",
+          "cli_smoke": "17 passed",
+          "contracts_roundtrip": "19 passed",
+          "execution_cli": "16 passed",
+          "policy_cli": "17 passed",
+          "resolution_cli": "27 passed",
+          "session_cli": "12 passed",
+          "session_store": "21 passed",
+          "clippy_all_targets": "PASS",
+          "fmt_check": "PASS",
+          "ontarch_sync": "PASS (writable; AGENTS_HOME seeded via agents-init)",
+          "ontarch_scan": "PASS (1 workspace standalone layout limitation recorded)",
+          "ontarch_bin_report": "PASS (regenerated; root matched WS_ROOT)",
+          "ontarch_validate": "PASS",
+          "panoply_gen_check": "PASS",
+          "panoply_validate_substrate": "PASS",
+          "post_sync_graph_hit": "PASS (text/dot/raw/json exit 0 freshness=hit)",
+          "bin_report": "exit 10",
+          "lima_linux_local_gate": "PASS (writable full Phase 2 list including sync/scan/validate)",
+          "environment_limitations": [
+            "moon unavailable in guest",
+            "standalone WS_ROOT scan saw 1 workspace (not full polyrepo 6)",
+            "bin inventory under standalone root has 0 Plan/Build workflow dirs; validate still PASS after regenerate"
+          ]
+        },
+        "ci_evidence": {
+          "github_actions_workflow_runs": "absent",
+          "github_actions_status_checks": "not present"
+        },
+        "expected_red_phase_3": {
+          "bin_cli": "1 passed; 26 failed (assert_not_still_unimplemented / Phase 3 seams)",
+          "e2e_mvp_path_includes_bin_report_and_gated_cleanup": "expected red (exit 10)",
+          "graph_cli::bin_still_not_implemented": "expected green"
+        },
+        "expected_red_phase_4": {
+          "e2e_mvp_path_includes_graph_projection": "stale/red (exit 4) \u2014 resolution registry overlay lacks coherent upstream (e.g. skills.json); goldens remain in graph_cli",
+          "note": "Phase 4 hermetic MVP fixture completion; not Phase 3 bin routing"
+        }
+      },
+      "d9": "open / decide-before-Phase-3",
+      "phase_boundary": "Phase 1 COMPLETE; Phase 2 COMPLETE; Phase 3 READY FOR KICKOFF; Command::Bin unimplemented; E09.S7 in_progress; M4 in_progress"
+    },
+    {
       "phase": "2-final-evidence-follow-up-review",
       "title": "Phase 2 final evidence follow-up review",
       "status": "changes-required",
@@ -682,13 +774,10 @@
     "Build/bin/wfos/2026-07-26-wfos-e09-s7-phase-1-closure-follow-up-review-final-corrections.md",
     "Build/bin/wfos/2026-07-26-wfos-e09-s7-phase-2-readiness-review-and-implementation-acceptance-addendum.md"
   ],
-  "next": "E09.S7 Phase 2 final evidence follow-up",
+  "next": "E09.S7 Phase 3 bin routing (READY FOR KICKOFF; D9 open \u2014 decide before Phase 3)",
   "blockers": [
-    "incomplete byte-identical outcome matrix",
-    "permission tests not privileged-runner safe",
-    "writable Linux sync/scan/build evidence incomplete",
-    "Phase 4 graph E2E red misclassified as Phase 3",
-    "D9 Phase 3 bin --scope grammar conflict (open / decide-before-Phase-3)"
+    "D9 Phase 3 bin --scope grammar conflict (open / decide-before-Phase-3)",
+    "Phase 3 Command::Bin not implemented (expected)"
   ],
-  "token_note": "Phase 2 production accepted; evidence follow-up E01\u2013E04; stop before Phase 3/E10"
+  "token_note": "Phase 2 COMPLETE after E01\u2013E04 evidence follow-up; Phase 3 ready for kickoff; stop before Phase 3/E10 without explicit go-ahead"
 }
