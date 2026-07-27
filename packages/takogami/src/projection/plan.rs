@@ -1217,7 +1217,10 @@ mod tests {
         .unwrap_err();
         assert_eq!(err.code(), "projection_contract_changed");
         assert!(err.message().contains("jq"));
-        assert!(err.message().contains("first PATH match failed controller trust"));
+        assert!(
+            err.message()
+                .contains("first PATH match failed controller trust")
+        );
         assert!(!err.message().contains(early.to_str().unwrap()));
         assert!(!err.message().contains(late.to_str().unwrap()));
     }
@@ -1359,13 +1362,13 @@ mod tests {
         let late = temp.path().join("late");
         write_split_fake_helpers(&early, &late);
         write_world_writable_exe(&early.join("jq"));
-        let dirs = vec![
-            early.canonicalize().unwrap(),
-            late.canonicalize().unwrap(),
-        ];
+        let dirs = vec![early.canonicalize().unwrap(), late.canonicalize().unwrap()];
         let err = resolve_named_helper("jq", &dirs).unwrap_err();
         assert_eq!(err.code(), "projection_contract_changed");
-        assert!(err.message().contains("first PATH match failed controller trust"));
+        assert!(
+            err.message()
+                .contains("first PATH match failed controller trust")
+        );
         let first = resolve_helper_first_match("jq", &dirs).unwrap_err();
         assert_eq!(first.code(), "projection_contract_changed");
         // Must not escape to the later trusted helper.

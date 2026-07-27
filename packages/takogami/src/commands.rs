@@ -2367,9 +2367,7 @@ adapter = "direct""#,
             {
                 use std::os::unix::fs::PermissionsExt;
                 let marker_q = child_spawn_marker.to_string_lossy().replace('\'', "'\\''");
-                let body = format!(
-                    "#!/bin/sh\necho ran >> '{marker_q}'\nexit 0\n"
-                );
+                let body = format!("#!/bin/sh\necho ran >> '{marker_q}'\nexit 0\n");
                 let ontarch_bin = ontarch.join("bin/ontarch");
                 fs::create_dir_all(ontarch_bin.parent().unwrap()).unwrap();
                 fs::write(&ontarch_bin, body.as_bytes()).unwrap();
@@ -2662,7 +2660,10 @@ adapter = "direct""#,
         early: &Path,
         late: &Path,
     ) {
-        assert_eq!(result.as_ref().unwrap().clone(), crate::exit_codes::EXECUTION_IO);
+        assert_eq!(
+            result.as_ref().unwrap().clone(),
+            crate::exit_codes::EXECUTION_IO
+        );
         assert_eq!(
             calls, 1,
             "execute_projection must be entered exactly once after authorization"
@@ -2925,7 +2926,6 @@ adapter = "direct""#,
 
     #[tokio::test]
     async fn projection_preflight_failure_observer_requires_safe_terminal() {
-
         let fx = BinFaultFixture::new();
         let sink = std::sync::Arc::new(std::sync::Mutex::new(None));
         let factory = observing_factory(sink.clone());
