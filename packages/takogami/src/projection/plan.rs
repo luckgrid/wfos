@@ -1156,6 +1156,238 @@ mod tests {
             .expect("busybox applet first-match must remain valid");
     }
 
+    fn write_world_writable_exe(path: &Path) {
+        write_exe(path);
+        let mut perms = fs::metadata(path).unwrap().permissions();
+        perms.set_mode(0o757);
+        fs::set_permissions(path, perms).unwrap();
+    }
+
+    #[test]
+    fn earlier_world_writable_executable_blocks_later_trusted_helper_at_seal() {
+        let temp = tempdir().unwrap();
+        let early = temp.path().join("early");
+        let late = temp.path().join("late");
+        write_split_fake_helpers(&early, &late);
+        write_world_writable_exe(&early.join("jq"));
+        let (_t, registry, ws) = fixture();
+        let err = with_search_dirs(vec![early.clone(), late.clone()], || {
+            SealedProjectionPlan::seal(
+                ProjectionOperation::BinReport,
+                &registry,
+                &ws,
+                None,
+                "s".into(),
+                "p".into(),
+                vec![],
+            )
+        })
+        .unwrap_err();
+        assert_eq!(err.code(), "projection_contract_changed");
+        assert!(err.message().contains("jq"));
+        assert!(err.message().contains("first PATH match failed controller trust"));
+        assert!(!err.message().contains(early.to_str().unwrap()));
+        assert!(!err.message().contains(late.to_str().unwrap()));
+    }
+
+    #[test]
+    fn earlier_world_writable_executable_blocks_later_trusted_helper_at_preflight() {
+        let temp = tempdir().unwrap();
+        let early = temp.path().join("early");
+        let late = temp.path().join("late");
+        write_split_fake_helpers(&early, &late);
+        let (_t, registry, ws) = fixture();
+        let plan = seal_bin_report_with_dirs(vec![early.clone(), late.clone()], &registry, &ws);
+        write_world_writable_exe(&early.join("jq"));
+        let err = plan.preflight_helpers().unwrap_err();
+        assert_eq!(err.code(), "projection_contract_changed");
+        assert!(err.message().contains("jq"));
+        assert!(!err.message().contains(early.to_str().unwrap()));
+        assert!(!err.message().contains(late.to_str().unwrap()));
+    }
+
+    #[test]
+    fn earlier_symlink_to_world_writable_target_blocks_later_trusted_helper() {
+        let temp = tempdir().unwrap();
+        let early = temp.path().join("early");
+        let late = temp.path().join("late");
+        let outside = temp.path().join("outside");
+        write_split_fake_helpers(&early, &late);
+        fs::create_dir_all(&outside).unwrap();
+        write_world_writable_exe(&outside.join("jq-real"));
+        symlink(outside.join("jq-real"), early.join("jq")).unwrap();
+        let (_t, registry, ws) = fixture();
+        let err = with_search_dirs(vec![early.clone(), late.clone()], || {
+            SealedProjectionPlan::seal(
+                ProjectionOperation::BinReport,
+                &registry,
+                &ws,
+                None,
+                "s".into(),
+                "p".into(),
+                vec![],
+            )
+        })
+        .unwrap_err();
+        assert_eq!(err.code(), "projection_contract_changed");
+        assert!(err.message().contains("jq"));
+        assert!(!err.message().contains(early.to_str().unwrap()));
+        assert!(!err.message().contains(outside.to_str().unwrap()));
+    }
+
+    #[test]
+    fn non_executable_earlier_candidate_allows_later_trusted_helper() {
+        let temp = tempdir().unwrap();
+        let early = temp.path().join("early");
+        let late = temp.path().join("late");
+        write_split_fake_helpers(&early, &late);
+        fs::write(early.join("jq"), b"#!/bin/sh\nexit 0\n").unwrap();
+        let mut perms = fs::metadata(early.join("jq")).unwrap().permissions();
+        perms.set_mode(0o644);
+        fs::set_permissions(early.join("jq"), perms).unwrap();
+        let (_t, registry, ws) = fixture();
+        let plan = seal_bin_report_with_dirs(vec![early.clone(), late.clone()], &registry, &ws);
+        let late_c = late.canonicalize().unwrap();
+        let jq = plan
+            .helper_identities()
+            .iter()
+            .find(|h| h.name == "jq")
+            .unwrap();
+        assert_eq!(jq.lookup_path, late_c.join("jq"));
+    }
+
+    #[test]
+    fn missing_earlier_candidate_allows_later_trusted_helper() {
+        let temp = tempdir().unwrap();
+        let early = temp.path().join("early");
+        let late = temp.path().join("late");
+        write_split_fake_helpers(&early, &late);
+        assert!(!early.join("jq").exists());
+        let (_t, registry, ws) = fixture();
+        let plan = seal_bin_report_with_dirs(vec![early.clone(), late.clone()], &registry, &ws);
+        let late_c = late.canonicalize().unwrap();
+        let jq = plan
+            .helper_identities()
+            .iter()
+            .find(|h| h.name == "jq")
+            .unwrap();
+        assert_eq!(jq.lookup_path, late_c.join("jq"));
+    }
+
+    #[test]
+    fn trusted_first_match_remains_accepted() {
+        let temp = tempdir().unwrap();
+        let early = temp.path().join("early");
+        let late = temp.path().join("late");
+        write_split_fake_helpers(&early, &late);
+        write_exe(&early.join("jq"));
+        let (_t, registry, ws) = fixture();
+        let plan = seal_bin_report_with_dirs(vec![early.clone(), late.clone()], &registry, &ws);
+        let early_c = early.canonicalize().unwrap();
+        let jq = plan
+            .helper_identities()
+            .iter()
+            .find(|h| h.name == "jq")
+            .unwrap();
+        assert_eq!(jq.lookup_path, early_c.join("jq"));
+        plan.preflight_helpers().unwrap();
+    }
+
+    #[test]
+    fn untrusted_first_match_diagnostic_omits_absolute_paths() {
+        let temp = tempdir().unwrap();
+        let early = temp.path().join("early");
+        let late = temp.path().join("late");
+        write_split_fake_helpers(&early, &late);
+        write_world_writable_exe(&early.join("jq"));
+        let (_t, registry, ws) = fixture();
+        let err = with_search_dirs(vec![early.clone(), late.clone()], || {
+            SealedProjectionPlan::seal(
+                ProjectionOperation::BinReport,
+                &registry,
+                &ws,
+                None,
+                "s".into(),
+                "p".into(),
+                vec![],
+            )
+        })
+        .unwrap_err();
+        let msg = err.message();
+        assert!(!msg.contains(early.to_str().unwrap()));
+        assert!(!msg.contains(late.to_str().unwrap()));
+        assert!(!msg.contains("/usr/bin"));
+        assert!(!msg.contains("/opt/homebrew"));
+    }
+
+    #[test]
+    fn untrusted_executable_first_match_is_never_skipped() {
+        let temp = tempdir().unwrap();
+        let early = temp.path().join("early");
+        let late = temp.path().join("late");
+        write_split_fake_helpers(&early, &late);
+        write_world_writable_exe(&early.join("jq"));
+        let dirs = vec![
+            early.canonicalize().unwrap(),
+            late.canonicalize().unwrap(),
+        ];
+        let err = resolve_named_helper("jq", &dirs).unwrap_err();
+        assert_eq!(err.code(), "projection_contract_changed");
+        assert!(err.message().contains("first PATH match failed controller trust"));
+        let first = resolve_helper_first_match("jq", &dirs).unwrap_err();
+        assert_eq!(first.code(), "projection_contract_changed");
+        // Must not escape to the later trusted helper.
+        assert!(!first.message().contains(late.to_str().unwrap()));
+    }
+
+    #[test]
+    fn world_writable_same_byte_first_match_still_fails_preflight() {
+        let temp = tempdir().unwrap();
+        let early = temp.path().join("early");
+        let late = temp.path().join("late");
+        write_split_fake_helpers(&early, &late);
+        let (_t, registry, ws) = fixture();
+        let plan = seal_bin_report_with_dirs(vec![early.clone(), late.clone()], &registry, &ws);
+        let jq = plan
+            .helper_identities()
+            .iter()
+            .find(|h| h.name == "jq")
+            .unwrap();
+        let bytes = fs::read(&jq.lookup_path).unwrap();
+        fs::write(early.join("jq"), &bytes).unwrap();
+        let mut perms = fs::metadata(early.join("jq")).unwrap().permissions();
+        perms.set_mode(0o757);
+        fs::set_permissions(early.join("jq"), perms).unwrap();
+        let err = plan.preflight_helpers().unwrap_err();
+        assert_eq!(err.code(), "projection_contract_changed");
+        assert!(err.message().contains("jq"));
+    }
+
+    #[test]
+    fn world_writable_fd_first_match_is_not_replaced_by_find() {
+        let temp = tempdir().unwrap();
+        let early = temp.path().join("early");
+        let late = temp.path().join("late");
+        write_split_fake_helpers(&early, &late);
+        write_world_writable_exe(&early.join("fd"));
+        let (_t, registry, ws) = fixture();
+        let err = with_search_dirs(vec![early.clone(), late.clone()], || {
+            SealedProjectionPlan::seal(
+                ProjectionOperation::BinReport,
+                &registry,
+                &ws,
+                None,
+                "s".into(),
+                "p".into(),
+                vec![],
+            )
+        })
+        .unwrap_err();
+        assert_eq!(err.code(), "projection_contract_changed");
+        assert!(err.message().contains("fd"));
+        assert!(!err.message().contains(early.to_str().unwrap()));
+    }
+
     #[test]
     fn world_writable_helper_directory_rejected() {
         let temp = tempdir().unwrap();
