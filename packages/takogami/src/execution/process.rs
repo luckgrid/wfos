@@ -10,14 +10,14 @@ use std::process::Stdio;
 use async_trait::async_trait;
 use tokio::process::Command;
 
-use super::environment::{EnvError, snapshot_env};
+use super::environment::{EnvError, build_child_env, snapshot_env};
 use super::signals::{ProcessGroupGuard, SignalSource, UnixSignalSource, signal_name};
 use super::streams::{StreamCapture, StreamEncoding, capture_pipe, stream_or_buffer};
 use super::{ExecutionMode, ExecutionOptions, ExecutionReport, Executor, StreamSummary};
 use crate::contracts::types::DiagnosticRecord;
 use crate::exit_codes;
 use crate::output::apply_rtk_if_eligible;
-use crate::policy::AuthorizedExecutionPlan;
+use crate::policy::{AuthorizedExecutionPlan, AuthorizedProjectionPlan};
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct TokioExecutor;
@@ -30,6 +30,20 @@ impl Executor for TokioExecutor {
         options: &ExecutionOptions,
     ) -> ExecutionReport {
         match execute_inner(plan, options, &default_signal_factory).await {
+            Ok(report) => report,
+            Err(err) => err.into_report(),
+        }
+    }
+}
+
+impl TokioExecutor {
+    /// Execute an evaluator-authorized projection plan (no second process runner).
+    pub async fn execute_projection(
+        &self,
+        authorized: &AuthorizedProjectionPlan,
+        options: &ExecutionOptions,
+    ) -> ExecutionReport {
+        match execute_projection_inner(authorized, options, &default_signal_factory).await {
             Ok(report) => report,
             Err(err) => err.into_report(),
         }
@@ -138,9 +152,101 @@ async fn execute_inner(
         }
     })?;
 
+    spawn_and_reap(
+        exe,
+        cwd,
+        &resolved.argv,
+        env,
+        options,
+        signal_factory,
+        Some(authorized),
+    )
+    .await
+}
+
+async fn execute_projection_inner(
+    authorized: &AuthorizedProjectionPlan,
+    options: &ExecutionOptions,
+    signal_factory: &SignalFactory,
+) -> Result<ExecutionReport, ExecFailure> {
+    let sealed = authorized.plan();
+
+    // Test-only post-seal drift seams (honored only when explicitly requested).
+    apply_projection_test_drift(sealed.executable_path(), sealed.cwd_path())?;
+
+    sealed.preflight_identities().map_err(|e| ExecFailure {
+        outcome: "failed_to_spawn".into(),
+        diagnostics: vec![DiagnosticRecord {
+            code: e.code().into(),
+            message: e.message(),
+        }],
+        spawned: false,
+        pid: None,
+    })?;
+
+    let env = build_child_env(sealed.fixed_env(), sealed.inherited_env_keys()).map_err(
+        |e: EnvError| {
+            let d = e.diagnostic();
+            ExecFailure {
+                outcome: "failed_to_spawn".into(),
+                diagnostics: vec![d],
+                spawned: false,
+                pid: None,
+            }
+        },
+    )?;
+
+    // Machine JSON projections never use RTK.
+    let options = ExecutionOptions {
+        mode: ExecutionMode::Json,
+        limits: options.limits.clone(),
+        rtk_projected: None,
+    };
+
+    spawn_and_reap(
+        sealed.executable_path(),
+        sealed.cwd_path(),
+        sealed.argv(),
+        env,
+        &options,
+        signal_factory,
+        None,
+    )
+    .await
+}
+
+fn apply_projection_test_drift(exe: &Path, cwd: &Path) -> Result<(), ExecFailure> {
+    if std::env::var_os("TAKOGAMI_TEST_INJECT_EXE_DRIFT").is_some() {
+        let _ = fs::remove_file(exe);
+    }
+    if std::env::var_os("TAKOGAMI_TEST_INJECT_CWD_DRIFT").is_some() {
+        let bogey = cwd.with_extension("drifted");
+        let _ = fs::rename(cwd, &bogey);
+    }
+    if std::env::var_os("TAKOGAMI_TEST_INJECT_SOURCE_DRIFT").is_some() {
+        // Touch a bound source script if present beside the executable.
+        if let Some(pkg_bin) = exe.parent() {
+            let common = pkg_bin.parent().map(|p| p.join("lib/common.sh"));
+            if let Some(path) = common {
+                let _ = fs::write(&path, b"# drifted\n");
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn spawn_and_reap(
+    exe: &Path,
+    cwd: &Path,
+    argv: &[String],
+    env: super::environment::EnvSnapshot,
+    options: &ExecutionOptions,
+    signal_factory: &SignalFactory,
+    lifecycle: Option<&AuthorizedExecutionPlan>,
+) -> Result<ExecutionReport, ExecFailure> {
     let limit = options.limits.capture_limit;
     let mut cmd = Command::new(exe);
-    cmd.args(&resolved.argv)
+    cmd.args(argv)
         .current_dir(cwd)
         .env_clear()
         .envs(env.pairs.iter().cloned())
@@ -149,7 +255,6 @@ async fn execute_inner(
         .stderr(Stdio::piped())
         .kill_on_drop(true);
 
-    // New process group so signals can target descendants via kill(-pgid).
     unsafe {
         cmd.pre_exec(|| {
             if libc::setpgid(0, 0) != 0 {
@@ -238,7 +343,6 @@ async fn execute_inner(
 
     let status = match status {
         Ok(s) => {
-            // The child was already reaped by `child.wait()` above.
             if let Some(g) = guard.as_mut() {
                 g.disarm();
             }
@@ -249,7 +353,6 @@ async fn execute_inner(
                 g.signal_group(libc::SIGKILL);
                 g.disarm();
             }
-            // Re-await so the child is reaped even when the first wait failed (S6.1-07 / §5.6).
             let _ = child.wait().await;
             return Err(wait_failure(&e, pid));
         }
@@ -261,13 +364,26 @@ async fn execute_inner(
     push_stream_diags(&mut diagnostics, "stdout", &stdout_cap);
     push_stream_diags(&mut diagnostics, "stderr", &stderr_cap);
 
-    let (compressor, gain, emitted_output_bytes, stdout_summary, stderr_summary) = finalize_output(
-        authorized,
-        options,
-        &stdout_cap,
-        &stderr_cap,
-        &mut diagnostics,
-    );
+    let (compressor, gain, emitted_output_bytes, stdout_summary, stderr_summary) =
+        if let Some(authorized) = lifecycle {
+            finalize_output(
+                authorized,
+                options,
+                &stdout_cap,
+                &stderr_cap,
+                &mut diagnostics,
+            )
+        } else {
+            // Projections: never RTK-compress machine JSON.
+            let emitted = stdout_cap.bytes.len() as u64 + stderr_cap.bytes.len() as u64;
+            (
+                "none".into(),
+                None,
+                emitted,
+                StreamSummary::from_capture(&stdout_cap),
+                StreamSummary::from_capture(&stderr_cap),
+            )
+        };
 
     Ok(ExecutionReport {
         spawned: true,
@@ -283,6 +399,10 @@ async fn execute_inner(
         emitted_output_bytes,
     })
 }
+
+// Keep the original execute_inner body removed — replaced by spawn_and_reap above.
+#[allow(dead_code)]
+fn _projection_placeholder() {}
 
 async fn run_capturing(
     child: &mut tokio::process::Child,

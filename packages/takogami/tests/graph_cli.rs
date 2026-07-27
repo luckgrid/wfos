@@ -1119,16 +1119,16 @@ fn schema_and_rust_enums_win_over_stale_readme_vocabulary() {
 }
 
 #[test]
-fn bin_still_not_implemented() {
+fn bin_is_implemented_not_exit_ten() {
+    // Phase 3 landed bin routing; this residual Phase 0 sentinel must no longer expect exit 10.
     let h = GraphHarness::new();
     let out = h.run(&["bin", "report"]);
-    assert_eq!(
+    assert_ne!(
         out.status.code(),
         Some(NOT_IMPLEMENTED as i32),
-        "{}",
+        "bin must be implemented after E09.S7 Phase 3: {}",
         stderr(&out)
     );
-    h.assert_no_child_and_no_record();
 }
 
 // --- P2-R03 tracked e2e goldens (byte-compare) ---

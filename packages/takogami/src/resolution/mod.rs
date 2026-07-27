@@ -35,7 +35,7 @@ mod executable;
 mod explain;
 mod paths;
 mod plan;
-mod profile;
+pub(crate) mod profile;
 mod request;
 mod resolver;
 

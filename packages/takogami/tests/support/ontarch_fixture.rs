@@ -611,7 +611,28 @@ case "$cmd" in
     exit 0
     ;;
   bin-cleanup)
-    printf '%s\n' {clean}
+    scope=""
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --scope)
+          scope="$2"
+          shift 2
+          ;;
+        --scope=*)
+          scope="${{1#--scope=}}"
+          shift
+          ;;
+        *)
+          shift
+          ;;
+      esac
+    done
+    if [ -n "$scope" ]; then
+      # Use | so scope paths with / do not break sed.
+      printf '%s\n' {clean} | sed "s|\"scope\":null|\"scope\":\"$scope\"|"
+    else
+      printf '%s\n' {clean}
+    fi
     exit 0
     ;;
   *)

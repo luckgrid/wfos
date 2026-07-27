@@ -1,4 +1,5 @@
 pub mod app;
+pub mod bin_projection;
 pub mod cli;
 pub mod commands;
 pub mod contracts;
@@ -9,6 +10,7 @@ pub mod exit_codes;
 pub mod graph;
 pub mod output;
 pub mod policy;
+pub mod projection;
 pub mod registry;
 pub mod resolution;
 pub mod sessions;

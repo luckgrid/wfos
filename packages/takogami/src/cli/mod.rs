@@ -135,8 +135,8 @@ pub enum BinCommand {
     Cleanup {
         #[arg(long, value_enum, default_value_t = BinCleanupMode::ReportOnly)]
         mode: BinCleanupMode,
-        #[arg(long, value_name = "PATH")]
-        scope: Option<PathBuf>,
+        #[arg(long, value_name = "SCOPE")]
+        scope: Option<String>,
     },
 }
 
@@ -251,6 +251,7 @@ impl Command {
                 | Self::Check { .. }
                 | Self::Session { .. }
                 | Self::Graph { .. }
+                | Self::Bin { .. }
         )
     }
 
@@ -289,7 +290,7 @@ impl GraphFormat {
 }
 
 impl BinCleanupMode {
-    fn as_str(self) -> &'static str {
+    pub fn as_str(self) -> &'static str {
         match self {
             Self::ReportOnly => "report-only",
             Self::DryRun => "dry-run",

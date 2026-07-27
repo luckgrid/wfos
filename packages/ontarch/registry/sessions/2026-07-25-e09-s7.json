@@ -43,7 +43,8 @@
     "Evaluator-owned dual-Allow authorization preserved; generalize private runnable payload only.",
     "Durable RuntimeCommandRecord schema 0.1.0 remains compatible; omit lifecycle resolution for bin; no breaking migration without addendum.",
     "Dry-run remains Gate/no-spawn; archive/delete deferred_unavailable + Deny before Ontarch invoke.",
-    "No approval transport, human-actor inference, or archive/delete execution in S7."
+    "No approval transport, human-actor inference, or archive/delete execution in S7.",
+    "D9 Option B: explicit --scope requires namespace/bin/segment+; omitted scope is workspace-wide non-mutating; do not widen Phase 1 Ontarch schema."
   ],
   "changed_paths": [
     "packages/ontarch/bin/ontarch-bin-cleanup",
@@ -82,9 +83,154 @@
     "packages/takogami/tests/fixtures/e2e/expected/graph-dot.txt",
     "packages/takogami/tests/fixtures/e2e/expected/graph-envelope.json",
     "packages/takogami/tests/fixtures/e2e/ontarch/registry/",
-    "packages/takogami/tests/fixtures/e2e/README.md"
+    "packages/takogami/tests/fixtures/e2e/README.md",
+    "packages/takogami/src/projection/",
+    "packages/takogami/src/bin_projection/",
+    "packages/takogami/src/policy/projection_eval.rs",
+    "packages/takogami/src/execution/environment.rs",
+    "packages/takogami/src/execution/process.rs",
+    "packages/takogami/src/resolution/profile.rs"
   ],
   "progress": [
+    {
+      "phase": 3,
+      "title": "Projection authorization and bin routing",
+      "status": "done",
+      "spec": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-3-projection-authorization-bin-routing-implementation-spec.md",
+      "plan": "~/.cursor/plans/e09.s7_phase_3_00d7963b.plan.md",
+      "baseline_wfos": "d0aefaf4c7d85c8f5b1b90d9345f862076860338",
+      "baseline_lg_workstreams": "288d13a3fa35c056e5610f0c125d76462e9c6bae",
+      "d9": {
+        "decision": "Option B",
+        "status": "done",
+        "rule": "explicit --scope requires namespace/bin/segment+; omitted scope is workspace-wide non-mutating; Phase 1 Ontarch schema not widened"
+      },
+      "summary": "Sealed s7-projection-v1 plans; evaluator-owned AuthorizedProjectionPlan dual-Allow; fixed+inherited env with PANOPLY_AGENT=1 and WS_ROOT; report/report-only Allow pending\u2192spawn\u2192validate\u2192terminal; dry-run Gate and archive/delete Deny+deferred zero-spawn; D9 ValidatedBinScope; Command::Bin implemented. Lifecycle digest remains s4.1-v1. Phase 4 graph E2E fixture debt remains expected-red.",
+      "limits_preserved": [
+        "no fabricated lifecycle ResolvedCommand for bin",
+        "resolution omitted on bin records; schema 0.1.0",
+        "no second process runner outside execution/",
+        "no PATH Ontarch authority",
+        "no archive/delete execution or approval transport",
+        "Phase 4 / E10 not started",
+        "E09 / M4 still in progress"
+      ],
+      "changed_paths": [
+        "packages/takogami/src/projection/",
+        "packages/takogami/src/bin_projection/",
+        "packages/takogami/src/policy/projection_eval.rs",
+        "packages/takogami/src/policy/mod.rs",
+        "packages/takogami/src/execution/environment.rs",
+        "packages/takogami/src/execution/process.rs",
+        "packages/takogami/src/execution/mod.rs",
+        "packages/takogami/src/commands.rs",
+        "packages/takogami/src/cli/mod.rs",
+        "packages/takogami/src/lib.rs",
+        "packages/takogami/src/resolution/profile.rs",
+        "packages/takogami/tests/bin_cli.rs",
+        "packages/takogami/tests/graph_cli.rs",
+        "packages/takogami/tests/support/ontarch_fixture.rs",
+        "docs/bin-archive.md",
+        "packages/ontarch/registry/sessions/2026-07-25-e09-s7.json"
+      ],
+      "gate": {
+        "toolchain": {
+          "rustc": "1.96.0",
+          "cargo": "1.96.0",
+          "moon": "2.3.2",
+          "path_pin": "$HOME/.rustup/toolchains/1.96.0-aarch64-apple-darwin/bin:$HOME/.proto/shims:$PATH"
+        },
+        "platform_macos": {
+          "arch": "aarch64-apple-darwin",
+          "bin_cli": "37 passed",
+          "policy_cli": "17 passed",
+          "execution_cli": "PASS",
+          "contracts_roundtrip": "19 passed",
+          "session_store": "21 passed",
+          "graph_cli": "89 passed",
+          "ontarch_graph_contract": "27 passed",
+          "ontarch_bin_contract": "26 passed",
+          "cli_smoke": "17 passed",
+          "resolution_cli": "27 passed",
+          "session_cli": "12 passed",
+          "e2e_mvp": "5 passed; 1 failed (e2e_mvp_path_includes_graph_projection \u2014 Phase 4 expected-red); bin path green",
+          "takogami_build": "PASS",
+          "takogami_lint": "PASS",
+          "takogami_format_check": "PASS",
+          "ontarch_sync": "PASS",
+          "ontarch_scan": "PASS",
+          "ontarch_validate": "PASS",
+          "panoply_gen_check": "PASS",
+          "panoply_validate_substrate": "PASS",
+          "git_diff_check": "PASS",
+          "command_bin_implemented": true,
+          "direct_cli": {
+            "bin_report_json": "exit 0",
+            "bin_cleanup_dry_run_json": "exit 6 (Gate)"
+          }
+        },
+        "platform_linux": {
+          "vm": "lima wfos-s61-alpine",
+          "arch": "aarch64-unknown-linux-musl",
+          "kernel": "Alpine Linux virt",
+          "cargo_target_dir": "/tmp/wfos-target",
+          "checkout": "writable copy /tmp/wfos-phase3 from host mount (virtiofs host tree is read-only)",
+          "moon": "unavailable in guest; cargo clippy/fmt/check used",
+          "bin_cli": "37 passed",
+          "policy_cli": "17 passed",
+          "execution_cli": "16 passed",
+          "contracts_roundtrip": "19 passed",
+          "session_store": "21 passed",
+          "graph_cli": "89 passed",
+          "ontarch_graph_contract": "27 passed",
+          "ontarch_bin_contract": "26 passed",
+          "cargo_check_tests": "PASS",
+          "clippy_D_warnings": "PASS",
+          "fmt_check": "PASS",
+          "e2e_mvp": "5 passed; 1 failed (graph projection Phase 4 expected-red); bin path green",
+          "command_bin_implemented": true
+        },
+        "ci_evidence": {
+          "macos_local_gate": "PASS",
+          "lima_linux_local_gate": "PASS",
+          "github_actions_status_checks": "not present for this working tree"
+        }
+      },
+      "expected_red_remaining": [
+        "e2e_mvp_path_includes_graph_projection (Phase 4 mixed-registry graph overlay / fixture debt)"
+      ],
+      "next": "E09.S7 Phase 4 \u2014 stop; do not start in this session",
+      "completed_at": "2026-07-27T04:54:40Z"
+    },
+    {
+      "phase": "3-kickoff",
+      "title": "Projection authorization and bin routing",
+      "status": "done",
+      "spec": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-3-projection-authorization-bin-routing-implementation-spec.md",
+      "baseline_wfos": "d0aefaf4c7d85c8f5b1b90d9345f862076860338",
+      "baseline_lg_workstreams": "288d13a3fa35c056e5610f0c125d76462e9c6bae",
+      "d9_decision": "Option B \u2014 explicit scope requires namespace/bin/segment+; omitted scope is workspace-wide",
+      "phase_2": "complete",
+      "phase_4": "not started",
+      "toolchain": {
+        "rustc": "1.95.0 (Homebrew; session history pinned 1.96.0)",
+        "cargo": "1.95.0",
+        "moon": "2.3.2"
+      },
+      "baseline_status": {
+        "wfos_head": "d0aefaf4c7d85c8f5b1b90d9345f862076860338",
+        "workstreams_head": "288d13a3fa35c056e5610f0c125d76462e9c6bae",
+        "wfos_working_tree": "clean",
+        "workstreams_working_tree": "untracked Phase 3 spec only",
+        "intervening_commits": "none"
+      },
+      "expected_red": {
+        "bin_cli": 27,
+        "e2e_bin_path": "expected red until Command::Bin lands",
+        "e2e_graph_path": "Phase 4 fixture debt \u2014 not Phase 3"
+      },
+      "completed_note": "superseded by phase 3 completion progress entry"
+    },
     {
       "phase": "2-final-evidence-follow-up",
       "title": "Phase 2 final evidence follow-up (E01\u2013E04)",

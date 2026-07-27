@@ -36,6 +36,7 @@ mod evaluate;
 mod explain;
 mod normalize;
 mod paths;
+mod projection_eval;
 mod raw;
 
 pub use authorize::{
@@ -48,4 +49,8 @@ pub use evaluate::{
 };
 pub use explain::{render_human_policy_section, render_human_policy_summary};
 pub use normalize::{CanonicalRule, Effect, MatcherKind, NormalizedPolicySet, OriginKind};
+pub use projection_eval::{
+    AuthorizedProjectionPlan, ProjectionEvaluationInput, ProjectionEvaluationResult,
+    RejectedProjectionOutcome, evaluate_projection_policy,
+};
 pub use raw::{PolicyEnforcementRecord, ProfileEnforcement, RemoteWritePolicy};

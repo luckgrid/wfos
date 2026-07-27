@@ -1,5 +1,7 @@
 //! Exact-key environment snapshot for authorized children (never log values).
 
+use std::collections::BTreeMap;
+
 use crate::contracts::types::DiagnosticRecord;
 
 const SECRET_INDICATORS: &[&str] = &[
@@ -17,6 +19,8 @@ const SECRET_INDICATORS: &[&str] = &[
 pub enum EnvError {
     /// Key name looks secret-bearing; values are never included in the message.
     SecretKeyName { key: String },
+    /// Fixed and inherited sets conflict or contain duplicates.
+    Conflict { key: String },
 }
 
 impl EnvError {
@@ -25,6 +29,10 @@ impl EnvError {
             Self::SecretKeyName { key } => DiagnosticRecord {
                 code: "execution_contract".into(),
                 message: format!("refusing secret-named environment key `{key}`"),
+            },
+            Self::Conflict { key } => DiagnosticRecord {
+                code: "execution_contract".into(),
+                message: format!("environment key conflict for `{key}`"),
             },
         }
     }
@@ -73,6 +81,52 @@ pub fn snapshot_env(keys: &[String]) -> Result<EnvSnapshot, EnvError> {
     Ok(EnvSnapshot { pairs, diagnostics })
 }
 
+/// Build a child environment from controller-fixed pairs plus approved inherited keys.
+///
+/// Fixed values always win. Caller values never override fixed keys. Secret-like inherited
+/// names are refused. Fixed/inherited key-name conflicts are refused.
+pub fn build_child_env(
+    fixed: &BTreeMap<String, String>,
+    inherited_keys: &[String],
+) -> Result<EnvSnapshot, EnvError> {
+    let mut seen_fixed = BTreeMap::new();
+    for (k, v) in fixed {
+        if seen_fixed.insert(k.clone(), ()).is_some() {
+            return Err(EnvError::Conflict { key: k.clone() });
+        }
+        if is_secret_key_name(k) {
+            // Fixed controller keys like PANOPLY_AGENT are allowed by explicit allowlist.
+            if k != "PANOPLY_AGENT" && k != "NO_COLOR" && k != "WS_ROOT" && k != "PATH" {
+                return Err(EnvError::SecretKeyName { key: k.clone() });
+            }
+        }
+        let _ = v;
+    }
+
+    let mut inherited_seen = BTreeMap::new();
+    for key in inherited_keys {
+        if fixed.contains_key(key) {
+            return Err(EnvError::Conflict { key: key.clone() });
+        }
+        if inherited_seen.insert(key.clone(), ()).is_some() {
+            return Err(EnvError::Conflict { key: key.clone() });
+        }
+        if is_secret_key_name(key) {
+            return Err(EnvError::SecretKeyName { key: key.clone() });
+        }
+    }
+
+    let inherited = snapshot_env(inherited_keys)?;
+    let mut pairs: Vec<(String, String)> =
+        fixed.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+    pairs.extend(inherited.pairs);
+    pairs.sort_by(|a, b| a.0.cmp(&b.0));
+    Ok(EnvSnapshot {
+        pairs,
+        diagnostics: inherited.diagnostics,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -102,5 +156,28 @@ mod tests {
                     && !d.message.contains('='))
         );
         let _ = snap.pairs.iter().find(|(k, _)| k == "PATH");
+    }
+
+    #[test]
+    fn fixed_panoply_agent_cannot_be_inherited_conflict() {
+        let mut fixed = BTreeMap::new();
+        fixed.insert("PANOPLY_AGENT".into(), "1".into());
+        let err = build_child_env(&fixed, &["PANOPLY_AGENT".into()]).unwrap_err();
+        assert!(matches!(err, EnvError::Conflict { .. }));
+    }
+
+    #[test]
+    fn fixed_overrides_caller_completely() {
+        let mut fixed = BTreeMap::new();
+        fixed.insert("PANOPLY_AGENT".into(), "1".into());
+        fixed.insert("NO_COLOR".into(), "1".into());
+        let snap = build_child_env(&fixed, &[]).unwrap();
+        assert_eq!(
+            snap.pairs
+                .iter()
+                .find(|(k, _)| k == "PANOPLY_AGENT")
+                .map(|(_, v)| v.as_str()),
+            Some("1")
+        );
     }
 }

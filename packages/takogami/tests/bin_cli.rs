@@ -145,6 +145,18 @@ impl BinHarness {
         );
     }
 
+    /// Child dies by signal (default disposition) so the executor records interrupted + 128+sig.
+    fn install_ontarch_self_signal(&self, signal_name: &str) {
+        write_executable(
+            &self.canonical_ontarch,
+            &format!(
+                "#!/bin/sh\necho ran >> {m}\nkill -s {sig} $$\n",
+                m = shell_single_quote(&self.marker.to_string_lossy()),
+                sig = signal_name
+            ),
+        );
+    }
+
     fn install_ontarch_oversized_stderr(&self) {
         let good = sample_inventory(self.workspace.to_str().unwrap()).to_string();
         let out_file = self.workspace.join("child_stdout.bin");
@@ -273,7 +285,7 @@ fn assert_allow_record(rec: &Value) {
     );
     assert_eq!(rec["execution"]["started"], true);
     assert!(rec["execution"]["pid"].as_u64().unwrap_or(0) > 0);
-    assert!(rec["execution"].get("ended_at").is_some());
+    assert!(rec.get("ended_at").is_some());
     let raw = serde_json::to_string(rec).unwrap();
     assert!(!raw.contains("SECRET_SENTINEL"));
     assert!(!raw.contains("/packages/ontarch/bin/"));
@@ -445,7 +457,15 @@ fn invalid_scope_syntax_is_usage_or_contract_with_no_policy_record() {
 #[test]
 fn valid_but_policy_blocked_scope_is_deny_with_safe_record() {
     let h = BinHarness::new();
-    // Syntactically relative scope that is outside allowed bin policy paths.
+    // Grammar-valid scope blocked by an injected path deny rule.
+    let policies = h.registry.join("policies.json");
+    let mut doc: Value = serde_json::from_str(&fs::read_to_string(&policies).unwrap()).unwrap();
+    for pol in doc["policies"].as_array_mut().unwrap() {
+        if pol["id"] == "agent-bin" {
+            pol["block"]["paths"] = serde_json::json!(["bin/", "lib/", "Brand/bin/**"]);
+        }
+    }
+    fs::write(&policies, serde_json::to_string_pretty(&doc).unwrap()).unwrap();
     let out = h.run(&[
         "--json",
         "bin",
@@ -453,7 +473,7 @@ fn valid_but_policy_blocked_scope_is_deny_with_safe_record() {
         "--mode",
         "report-only",
         "--scope",
-        "lib/secret",
+        "Brand/bin/blocked",
     ]);
     assert_not_still_unimplemented(&out);
     assert_eq!(
@@ -466,6 +486,29 @@ fn valid_but_policy_blocked_scope_is_deny_with_safe_record() {
     let records = h.load_records();
     assert_eq!(records.len(), 1);
     assert_gate_or_deny_record(&records[0], "deny");
+}
+
+#[test]
+fn lib_or_src_scope_is_rejected_before_policy() {
+    let h = BinHarness::new();
+    let out = h.run(&[
+        "--json",
+        "bin",
+        "cleanup",
+        "--mode",
+        "report-only",
+        "--scope",
+        "lib/secret",
+    ]);
+    assert_not_still_unimplemented(&out);
+    assert!(
+        matches!(out.status.code(), Some(code) if code == USAGE as i32 || code == CONTRACT as i32),
+        "lib/src scope must fail pre-policy; got {:?}: {}",
+        out.status.code(),
+        stderr(&out)
+    );
+    assert!(h.load_records().is_empty());
+    h.assert_marker_untouched();
 }
 
 #[test]
@@ -485,34 +528,34 @@ fn missing_canonical_ontarch_fails_before_spawn_even_when_path_replacement_exist
 
 #[test]
 fn projection_executable_identity_drift_after_seal_fails_preflight() {
-    // Honest stub: true post-seal drift requires a Phase 3 injectable seam.
-    // Until that seam exists, this documents the required contract and fails closed
-    // the same way as missing-canonical (no PATH fallback).
     let h = BinHarness::new();
-    // Replace canonical with a non-executable after "seal" would have bound identity:
-    // Phase 3 must inject between authorize and spawn; for now assert no PATH rescue.
-    fs::remove_file(&h.canonical_ontarch).unwrap();
     write_executable(
         &h.path_dir.join("ontarch"),
         "#!/bin/sh\necho path-rescue\nexit 0\n",
     );
-    let out = h.run(&["--json", "bin", "report"]);
+    let out = h.run_env(
+        &["--json", "bin", "report"],
+        &[("TAKOGAMI_TEST_INJECT_EXE_DRIFT", "1")],
+    );
     assert_not_still_unimplemented(&out);
     assert_ne!(out.status.code(), Some(SUCCESS as i32));
     assert!(
         !h.path_decoy_marker.exists(),
         "must not rescue via PATH after identity loss"
     );
+    h.assert_marker_untouched();
 }
 
 #[test]
 fn projection_cwd_identity_drift_after_seal_fails_preflight() {
-    // Named Phase 3 seam stub — same honest posture as executable drift.
     let h = BinHarness::new();
-    let out = h.run(&["--json", "bin", "report"]);
+    let out = h.run_env(
+        &["--json", "bin", "report"],
+        &[("TAKOGAMI_TEST_INJECT_CWD_DRIFT", "1")],
+    );
     assert_not_still_unimplemented(&out);
-    // When Phase 3 lands, replace this with post-seal cwd mutation via injectable hook.
-    panic!("Phase 3 seam required: inject cwd identity drift after seal, before spawn");
+    assert_ne!(out.status.code(), Some(SUCCESS as i32));
+    h.assert_marker_untouched();
 }
 
 #[test]
@@ -575,6 +618,80 @@ fn child_nonzero_exit_preserved_with_terminal_record() {
     assert_eq!(rec["execution"]["outcome"], "completed");
     assert_eq!(rec["execution"]["exit_code"], 7);
     assert_eq!(rec["execution"]["started"], true);
+}
+
+#[test]
+fn child_signal_exit_preserved_with_terminal_record() {
+    let h = BinHarness::new();
+    h.install_ontarch_self_signal("TERM");
+    let out = h.run(&["--json", "bin", "report"]);
+    assert_not_still_unimplemented(&out);
+    assert_eq!(out.status.code(), Some(143), "{}", stderr(&out));
+    let rec = &h.load_records()[0];
+    assert_eq!(rec["execution"]["outcome"], "interrupted");
+    assert_eq!(rec["execution"]["signal"], "SIGTERM");
+    assert_eq!(rec["execution"]["exit_code"], 143);
+    assert_eq!(rec["execution"]["started"], true);
+    h.assert_marker_once();
+}
+
+#[test]
+fn broken_pipe_on_bin_report_json_is_success_and_finalizes() {
+    let h = BinHarness::new();
+    let mut child = bin()
+        .arg("--state-home")
+        .arg(&h.state_home)
+        .args(["--json", "bin", "report"])
+        .env("TAKOGAMI_ONTARCH_REGISTRY", &h.registry)
+        .env("TAKOGAMI_WORKSPACE_ROOT", &h.workspace)
+        .env("TAKOGAMI_STATE_HOME", &h.state_home)
+        .env("PATH", &h.path_dir)
+        .env_remove("TAKOGAMI_PROFILE")
+        .env_remove("XDG_STATE_HOME")
+        .env_remove("PANOPLY_AGENT")
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("spawn");
+    drop(child.stdout.take());
+    let status = child.wait().expect("wait");
+    assert_eq!(
+        status.code(),
+        Some(SUCCESS as i32),
+        "broken pipe must not override Allow success"
+    );
+    assert_eq!(h.load_records().len(), 1);
+    assert_eq!(h.load_records()[0]["execution"]["outcome"], "completed");
+    h.assert_marker_once();
+}
+
+#[test]
+fn broken_pipe_on_bin_gate_preserves_policy_exit() {
+    let h = BinHarness::new();
+    let mut child = bin()
+        .arg("--state-home")
+        .arg(&h.state_home)
+        .args(["--json", "bin", "cleanup", "--mode", "dry-run"])
+        .env("TAKOGAMI_ONTARCH_REGISTRY", &h.registry)
+        .env("TAKOGAMI_WORKSPACE_ROOT", &h.workspace)
+        .env("TAKOGAMI_STATE_HOME", &h.state_home)
+        .env("PATH", &h.path_dir)
+        .env_remove("TAKOGAMI_PROFILE")
+        .env_remove("XDG_STATE_HOME")
+        .env_remove("PANOPLY_AGENT")
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("spawn");
+    drop(child.stdout.take());
+    let status = child.wait().expect("wait");
+    assert_eq!(
+        status.code(),
+        Some(POLICY_GATE as i32),
+        "broken pipe must preserve Gate exit"
+    );
+    h.assert_marker_untouched();
+    assert_eq!(h.load_records().len(), 1);
 }
 
 #[test]
@@ -696,4 +813,122 @@ fn prose_child_stdout_is_rejected_not_scraped() {
     let out = h.run(&["--json", "bin", "report"]);
     assert_not_still_unimplemented(&out);
     assert_ne!(out.status.code(), Some(SUCCESS as i32));
+}
+
+#[test]
+fn scope_absent_allows_workspace_wide_report_only() {
+    let h = BinHarness::new();
+    let out = h.run(&["--json", "bin", "cleanup", "--mode", "report-only"]);
+    assert_not_still_unimplemented(&out);
+    assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
+    let rec = &h.load_records()[0];
+    assert!(
+        !rec["request"]["flags"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|f| f == "scope_provided")
+    );
+}
+
+#[test]
+fn workflow_scope_is_accepted_and_forwarded_literally() {
+    let h = BinHarness::new();
+    let out = h.run(&[
+        "--json",
+        "bin",
+        "cleanup",
+        "--mode",
+        "report-only",
+        "--scope",
+        "Build/bin/wfos",
+    ]);
+    assert_not_still_unimplemented(&out);
+    assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
+    let rec = &h.load_records()[0];
+    assert!(
+        rec["request"]["flags"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|f| f == "scope_provided")
+    );
+    assert_no_absolute_leak(&out, &h.load_records(), h.workspace.to_str().unwrap());
+}
+
+#[test]
+fn namespace_root_scope_plan_bin_is_rejected() {
+    let h = BinHarness::new();
+    let out = h.run(&[
+        "--json",
+        "bin",
+        "cleanup",
+        "--mode",
+        "report-only",
+        "--scope",
+        "Plan/bin",
+    ]);
+    assert_not_still_unimplemented(&out);
+    assert!(matches!(
+        out.status.code(),
+        Some(code) if code == USAGE as i32 || code == CONTRACT as i32
+    ));
+    assert!(h.load_records().is_empty());
+    h.assert_marker_untouched();
+}
+
+#[test]
+fn namespace_root_scope_build_bin_is_rejected() {
+    let h = BinHarness::new();
+    let out = h.run(&[
+        "--json",
+        "bin",
+        "cleanup",
+        "--mode",
+        "report-only",
+        "--scope",
+        "Build/bin",
+    ]);
+    assert_not_still_unimplemented(&out);
+    assert!(matches!(
+        out.status.code(),
+        Some(code) if code == USAGE as i32 || code == CONTRACT as i32
+    ));
+    assert!(h.load_records().is_empty());
+}
+
+#[test]
+fn scope_with_traversal_is_rejected_before_policy() {
+    let h = BinHarness::new();
+    let out = h.run(&[
+        "--json",
+        "bin",
+        "cleanup",
+        "--mode",
+        "report-only",
+        "--scope",
+        "Build/bin/../lib",
+    ]);
+    assert!(h.load_records().is_empty());
+    h.assert_marker_untouched();
+    assert_ne!(out.status.code(), Some(SUCCESS as i32));
+}
+
+#[test]
+fn validated_scope_record_stores_only_scope_provided() {
+    let h = BinHarness::new();
+    let out = h.run(&[
+        "--json",
+        "bin",
+        "cleanup",
+        "--mode",
+        "report-only",
+        "--scope",
+        "Build/bin/demo",
+    ]);
+    assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
+    let rec = &h.load_records()[0];
+    let blob = serde_json::to_string(rec).unwrap();
+    assert!(blob.contains("scope_provided"));
+    assert!(!blob.contains("Build/bin/demo"));
 }

@@ -13,7 +13,9 @@ moon run ontarch:bin-report
 ```
 
 The report walks every namespace `bin/<workflow>/` under the Workstreams root
-(`Plan/bin`, `Build/bin`, `Control/bin`, …). For each workflow directory it records:
+(`Plan/bin`, `Build/bin`, `Control/bin`, …).
+
+These namespace bin roots are inventory *walk* roots, not accepted Takogami explicit `--scope` values. For each workflow directory it records:
 
 | Field | Meaning |
 |-------|---------|
@@ -52,6 +54,21 @@ Retention values:
 
 See `packages/ontarch/schemas/manifest.schema.json` and the fixture at
 `packages/ontarch/registry/fixtures/example-manifest.json`.
+
+
+## Takogami `--scope` (D9 Option B)
+
+When routing cleanup through the runtime controller (`takogami bin cleanup`), an explicit
+`--scope` must be a workflow/subtree path:
+
+```text
+<namespace>/bin/<segment>[/<segment>...]
+```
+
+Examples: `Plan/bin/research`, `Build/bin/wfos`, `Build/bin/wfos/reviews`.
+Namespace roots such as `Plan/bin` or `Build/bin` are **not** valid explicit scopes.
+Omitting `--scope` keeps workspace-wide non-mutating report/planning behavior.
+The Phase 1 Ontarch schema grammar is unchanged.
 
 ## Cleanup modes
 

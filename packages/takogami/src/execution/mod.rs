@@ -5,7 +5,7 @@ mod process;
 mod signals;
 mod streams;
 
-pub use environment::{EnvError, EnvSnapshot, snapshot_env};
+pub use environment::{EnvError, EnvSnapshot, build_child_env, snapshot_env};
 pub use process::TokioExecutor;
 pub use signals::{NullSignalSource, ProcessGroupGuard, SignalSource, UnixSignalSource};
 pub use streams::{
@@ -72,6 +72,7 @@ pub struct StreamSummary {
     pub truncated: bool,
     pub total_bytes: u64,
     pub captured_bytes: u64,
+    pub bytes: Vec<u8>,
 }
 
 impl StreamSummary {
@@ -82,6 +83,7 @@ impl StreamSummary {
             truncated: false,
             total_bytes: 0,
             captured_bytes: 0,
+            bytes: Vec::new(),
         }
     }
 
@@ -98,6 +100,7 @@ impl StreamSummary {
             truncated: capture.truncated,
             total_bytes: capture.total_bytes,
             captured_bytes: capture.bytes.len() as u64,
+            bytes: capture.bytes.clone(),
         }
     }
 }

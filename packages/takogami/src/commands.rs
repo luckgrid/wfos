@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::cli::{Command, GraphFormat, ListTarget, SessionCommand};
+use crate::cli::{BinCleanupMode, BinCommand, Command, GraphFormat, ListTarget, SessionCommand};
 use crate::contracts::types::{
     DiagnosticRecord, ExecutionRecord, OutputSummary, RECORD_KIND_COMMAND_EXECUTION, RequestRecord,
     RuntimeCommandRecord, SCHEMA_VERSION,
@@ -41,6 +41,17 @@ pub async fn dispatch_implemented(
         Command::Interfaces { validate } => run_interfaces(sink, *validate),
         Command::Session { sub } => run_session(sink, sub, cli_state_home, cli_profile),
         Command::Graph { format } => run_graph(sink, *format),
+        Command::Bin { sub } => {
+            run_bin(
+                sink,
+                sub,
+                cli_profile,
+                cli_state_home,
+                &TokioExecutor,
+                &default_store_factory,
+            )
+            .await
+        }
         Command::Dev { .. } | Command::Build { .. } | Command::Check { .. } => {
             let (verb, unit, explain, execute) =
                 command.lifecycle_parts().expect("lifecycle command");
@@ -57,9 +68,6 @@ pub async fn dispatch_implemented(
             )
             .await
         }
-        _ => Err(ControllerError::internal(
-            "dispatch_implemented called for unimplemented command",
-        )),
     }
 }
 
@@ -1750,5 +1758,411 @@ adapter = "direct""#,
         assert_eq!(code, NOT_IMPLEMENTED);
         assert_eq!(executor.calls.load(std::sync::atomic::Ordering::SeqCst), 1);
         fx.assert_marker_untouched();
+    }
+}
+
+async fn run_bin(
+    sink: &OutputSink,
+    sub: &BinCommand,
+    cli_profile: Option<&str>,
+    cli_state_home: Option<&Path>,
+    executor: &TokioExecutor,
+    open_store: &StoreFactory,
+) -> Result<u8, ControllerError> {
+    use crate::bin_projection::{CleanupMode, decode_cleanup_plan, decode_inventory};
+    use crate::contracts::{OutputSummary, SCHEMA_VERSION};
+    use crate::policy::{
+        ProjectionEvaluationInput, ProjectionEvaluationResult, evaluate_projection_policy,
+    };
+    use crate::projection::{
+        ProjectionOperation, ScopeError, SealedProjectionPlan, ValidatedBinScope,
+    };
+    use crate::resolution::profile::{collect_bin_policy_refs, select_profile};
+    use crate::resolution::{CorrelationIdGenerator, DefaultIdGenerator};
+
+    let (operation, raw_scope) = match sub {
+        BinCommand::Report => (ProjectionOperation::BinReport, None),
+        BinCommand::Cleanup { mode, scope } => {
+            let op = match mode {
+                BinCleanupMode::ReportOnly => ProjectionOperation::BinCleanupReportOnly,
+                BinCleanupMode::DryRun => ProjectionOperation::BinCleanupDryRun,
+                BinCleanupMode::Archive => ProjectionOperation::BinCleanupArchive,
+                BinCleanupMode::DeleteApproved => ProjectionOperation::BinCleanupDeleteApproved,
+            };
+            (op, scope.as_deref())
+        }
+    };
+
+    let scope = match raw_scope {
+        None => None,
+        Some(raw) => match ValidatedBinScope::parse(raw) {
+            Ok(s) => Some(s),
+            Err(_) => {
+                let err = ControllerError::usage(format!(
+                    "{} ({})",
+                    ScopeError::Invalid.message(),
+                    ScopeError::Invalid.code()
+                ));
+                return sink
+                    .emit_error("bin", &err)
+                    .map_err(|e| ControllerError::internal(e.to_string()));
+            }
+        },
+    };
+
+    let paths = resolve_registry_paths()?;
+    let access = RegistryAccess::new(paths.clone());
+    let profiles = access
+        .load_profiles()
+        .map_err(|e| ControllerError::contract(format!("profile registry unavailable: {e}")))?;
+    let profile = select_profile(
+        &profiles,
+        cli_profile,
+        std::env::var("TAKOGAMI_PROFILE").ok().as_deref(),
+    )
+    .map_err(|e| ControllerError::contract(format!("profile selection failed: {e:?}")))?;
+    let policies_doc = access
+        .load_policies()
+        .map_err(|e| ControllerError::contract(format!("policy registry unavailable: {e}")))?;
+    let selected = collect_bin_policy_refs(&policies_doc, &profile)
+        .map_err(|e| ControllerError::contract(format!("policy selection failed: {e:?}")))?;
+
+    let mut id_gen = DefaultIdGenerator::default();
+    let session_id = id_gen.next_id();
+    let policy_root = paths
+        .workspace_root
+        .canonicalize()
+        .map_err(|e| ControllerError::contract(format!("cannot canonicalize policy root: {e}")))?;
+
+    let approved_path = std::env::var("PATH").ok();
+    let sealed = SealedProjectionPlan::seal(
+        operation,
+        &paths.registry_root,
+        &paths.workspace_root,
+        scope,
+        session_id.clone(),
+        selected.profile.id.clone(),
+        selected.policy_ids.clone(),
+        approved_path.as_deref(),
+    )
+    .map_err(|e| ControllerError::ExecutionIo {
+        message: e.message(),
+        code: e.code().into(),
+    })?;
+
+    let eval_input = ProjectionEvaluationInput::new(
+        sealed.clone(),
+        selected.profile.clone(),
+        selected.policies.clone(),
+        selected.policy_origins.clone(),
+        policy_root,
+    );
+    let eval = evaluate_projection_policy(&eval_input);
+
+    let command_name = operation.request_command_name();
+    let env_state = std::env::var("TAKOGAMI_STATE_HOME").ok();
+    let env_xdg = std::env::var("XDG_STATE_HOME").ok();
+    let state_home = resolve_session_state_home(StateHomeInputs {
+        cli_state_home,
+        env_takogami_state_home: env_state.as_deref(),
+        profile_session_state_home: selected.profile.session_state_home.as_deref(),
+        env_xdg_state_home: env_xdg.as_deref(),
+        home_dir: dirs_home(),
+    });
+
+    match eval {
+        ProjectionEvaluationResult::Contract(err) => {
+            let kind_code = err.kind.code();
+            let ctrl = ControllerError::PolicyContract {
+                code: kind_code.into(),
+                message: err.message.clone(),
+                details: Box::new(crate::error::PolicyContractDetails {
+                    code: kind_code.into(),
+                    message: err.message.clone(),
+                    session_id: err.session_id.clone(),
+                    plan_digest: err.plan_digest.clone(),
+                    policy_id: err.policy_id.clone(),
+                    field: err.field.clone(),
+                }),
+            };
+            sink.emit_error("bin", &ctrl)
+                .map_err(|e| ControllerError::internal(e.to_string()))
+        }
+        ProjectionEvaluationResult::Rejected(rejected) => {
+            let outcome = match rejected.decision() {
+                PolicyDecision::Deny { .. } => "denied",
+                PolicyDecision::Gate { .. } => "gated",
+                PolicyDecision::Allow { .. } => {
+                    return Err(ControllerError::internal(
+                        "projection evaluator returned Allow without authorization",
+                    ));
+                }
+            };
+            let mut record = projection_terminal_record(
+                rejected.plan(),
+                rejected.decision().clone(),
+                outcome,
+                false,
+                None,
+                None,
+                None,
+            );
+            if rejected.deferred_unavailable() {
+                record.error = Some(DiagnosticRecord {
+                    code: "deferred_unavailable".into(),
+                    message: "archive/delete-approved remain deferred; no child spawn".into(),
+                });
+            } else {
+                record.error = Some(DiagnosticRecord {
+                    code: if outcome == "denied" {
+                        "policy_deny".into()
+                    } else {
+                        "policy_gate".into()
+                    },
+                    message: format!("{outcome} by policy"),
+                });
+            }
+            persist_terminal(open_store, &state_home, &record)?;
+
+            let exit = match rejected.decision() {
+                PolicyDecision::Deny { .. } => crate::exit_codes::POLICY_DENY,
+                PolicyDecision::Gate { .. } => crate::exit_codes::POLICY_GATE,
+                PolicyDecision::Allow { .. } => unreachable!(),
+            };
+            let mut data = serde_json::json!({
+                "policy_decision": rejected.decision(),
+                "plan_digest": rejected.plan().plan_digest(),
+                "session_id": rejected.plan().session_id(),
+            });
+            if rejected.deferred_unavailable() {
+                data["deferred_unavailable"] = serde_json::json!(true);
+                data["diagnostics"] = serde_json::json!([{
+                    "code": "deferred_unavailable",
+                    "message": "archive/delete-approved remain deferred; no child spawn"
+                }]);
+            }
+            let status = if exit == crate::exit_codes::POLICY_GATE {
+                "gated"
+            } else {
+                "denied"
+            };
+            let envelope = crate::contracts::CommandEnvelope {
+                schema_version: SCHEMA_VERSION.into(),
+                command: command_name.into(),
+                session_id: Some(rejected.plan().session_id().into()),
+                status: status.into(),
+                exit_code: exit,
+                data: Some(data),
+                explanation: None,
+                diagnostics: if rejected.deferred_unavailable() {
+                    vec![DiagnosticRecord {
+                        code: "deferred_unavailable".into(),
+                        message: "archive/delete-approved remain deferred; no child spawn".into(),
+                    }]
+                } else {
+                    vec![]
+                },
+                child: None,
+                metrics: None,
+            };
+            match sink.emit_envelope(&envelope) {
+                Ok(()) => Ok(exit),
+                Err(e) if crate::output::is_broken_pipe(&e) => Ok(exit),
+                Err(e) => Err(ControllerError::internal(e.to_string())),
+            }
+        }
+        ProjectionEvaluationResult::Authorized(authorized) => {
+            let plan = authorized.plan();
+            let store = open_store(&state_home).map_err(|e| ControllerError::StateIo {
+                message: e.to_string(),
+                code: e.code().into(),
+            })?;
+            let lock =
+                store
+                    .acquire_lock(plan.session_id())
+                    .map_err(|e| ControllerError::StateIo {
+                        message: e.to_string(),
+                        code: e.code().into(),
+                    })?;
+
+            let mut pending = projection_terminal_record(
+                plan,
+                authorized.policy_decision().clone(),
+                "pending",
+                false,
+                None,
+                None,
+                None,
+            );
+            pending.ended_at = None;
+            store
+                .write_pending(&pending, &lock)
+                .map_err(|e| ControllerError::StateIo {
+                    message: e.to_string(),
+                    code: e.code().into(),
+                })?;
+
+            let report = executor
+                .execute_projection(&authorized, &crate::execution::ExecutionOptions::default())
+                .await;
+
+            if report.spawned {
+                let mut pid_pending = pending.clone();
+                pid_pending.execution.started = true;
+                pid_pending.execution.pid = report.pid;
+                if let Err(e) = store.write_final(&pid_pending, &lock) {
+                    // PID-pending failure still propagates; child may have started.
+                    drop(lock);
+                    return Err(ControllerError::StateIo {
+                        message: e.to_string(),
+                        code: e.code().into(),
+                    });
+                }
+            }
+
+            let mut outcome = report.outcome.clone();
+            let mut exit = report.exit_code.unwrap_or(crate::exit_codes::EXECUTION_IO);
+            let mut payload_value = None;
+            let mut diagnostics = report.diagnostics.clone();
+            let mut controller_error = None;
+
+            if report.spawned && report.signal.is_none() && report.exit_code == Some(0) {
+                let stdout_bytes = report.stdout.bytes.clone();
+                let truncated = report.stdout.truncated;
+                let validate_result = match operation {
+                    ProjectionOperation::BinReport => {
+                        decode_inventory(&stdout_bytes, truncated, &paths.workspace_root)
+                            .map(|inv| serde_json::to_value(inv).unwrap())
+                    }
+                    ProjectionOperation::BinCleanupReportOnly => decode_cleanup_plan(
+                        &stdout_bytes,
+                        truncated,
+                        CleanupMode::ReportOnly,
+                        plan.safe_scope(),
+                    )
+                    .map(|p| serde_json::to_value(p).unwrap()),
+                    _ => unreachable!("authorized path only for child-supported ops"),
+                };
+                match validate_result {
+                    Ok(v) => payload_value = Some(v),
+                    Err(pe) => {
+                        outcome = "controller_error".into();
+                        exit = crate::exit_codes::CONTRACT;
+                        diagnostics.push(DiagnosticRecord {
+                            code: pe.code().into(),
+                            message: pe.message(),
+                        });
+                        controller_error = Some(DiagnosticRecord {
+                            code: pe.code().into(),
+                            message: pe.message(),
+                        });
+                    }
+                }
+            } else if report.spawned && report.exit_code != Some(0) {
+                // Preserve native nonzero exit.
+                exit = report.exit_code.unwrap_or(1);
+            } else if !report.spawned {
+                exit = crate::exit_codes::EXECUTION_IO;
+                outcome = report.outcome;
+            }
+
+            let terminal = projection_terminal_record(
+                plan,
+                authorized.policy_decision().clone(),
+                &outcome,
+                report.spawned,
+                report.pid,
+                report.exit_code,
+                report.signal.clone(),
+            );
+            let mut terminal = terminal;
+            terminal.output_summary = OutputSummary {
+                stdout_bytes: report.stdout.total_bytes,
+                stderr_bytes: report.stderr.total_bytes,
+                truncated: report.stdout.truncated || report.stderr.truncated,
+                encoding: report.stdout.encoding.clone(),
+                compressor: report.compressor.clone(),
+            };
+            terminal.error = controller_error;
+            if let Err(e) = store.write_final(&terminal, &lock) {
+                drop(lock);
+                return Err(ControllerError::StateIo {
+                    message: e.to_string(),
+                    code: e.code().into(),
+                });
+            }
+            drop(lock);
+
+            let data = serde_json::json!({
+                "policy_decision": authorized.policy_decision(),
+                "plan_digest": plan.plan_digest(),
+                "session_id": plan.session_id(),
+                "execution": {
+                    "outcome": outcome,
+                    "started": report.spawned,
+                    "pid": report.pid,
+                    "exit_code": report.exit_code,
+                    "signal": report.signal,
+                },
+                "payload": payload_value,
+            });
+            let status = if exit == 0 { "ok" } else { "error" };
+            let envelope = crate::contracts::CommandEnvelope {
+                schema_version: SCHEMA_VERSION.into(),
+                command: command_name.into(),
+                session_id: Some(plan.session_id().into()),
+                status: status.into(),
+                exit_code: exit,
+                data: Some(data),
+                explanation: None,
+                diagnostics,
+                child: None,
+                metrics: None,
+            };
+            match sink.emit_envelope(&envelope) {
+                Ok(()) => Ok(exit),
+                Err(e) if crate::output::is_broken_pipe(&e) => Ok(exit),
+                Err(e) => Err(ControllerError::internal(e.to_string())),
+            }
+        }
+    }
+}
+
+fn projection_terminal_record(
+    plan: &crate::projection::SealedProjectionPlan,
+    decision: PolicyDecision,
+    outcome: &str,
+    started: bool,
+    pid: Option<u32>,
+    exit_code: Option<u8>,
+    signal: Option<String>,
+) -> RuntimeCommandRecord {
+    use crate::sessions::utc_now_rfc3339;
+    let ended = outcome != "pending";
+    RuntimeCommandRecord {
+        schema_version: SCHEMA_VERSION.into(),
+        record_kind: RECORD_KIND_COMMAND_EXECUTION.into(),
+        session_id: plan.session_id().into(),
+        plan_digest: plan.plan_digest().into(),
+        parent_session_id: None,
+        work_session_id: None,
+        runtime_context: None,
+        started_at: utc_now_rfc3339(),
+        ended_at: ended.then(utc_now_rfc3339),
+        actor: "agent".into(),
+        profile_id: plan.profile_id().into(),
+        request: plan.safe_request().clone(),
+        resolution: None,
+        policy_decision: decision,
+        execution: ExecutionRecord {
+            started,
+            pid,
+            exit_code,
+            signal,
+            outcome: outcome.into(),
+        },
+        source_fingerprints: plan.source_fingerprints().to_vec(),
+        output_summary: empty_output(),
+        error: None,
     }
 }

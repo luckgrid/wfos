@@ -110,6 +110,70 @@ pub fn collect_policy_refs(
     })
 }
 
+pub fn collect_bin_policy_refs(
+    policies: &PoliciesDocument,
+    profile: &ProfileRecord,
+) -> Result<SelectedProfile, ResolutionCode> {
+    let mut seen_ids = BTreeSet::new();
+    for p in &policies.policies {
+        if !seen_ids.insert(p.id.as_str()) {
+            return Err(ResolutionCode::PolicyDuplicate { id: p.id.clone() });
+        }
+    }
+
+    let mut origins: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    let push = |map: &mut BTreeMap<String, BTreeSet<String>>, id: &str, origin: &str| {
+        map.entry(id.to_string())
+            .or_default()
+            .insert(origin.to_string());
+    };
+
+    for p in &policies.policies {
+        if p.applies_to.as_deref() == Some("agent") {
+            push(&mut origins, &p.id, "global agent policy");
+        }
+    }
+    if let Some(rails) = profile.rails.as_deref() {
+        push(&mut origins, rails, "profile rails");
+    }
+    if let Some(rails_bin) = profile.rails_bin.as_deref() {
+        push(&mut origins, rails_bin, "profile rails_bin");
+    }
+
+    let by_id: BTreeMap<&str, &PolicyRecord> = policies
+        .policies
+        .iter()
+        .map(|p| (p.id.as_str(), p))
+        .collect();
+
+    for id in origins.keys() {
+        if !by_id.contains_key(id.as_str()) {
+            return Err(ResolutionCode::PolicyNotFound { id: id.clone() });
+        }
+    }
+
+    let policy_ids: Vec<String> = origins.keys().cloned().collect();
+    let selected_policies = policy_ids
+        .iter()
+        .filter_map(|id| by_id.get(id.as_str()).map(|policy| (*policy).clone()))
+        .collect();
+    let policy_origins: Vec<(String, String)> = origins
+        .iter()
+        .map(|(id, labels)| {
+            let mut sorted: Vec<_> = labels.iter().cloned().collect();
+            sorted.sort();
+            (id.clone(), sorted.join(", "))
+        })
+        .collect();
+
+    Ok(SelectedProfile {
+        profile: profile.clone(),
+        policies: selected_policies,
+        policy_ids,
+        policy_origins,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
