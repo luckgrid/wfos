@@ -467,11 +467,16 @@ fn resolve_helper_authority(
         helpers.push(resolve_named_helper(name, &search_dirs)?);
     }
     // Prefer fd, else find — seal the winner under its real name.
-    let lookup = resolve_named_helper("fd", &search_dirs)
-        .or_else(|_| resolve_named_helper("find", &search_dirs))
-        .map_err(|_| {
-            ProjectionSealError::ToolPath("required helper fd or find not found".into())
-        })?;
+    // Fall through to find only when fd is genuinely absent (ToolPath), never when an
+    // executable first match failed controller trust (Identity / fail-closed).
+    let lookup = match resolve_named_helper("fd", &search_dirs) {
+        Ok(id) => id,
+        Err(ProjectionSealError::ToolPath(_)) => resolve_named_helper("find", &search_dirs)
+            .map_err(|_| {
+                ProjectionSealError::ToolPath("required helper fd or find not found".into())
+            })?,
+        Err(e) => return Err(e),
+    };
     helpers.push(lookup);
 
     // Child PATH directories follow controller search-directory authority order, not helper-name
@@ -543,16 +548,24 @@ fn parse_sealed_path_dirs(path: &str) -> Result<Vec<PathBuf>, ProjectionSealErro
 }
 
 /// Pure-Rust first-match resolver over ordered PATH directories (no shell / which / command -v).
+///
+/// Shell-eligibility model (locked): POSIX `execvp` / bash PATH search — follow symlinks,
+/// select the first non-directory path with any execute bit. Controller trust is applied only
+/// to that first child-visible match; an untrusted executable never continues to a later dir.
 fn resolve_helper_first_match(
     name: &str,
     path_dirs: &[PathBuf],
 ) -> Result<HelperIdentity, ProjectionSealError> {
     for dir in path_dirs {
         let candidate = dir.join(name);
-        match try_seal_helper_candidate(name, &candidate) {
-            Ok(id) => return Ok(id),
-            Err(ProjectionSealError::ToolPath(_)) => continue,
-            Err(e) => return Err(e),
+        match classify_helper_candidate(name, &candidate) {
+            HelperCandidate::NoShellMatch => continue,
+            HelperCandidate::Trusted(id) => return Ok(id),
+            HelperCandidate::Untrusted(reason) => {
+                return Err(ProjectionSealError::Identity(format!(
+                    "helper {name} first PATH match failed controller trust: {reason}"
+                )));
+            }
         }
     }
     Err(ProjectionSealError::Identity(format!(
@@ -582,10 +595,14 @@ fn resolve_named_helper(
 ) -> Result<HelperIdentity, ProjectionSealError> {
     for dir in search_dirs {
         let candidate = dir.join(name);
-        match try_seal_helper_candidate(name, &candidate) {
-            Ok(id) => return Ok(id),
-            Err(ProjectionSealError::ToolPath(_)) => continue,
-            Err(e) => return Err(e),
+        match classify_helper_candidate(name, &candidate) {
+            HelperCandidate::NoShellMatch => continue,
+            HelperCandidate::Trusted(id) => return Ok(id),
+            HelperCandidate::Untrusted(reason) => {
+                return Err(ProjectionSealError::Identity(format!(
+                    "helper {name} first PATH match failed controller trust: {reason}"
+                )));
+            }
         }
     }
     Err(ProjectionSealError::ToolPath(format!(
@@ -593,68 +610,83 @@ fn resolve_named_helper(
     )))
 }
 
-fn try_seal_helper_candidate(
-    name: &str,
-    candidate: &Path,
-) -> Result<HelperIdentity, ProjectionSealError> {
-    let _meta = fs::symlink_metadata(candidate)
-        .map_err(|_| ProjectionSealError::ToolPath(format!("required helper {name} not found")))?;
-    // Parent directory of the lookup path must not be a world-writable non-symlink dir.
+/// Internal classification separating shell eligibility from controller trust.
+///
+/// `NoShellMatch` — the child would not select this path; keep searching.
+/// `Trusted` — first child-visible match that also passes controller trust.
+/// `Untrusted` — first child-visible match rejected by trust; stop immediately.
+#[derive(Debug)]
+enum HelperCandidate {
+    NoShellMatch,
+    Trusted(HelperIdentity),
+    Untrusted(String),
+}
+
+fn classify_helper_candidate(name: &str, candidate: &Path) -> HelperCandidate {
+    // Shell eligibility: follow symlinks (child execvp does). NotFound → keep searching.
+    let shell_meta = match fs::metadata(candidate) {
+        Ok(m) => m,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return HelperCandidate::NoShellMatch;
+        }
+        Err(_) => {
+            // Eligibility undeterminable (PermissionDenied, ELOOP, …) — fail closed.
+            return HelperCandidate::Untrusted(
+                "candidate eligibility could not be determined safely".into(),
+            );
+        }
+    };
+    if !shell_meta.is_file() {
+        // Directory / FIFO / socket: child PATH search continues.
+        return HelperCandidate::NoShellMatch;
+    }
+    if shell_meta.permissions().mode() & 0o111 == 0 {
+        return HelperCandidate::NoShellMatch;
+    }
+
+    // First child-visible executable match — apply controller trust to this exact candidate.
+    if !candidate.is_absolute() {
+        return HelperCandidate::Untrusted("lookup path must be absolute".into());
+    }
     if let Some(parent) = candidate.parent() {
         let Ok(pm) = fs::symlink_metadata(parent) else {
-            return Err(ProjectionSealError::ToolPath(format!(
-                "helper {name} parent missing"
-            )));
+            return HelperCandidate::Untrusted("parent missing".into());
         };
         if pm.file_type().is_symlink() {
-            return Err(ProjectionSealError::ToolPath(format!(
-                "helper {name} parent must not be a symlink directory"
-            )));
+            return HelperCandidate::Untrusted("parent must not be a symlink directory".into());
         }
         if is_world_writable(&pm) {
-            return Err(ProjectionSealError::ToolPath(format!(
-                "helper {name} parent directory is world-writable"
-            )));
+            return HelperCandidate::Untrusted("parent directory is world-writable".into());
         }
     }
-    // Allow symlink applets (Alpine busybox): seal the canonical regular-file target.
-    let canonical = candidate
-        .canonicalize()
-        .map_err(|_| ProjectionSealError::ToolPath(format!("helper {name} does not resolve")))?;
-    let target_meta = fs::symlink_metadata(&canonical)
-        .map_err(|_| ProjectionSealError::ToolPath(format!("helper {name} target missing")))?;
+    let Ok(canonical) = candidate.canonicalize() else {
+        return HelperCandidate::Untrusted("does not resolve".into());
+    };
+    let Ok(target_meta) = fs::symlink_metadata(&canonical) else {
+        return HelperCandidate::Untrusted("target missing".into());
+    };
     if target_meta.file_type().is_symlink() {
-        return Err(ProjectionSealError::ToolPath(format!(
-            "helper {name} resolved to a symlink"
-        )));
+        return HelperCandidate::Untrusted("resolved to a symlink".into());
     }
     if !target_meta.is_file() {
-        return Err(ProjectionSealError::ToolPath(format!(
-            "helper {name} is not a regular file"
-        )));
+        return HelperCandidate::Untrusted("is not a regular file".into());
     }
     if target_meta.permissions().mode() & 0o111 == 0 {
-        return Err(ProjectionSealError::ToolPath(format!(
-            "helper {name} is not executable"
-        )));
+        return HelperCandidate::Untrusted("is not executable".into());
     }
     if is_world_writable(&target_meta) {
-        return Err(ProjectionSealError::ToolPath(format!(
-            "helper {name} is world-writable"
-        )));
+        return HelperCandidate::Untrusted("target is world-writable".into());
     }
-    let digest = sha256_hex_regular_nofollow(&canonical, name).map_err(|e| {
-        ProjectionSealError::ToolPath(format!(
-            "helper {name} fingerprint failed: {}",
-            e.public_message()
-        ))
-    })?;
-    if !candidate.is_absolute() {
-        return Err(ProjectionSealError::ToolPath(format!(
-            "helper {name} lookup path must be absolute"
-        )));
-    }
-    Ok(HelperIdentity {
+    let digest = match sha256_hex_regular_nofollow(&canonical, name) {
+        Ok(d) => d,
+        Err(e) => {
+            return HelperCandidate::Untrusted(format!(
+                "fingerprint failed: {}",
+                e.public_message()
+            ));
+        }
+    };
+    HelperCandidate::Trusted(HelperIdentity {
         name: name.to_string(),
         lookup_path: candidate.to_path_buf(),
         canonical_path: canonical,
@@ -1426,9 +1458,12 @@ mod tests {
         let mut perms = fs::metadata(&jq).unwrap().permissions();
         perms.set_mode(0o757); // world-writable + executable
         fs::set_permissions(&jq, perms).unwrap();
-        let err = try_seal_helper_candidate("jq", &jq).unwrap_err();
-        assert_eq!(err.code(), "execution_contract");
-        assert!(err.message().contains("world-writable"));
+        match classify_helper_candidate("jq", &jq) {
+            HelperCandidate::Untrusted(reason) => {
+                assert!(reason.contains("world-writable"));
+            }
+            other => panic!("expected Untrusted, got {other:?}"),
+        }
     }
 
     #[test]
