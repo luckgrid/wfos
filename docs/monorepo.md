@@ -73,7 +73,7 @@ The Cargo workspace landed with the runtime-controller foundation. Root `Cargo.t
 member crate; `Cargo.lock` is committed. `.moon/toolchains.yml` already enables the rust
 toolchain with `clippy` and `rustfmt`. See the [runtime controller (Takogami)](runtime-controller.md)
 guide and [`packages/takogami/README.md`](../packages/takogami/README.md) for the current
-proved surface (discovery/routing still ahead).
+proved surface (E09 runtime-controller MVP).
 
 ## How the runtime controller relates to moon
 

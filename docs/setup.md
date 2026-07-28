@@ -22,8 +22,9 @@ curl -fsSL https://moonrepo.dev/install/proto.sh | bash
 From the workspace root:
 
 ```bash
-moon run wfos:setup     # proto install — fetch pinned toolchains (proto, moon, rust)
+moon run wfos:setup        # proto install — fetch pinned toolchains (proto, moon, rust)
 moon run panoply:doctor    # detect tools, print readiness, write the metadata-plane registry
+moon run ontarch:sync      # generate registry + local-toolkit projection (needs tools.json from doctor)
 ```
 
 `panoply:doctor` is read-only and safe to run anytime. To install missing native-toolchain tools and wire

@@ -26,8 +26,10 @@ The E09 runtime-controller MVP is a single-process CLI. What is implemented toda
 - **Evaluator-owned authorization.** Only dual-Allow proofs minted inside the policy evaluator
   reach the executor. Private sealed runnable views are not constructible from outside.
 - **Command-record transitions** under `RuntimeCommandRecord` schema `0.1.0`: pending →
-  PID-bearing pending → terminal (`completed` / controller error / failure / gated / denied as
-  truthful). `session list|show|latest` queries those operational records.
+  PID-bearing pending → terminal (`completed` / `planned` / controller error / failure /
+  gated / denied as truthful). Plan-only lifecycle attempts persist a terminal `planned`
+  record (`started=false`, `pid=null`) with no child spawn. `session list|show|latest`
+  queries those operational records.
 - **Bin Gate/Deny paths** stop before executor reachability: cleanup `dry-run` is Gate/no-spawn;
   `archive` / `delete-approved` are Deny + `deferred_unavailable` / no-spawn.
 - **Optional providers.** RTK, tmux, and Herdr remain optional. Graph/bin machine JSON is never

@@ -18,8 +18,8 @@ Experienced-dev path (Rust + this workspace root):
 curl -fsSL https://moonrepo.dev/install/proto.sh | bash   # once, if needed
 proto install                                             # .prototools pins (moon + rust)
 moon run wfos:setup
-moon run ontarch:sync
 moon run panoply:doctor
+moon run ontarch:sync
 cargo build -p takogami
 
 cargo run -p takogami -- doctor

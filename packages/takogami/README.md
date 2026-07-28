@@ -10,13 +10,15 @@ It does not own persistent terminal PTYs (tmux / optional Herdr) or desktop wind
 **Status: E09 runtime-controller MVP implemented.** Lifecycle `dev` / `build` / `check`
 resolve a sealed plan, evaluate dual-layer profile/policy rules (request + child), and emit
 Allow / Gate / Deny with safe provenance. Resolution is plan-only unless `--execute` is
-supplied. Allowed direct `--execute` writes a durable pending `RuntimeCommandRecord`
+supplied. Plan-only never starts the resolved child, but a policy-decision-bearing attempt
+persists a terminal `RuntimeCommandRecord` with `outcome=planned`, `started=false`, and
+`pid=null`. Allowed direct `--execute` writes a durable pending `RuntimeCommandRecord`
 (schema `0.1.0`), then runs the sealed child through the single hardened Tokio executor with
 literal argv and `env_clear` + sealed non-sensitive keys. `session list|show|latest` queries
-those operational command-execution records. `takogami graph` projects the Ontarch registry
-graph (zero-spawn, no operational record, no implicit sync). Supported bin projections
-(`bin report`, cleanup `report-only`) share the same executor and record pipeline; cleanup
-`dry-run` is Gate/no-spawn; cleanup `archive` / `delete-approved` are Deny +
+those operational command-execution records (including planned). `takogami graph` projects the
+Ontarch registry graph (zero-spawn, no operational record, no implicit sync). Supported bin
+projections (`bin report`, cleanup `report-only`) share the same executor and record pipeline;
+cleanup `dry-run` is Gate/no-spawn; cleanup `archive` / `delete-approved` are Deny +
 `deferred_unavailable` with no spawn. Optional RTK postprocesses eligible human streams only.
 Interactive providers and work-session restore remain post-MVP.
 
@@ -46,11 +48,13 @@ takogami dev|build|check <unit> [--explain] [--execute] [--json]
   → only evaluator-minted dual-Allow authorization reaches execution
   → policy deny exit 5; policy gate exit 6 (fail closed; no approval bypass)
   → child exit codes pass through; state I/O exit 7; execution I/O exit 8
-takogami session list|show|latest [--limit N] [--json]
-  → operational command_execution records only (not build or work sessions)
+takogami session list [--limit N] [--json]
+takogami session show <session-id> [--json]
+takogami session latest [--json]
+  → operational command_execution records only (including planned; not build or work sessions)
 takogami graph [--format text|dot|json] [--json]
   → typed registry graph projection; hit/miss/stale; no child; no operational record
-takogami bin report [--scope SCOPE] [--json]
+takogami bin report [--json]
   → dual-Allow → Ontarch child executes once → terminal record
 takogami bin cleanup --mode report-only|dry-run|archive|delete-approved [--scope SCOPE] [--json]
   → report-only: dual-Allow / execute / record
@@ -100,8 +104,10 @@ Registry override for tests/fixtures: `TAKOGAMI_ONTARCH_REGISTRY`, `TAKOGAMI_WOR
 
 - Profile precedence: CLI `--profile` → `TAKOGAMI_PROFILE` → `workspace-dev` → fail closed.
 - No shell: structured argv boundaries preserved; legacy strings use the constrained parser.
-- Plan-only without `--execute`: resolution never runs the resolved executable, Panoply,
-  Ontarch, Herdr, or tmux, and writes no operational command-record files for that path.
+- Plan-only without `--execute`: resolution never starts the resolved child (no Panoply,
+  Ontarch, Herdr, or tmux spawn), but a policy-decision-bearing attempt persists a terminal
+  `RuntimeCommandRecord` with `outcome=planned`, `started=false`, and `pid=null`. Graph
+  remains the distinct zero-spawn and no-record path.
 - With `--execute`: only evaluator-minted dual-Allow authorization reaches the hardened
   executor; pending state is persisted before spawn; child PID, streams, signals, exit, and
   terminal outcome are recorded truthfully.

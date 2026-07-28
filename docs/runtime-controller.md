@@ -43,8 +43,11 @@ takogami tools        report tools from Panoply / Ontarch projections
 takogami interfaces   validate descriptors, schemas, policies, registry entries
 takogami dev|build|check <unit> [--explain] [--execute]   resolve + policy + optional direct execute
 takogami graph        project metadata-plane graph (read-only; see Graph projection)
-takogami bin report|cleanup   project bin/archive contracts (sealed helper PATH; dual-Allow)
-takogami session list|show|latest   read command execution records (not work sessions)
+takogami bin report [--json]
+takogami bin cleanup --mode report-only|dry-run|archive|delete-approved [--scope SCOPE] [--json]
+takogami session list [--limit N] [--json]
+takogami session show <session-id> [--json]
+takogami session latest [--json]
 ```
 
 ### Graph projection
@@ -92,7 +95,9 @@ Helper trust model:
 
 Lifecycle verbs resolve a sealed plan, then evaluate dual-layer policy (Takogami request +
 child intent) with Deny > Gate > Allow. Resolution is plan-only unless `--execute` is
-supplied. `--explain` prints resolution and policy provenance; resolution failures print the
+supplied. Plan-only never starts the resolved child, but a policy-decision-bearing attempt
+persists a terminal `RuntimeCommandRecord` with `outcome=planned`, `started=false`, and
+`pid=null`. `--explain` prints resolution and policy provenance; resolution failures print the
 safely completed portion without a digest. Gate fails closed (no CLI/env/file approval bypass).
 Allowed direct `--execute` persists a pending `RuntimeCommandRecord` (schema `0.1.0`), then
 spawns the sealed executable through the single hardened Tokio executor (no shell, no PATH
@@ -127,9 +132,9 @@ Optional `integrations/` modules under the runtime-controller package are an imp
 layout for `runtime-integration` units — not a separate product. Unadopted brand candidates do
 not belong in package names or the live command surface.
 
-Every MVP command should be explainable: `takogami <cmd> --explain` prints the unit, the
-descriptor and native manifest it resolved, the runtime/package adapter, the native command,
-the correlation/session id, and the policies applied.
+Lifecycle `dev`/`build`/`check` commands support `--explain` and expose resolution and policy
+provenance. Other MVP commands expose bounded results, diagnostics, and provenance through
+their command-specific human or JSON output contracts.
 
 ## Workstream routing (post-MVP)
 
