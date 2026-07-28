@@ -109,7 +109,7 @@
       "reviewed_phase4_evidence_followup": "bb2ef820b4f7b967b11ca249b50f2b0be9e3b470",
       "implementation_commit": "b2b0057cecdf48d6b7d3f67baafb9c51a135553b",
       "validated_candidate_commit": "b2b0057cecdf48d6b7d3f67baafb9c51a135553b",
-      "evidence_commit": "PENDING_AFTER_THIS_COMMIT",
+      "evidence_commit": "bfebc062d45d3a1016d476f98d3e9a0bf6e513f4",
       "provenance_note": "Pattern A: implementation_commit and validated_candidate_commit are the same full SHA because the complete macOS and Linux gates ran at the exact code/test snapshot before any evidence commit was written; the later evidence commit is never relabeled as the validated candidate.",
       "findings_addressed": [
         "P4-i01-01",
