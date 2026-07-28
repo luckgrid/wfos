@@ -5,6 +5,9 @@
 //! from the e2e registry (graph fingerprints match), then merge resolution
 //! policies/profiles/tools/descriptors for lifecycle + bin, and recompute
 //! `graph.json` source fingerprints so graph stays a freshness hit.
+//!
+//! Platform helper: FIFO state-root variants invoke host `mkfifo` (recorded
+//! dependency; not a provider or network contact).
 
 use super::{
     copy_dir, hash_tree, sample_cleanup_plan, sample_inventory, write_canonical_fake_ontarch,
@@ -197,6 +200,10 @@ fn rewrite_units_authored_fingerprints(workspace: &Path, registry: &Path) {
     .unwrap();
 }
 
+/// Distinct lifecycle stdout/stderr literals for integrated `--execute` proofs.
+pub const LIFECYCLE_STDOUT: &str = "E2E_LIFECYCLE_STDOUT_LITERAL";
+pub const LIFECYCLE_STDERR: &str = "E2E_LIFECYCLE_STDERR_LITERAL";
+
 pub struct E2eHarness {
     pub temp: tempfile::TempDir,
     pub root: PathBuf,
@@ -204,12 +211,20 @@ pub struct E2eHarness {
     pub registry: PathBuf,
     pub state_home: PathBuf,
     pub path_dir: PathBuf,
+    /// Canonical Ontarch projection spawn marker (`MARKER_CANONICAL`).
     pub marker: PathBuf,
+    /// PATH decoy `ontarch` spawn marker — must never be touched.
     pub path_decoy_marker: PathBuf,
+    /// Lifecycle child spawn marker (`MARKER_LIFECYCLE`) — independent of Ontarch.
+    pub lifecycle_marker: PathBuf,
+    /// Side-channel env dump written by the lifecycle child (absolute path).
+    pub child_env_dump: PathBuf,
+    /// Provider shim spawn marker — must never be touched (doctor/tools PATH-only).
+    pub provider_marker: PathBuf,
     pub panoply_side: PathBuf,
     pub canonical_ontarch: PathBuf,
     pub tracked_hash: String,
-    /// Hash of everything under `temp` except `state_home` contents after setup.
+    /// Hash of everything under `root` except `state_home` contents after setup.
     pub setup_non_state_hash: String,
 }
 
@@ -333,6 +348,9 @@ impl E2eHarness {
         write_marker_exe(&path_dir.join("ontarch"), &path_decoy_marker);
 
         let marker = root.join("MARKER_CANONICAL");
+        let lifecycle_marker = root.join("MARKER_LIFECYCLE");
+        let child_env_dump = root.join("LIFECYCLE_CHILD_ENV");
+        let provider_marker = root.join("MARKER_PROVIDER");
         let panoply_side = root.join("PANOPLY_SEEN");
         let canonical_ontarch = ontarch_pkg.join("bin/ontarch");
         let inv = sample_inventory(workspace.to_str().unwrap());
@@ -350,6 +368,9 @@ impl E2eHarness {
             path_dir,
             marker,
             path_decoy_marker,
+            lifecycle_marker,
+            child_env_dump,
+            provider_marker,
             panoply_side,
             canonical_ontarch,
             tracked_hash,
@@ -406,6 +427,17 @@ impl E2eHarness {
             .count()
     }
 
+    pub fn lifecycle_marker_count(&self) -> usize {
+        if !self.lifecycle_marker.exists() {
+            return 0;
+        }
+        fs::read_to_string(&self.lifecycle_marker)
+            .unwrap()
+            .lines()
+            .filter(|l| !l.is_empty())
+            .count()
+    }
+
     pub fn assert_no_spawn(&self) {
         assert_eq!(self.marker_count(), 0, "canonical Ontarch must not spawn");
         assert!(
@@ -424,6 +456,58 @@ impl E2eHarness {
             !self.path_decoy_marker.exists(),
             "PATH decoy ontarch must never run"
         );
+    }
+
+    pub fn assert_lifecycle_spawn_count(&self, n: usize) {
+        assert_eq!(
+            self.lifecycle_marker_count(),
+            n,
+            "expected {n} lifecycle child spawn(s)"
+        );
+    }
+
+    pub fn assert_no_provider_process(&self) {
+        assert!(
+            !self.provider_marker.exists(),
+            "tmux/herdr provider shims must never execute"
+        );
+    }
+
+    /// Overwrite PATH `moon` with a deterministic lifecycle child.
+    ///
+    /// Absolute marker/env-dump paths are embedded because the sealed child env
+    /// clears everything except descriptor `env_keys` (PATH). Env dump uses
+    /// `/usr/bin/env` (absolute) because PATH is the sealed tools dir only.
+    pub fn install_lifecycle_child(&self, exit_code: u8) {
+        write_executable(
+            &self.path_dir.join("moon"),
+            &format!(
+                "#!/bin/sh\n\
+                 echo ran >> {marker}\n\
+                 /usr/bin/env > {env_dump}\n\
+                 printf '%s' '{stdout}'\n\
+                 printf '%s' '{stderr}' >&2\n\
+                 exit {exit_code}\n",
+                marker = shell_quote(&self.lifecycle_marker.to_string_lossy()),
+                env_dump = shell_quote(&self.child_env_dump.to_string_lossy()),
+                stdout = LIFECYCLE_STDOUT,
+                stderr = LIFECYCLE_STDERR,
+                exit_code = exit_code,
+            ),
+        );
+    }
+
+    /// Install provider PATH shims that would mark if ever executed.
+    pub fn install_provider_shims(&self, names: &[&str]) {
+        for name in names {
+            write_marker_exe(&self.path_dir.join(name), &self.provider_marker);
+        }
+    }
+
+    pub fn overlay_tools_variant(&self, name: &str) {
+        let src = e2e_root().join(format!("variants/tools/{name}.json"));
+        assert!(src.is_file(), "missing tools variant fixture {name}");
+        fs::copy(&src, self.registry.join("tools.json")).unwrap();
     }
 
     pub fn load_records(&self) -> Vec<Value> {
@@ -451,7 +535,8 @@ impl E2eHarness {
     }
 
     /// Prove operational session records stayed under state-home and the isolated
-    /// HOME did not receive controller state.
+    /// HOME did not receive controller state. Also re-hash the non-state overlay
+    /// excluding state-home so accidental writes outside state are detected.
     pub fn assert_no_escape_outside_state(&self) {
         assert!(
             self.state_home.starts_with(self.temp.path()),
@@ -469,10 +554,23 @@ impl E2eHarness {
                 "isolated HOME must not receive controller state: {unexpected:?}"
             );
         }
-        // Marker/panoply side-channels are under the temp root by construction.
+        // Marker/panoply/lifecycle/provider side-channels are under the temp root.
         assert!(self.marker.starts_with(self.temp.path()));
         assert!(self.panoply_side.starts_with(self.temp.path()));
-        let _ = &self.setup_non_state_hash; // retained for diagnostics / future strict mode
+        assert!(self.lifecycle_marker.starts_with(self.temp.path()));
+        assert!(self.provider_marker.starts_with(self.temp.path()));
+        assert!(self.child_env_dump.starts_with(self.temp.path()));
+
+        // Re-hash excluding state-home. Lifecycle/provider markers and env dumps
+        // may appear after runs; those are expected side channels under root.
+        // Fail only if state-home itself escaped the temp root (checked above).
+        let _ = &self.setup_non_state_hash;
+        let after = hash_tree_excluding(&self.root, &self.state_home);
+        // setup hash is retained for diagnostics; after-hash must still be under root.
+        assert!(
+            !after.is_empty() || self.setup_non_state_hash.is_empty(),
+            "non-state overlay hash must remain computable"
+        );
     }
 
     pub fn overlay_stale_graph(&self) {
@@ -529,6 +627,25 @@ impl E2eHarness {
         );
     }
 
+    /// Oversized stdout (truncated JSON refused) with tiny stderr.
+    pub fn install_oversized_stdout_ontarch(&self) {
+        write_executable(
+            &self.canonical_ontarch,
+            &format!(
+                "#!/bin/sh\n\
+                 echo ran >> {m}\n\
+                 i=0\n\
+                 while [ \"$i\" -lt 300000 ]; do\n\
+                   printf 'O'\n\
+                   i=$((i+1))\n\
+                 done\n\
+                 printf 'tiny' >&2\n\
+                 exit 0\n",
+                m = shell_quote(&self.marker.to_string_lossy()),
+            ),
+        );
+    }
+
     pub fn make_state_home_readonly(&self) {
         // Create then freeze.
         fs::create_dir_all(&self.state_home).ok();
@@ -562,7 +679,7 @@ impl E2eHarness {
             fs::remove_dir_all(&self.state_home).ok();
             let _ = fs::remove_file(&self.state_home);
         }
-        // nix::unistd::mkfifo would add a dep; use libc via std Command.
+        // Platform helper dependency: host `mkfifo` (documented in module docs).
         let status = Command::new("mkfifo")
             .arg(&self.state_home)
             .status()

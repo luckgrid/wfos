@@ -1,0 +1,42 @@
+{
+  "generated_at": "2026-07-25T00:00:00Z",
+  "summary": {},
+  "tools": [
+    {
+      "id": "rg",
+      "module": "core",
+      "installed": true,
+      "default": true,
+      "agent_safe": true,
+      "detect": "rg",
+      "version": "14.0.0"
+    },
+    {
+      "id": "cargo",
+      "module": "rust",
+      "installed": true,
+      "default": true,
+      "agent_safe": true,
+      "detect": "cargo",
+      "version": "1.96.0"
+    },
+    {
+      "id": "tmux",
+      "module": "terminal",
+      "installed": true,
+      "default": false,
+      "agent_safe": true,
+      "detect": "tmux",
+      "version": "3.4"
+    },
+    {
+      "id": "herdr",
+      "module": "terminal",
+      "installed": true,
+      "default": false,
+      "agent_safe": true,
+      "detect": "herdr",
+      "version": "0.1.0"
+    }
+  ]
+}
