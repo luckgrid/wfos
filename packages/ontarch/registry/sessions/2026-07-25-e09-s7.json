@@ -1702,28 +1702,119 @@
       "phase5_planned": "E09.S7 Phase 5 documentation, release evidence, and E09/M4 closure",
       "completed_at": "2026-07-28T03:23:38Z",
       "notes": "Phase 3 COMPLETE through i07. Post-evidence validation recorded. Phase 4 and Phase 5 remain separately defined. Do not mark E09/M4 complete. GitHub Actions evidence: absent. E10 not started. Historical i04\u2013i06 progress entries not rewritten."
+    },
+    {
+      "phase": "4-hermetic-mvp-acceptance-fixture-and-portability",
+      "title": "E09.S7 Phase 4 hermetic MVP acceptance fixture and portability",
+      "status": "done",
+      "addendum": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-4-evidence-review-addendum.md",
+      "starting_phase3_head": "5ddbe0b64306fb4bb54ba32d3b10db55dc7824d4",
+      "implementation_commit": "87599c3ab8bdfdbf459063f2a9377b74622abfea",
+      "validated_candidate_commit": "87599c3ab8bdfdbf459063f2a9377b74622abfea",
+      "evidence_commit": "<filled-after-evidence-commit>",
+      "provenance_note": "Pattern A: implementation_commit and validated_candidate_commit are the same full SHA because the complete macOS and Linux gates ran at the exact code/test snapshot before any evidence commit was written; the later evidence commit is never relabeled as the validated candidate.",
+      "changed_paths": [
+        "packages/takogami/tests/e2e_mvp.rs",
+        "packages/takogami/tests/support/e2e_harness.rs",
+        "packages/takogami/tests/support/mod.rs",
+        "packages/takogami/tests/fixtures/e2e/"
+      ],
+      "tests_added": [
+        "e2e_fixture_skeleton_is_tracked_and_copyable",
+        "e2e_mvp_full_command_chain",
+        "e2e_stale_and_malformed_registry_variants",
+        "e2e_state_root_variants_fail_closed",
+        "e2e_concurrent_lifecycle_and_bin_share_state_home",
+        "e2e_graph_and_bin_output_bounds_observed",
+        "e2e_registry_hit_stale_miss_and_rtk_non_transform",
+        "e2e_no_host_state_dependency"
+      ],
+      "metrics_and_token_evidence": {
+        "registry_cache_hit_stale_miss": "e2e_registry_hit_stale_miss_and_rtk_non_transform + e2e_stale_and_malformed_registry_variants",
+        "rtk_graph_bin_non_transform": "assert_compressor_none on graph/bin JSON; no compressor=rtk",
+        "rtk_lifecycle_fallback": "plan-only build reports compressor none / gain absent when RTK unavailable",
+        "fixture_immutability": "hash_tree assert_tracked_unchanged on every e2e_* test",
+        "no_host_state": "scrubbed HOME/XDG/AGENTS_HOME; isolated HOME empty; state-home under temp root"
+      },
+      "gate": {
+        "macos": {
+          "platform": "macOS-aarch64 Darwin 25.5.0",
+          "toolchain": "rustc 1.96.0 / cargo 1.96.0 / moon 2.3.2",
+          "wfos_commit": "87599c3ab8bdfdbf459063f2a9377b74622abfea",
+          "moon_takogami_build": "PASS",
+          "moon_takogami_test": "PASS (lib 265; bin_cli 59; cli_smoke 17; contracts_roundtrip 19; e2e_mvp 8; execution_cli 16; graph_cli 89; ontarch_bin_contract 26; ontarch_graph_contract 27; policy_cli 17; resolution_cli 27; session_cli 12; session_store 21)",
+          "moon_takogami_lint": "PASS",
+          "moon_takogami_format_check": "PASS",
+          "moon_ontarch_sync": "PASS",
+          "moon_ontarch_scan": "PASS",
+          "moon_ontarch_validate": "PASS",
+          "moon_panoply_gen_check": "PASS",
+          "moon_panoply_validate_substrate": "PASS",
+          "git_diff_check": "PASS",
+          "github_actions_status_checks": "absent"
+        },
+        "linux_lima_wfos_s61_alpine": {
+          "platform": "Lima Linux aarch64 (wfos-s61-alpine musl)",
+          "toolchain": "rustc 1.96.0 / cargo 1.96.0",
+          "moon": "unavailable in guest",
+          "wfos_commit": "87599c3ab8bdfdbf459063f2a9377b74622abfea",
+          "writable_copy": "/tmp/wfos-phase4-linux (rsync of host WfOS tree excluding target/.git; CARGO_TARGET_DIR=/tmp/wfos-target-phase4)",
+          "host_mount_limitation": "host virtiofs /Users/dvz is read-only; AppleDouble ._* / .DS_Store stripped after rsync; ontarch validate preceded by bin-report regeneration against copy root",
+          "appledouble_cleanup": "find ... -name '._*' -delete; find ... -name '.DS_Store' -delete",
+          "evidence_kind": "local Lima evidence; GitHub Actions absent",
+          "direct_command_substitutions": {
+            "takogami_build": "cargo build -p takogami",
+            "takogami_test": "cargo test -p takogami",
+            "takogami_lint": "cargo clippy -p takogami --all-targets -- -D warnings",
+            "takogami_format_check": "cargo fmt -p takogami -- --check",
+            "ontarch_sync": "packages/ontarch/bin/ontarch sync",
+            "ontarch_scan": "packages/ontarch/bin/ontarch scan",
+            "ontarch_validate": "packages/ontarch/bin/ontarch validate",
+            "panoply_gen_check": "packages/panoply/bin/panoply gen brewfile --check",
+            "panoply_validate_substrate": "packages/panoply/bin/validate-substrate.sh"
+          },
+          "cargo_build": "PASS",
+          "cargo_test": "PASS (lib 265; bin_cli 59; cli_smoke 17; contracts_roundtrip 19; e2e_mvp 8; execution_cli 16; graph_cli 89; ontarch_bin_contract 26; ontarch_graph_contract 27; policy_cli 17; resolution_cli 27; session_cli 12; session_store 21)",
+          "cargo_clippy_all_targets_D_warnings": "PASS",
+          "cargo_fmt_check": "PASS",
+          "ontarch_sync": "PASS",
+          "ontarch_scan": "PASS",
+          "ontarch_validate": "PASS",
+          "panoply_gen_check": "PASS",
+          "panoply_validate_substrate": "PASS",
+          "git_diff_check": "skipped_no_git_in_writable_copy"
+        }
+      },
+      "github_actions_evidence": "absent",
+      "blockers_limitations": [
+        "ontarch:secrets-scan still reports the pre-existing age-secret-key in git history (commit a3a4978) \u2014 unrelated to S7, not an E09 gate blocker",
+        "GitHub Actions evidence absent; Linux evidence is local Lima alpine aarch64"
+      ],
+      "preserved": [
+        "RuntimeCommandRecord schema 0.1.0 unchanged",
+        "no second process runner",
+        "no widened authorization constructors",
+        "archive/delete remain Deny/deferred/no-spawn",
+        "test mutation hooks remain cfg(test) only"
+      ],
+      "final_disposition": "Phase 4 COMPLETE; candidate frozen; Phase 5 documentation/release evidence authorized next; E09/M4 remain in progress",
+      "next": "Phase 5 documentation, release evidence, and E09/M4 closure",
+      "phase5_planned": true,
+      "completed_at": "2026-07-28T04:26:40Z",
+      "notes": "Stop before Phase 5 documentation closure. Do not begin E10. Do not mark E09/M4 complete."
     }
   ],
   "loaded_context": [
     "Build/bin/wfos/STATE.md",
+    "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-4-evidence-review-addendum.md",
     "Build/bin/wfos/2026-07-25-wfos-e09-s7-graph-bin-projections-mvp-hardening-implementation-plan.md",
-    "Build/bin/wfos/2026-07-25-wfos-e09-s7-phase-0-review-phase-1-corrections-addendum.md",
-    "Build/bin/wfos/E09_runtime_controller.md#E09.S7",
-    "packages/ontarch/graphs/edges.schema.json",
-    "docs/bin-archive.md",
-    "packages/ontarch/registry/sessions/2026-07-25-e09-s6.1.json",
-    "packages/ontarch/registry/sessions/2026-07-24-e09-s6.json",
-    "Build/bin/wfos/2026-07-26-wfos-e09-s7-phase-0-follow-up-review-phase-1-completion-addendum.md",
-    "Build/bin/wfos/2026-07-26-wfos-e09-s7-phase-1-implementation-review-closure-corrections-addendum.md",
-    "Build/bin/wfos/2026-07-26-wfos-e09-s7-phase-1-closure-follow-up-review-final-corrections.md",
-    "Build/bin/wfos/2026-07-26-wfos-e09-s7-phase-2-readiness-review-and-implementation-acceptance-addendum.md",
-    "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-3-i06-addendum.md",
-    "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-3-i07-addendum.md"
+    "packages/ontarch/registry/sessions/2026-07-25-e09-s7.json"
   ],
-  "next": "E09.S7 Phase 4 hermetic MVP acceptance fixture and portability",
+  "next": "E09.S7 Phase 5 documentation, release evidence, and E09/M4 closure",
   "blockers": [
     "ontarch:secrets-scan still reports pre-existing age-secret-key in git history (commit a3a4978) \u2014 unrelated to S7",
     "Phase 4 graph E2E fixture debt remains expected-red"
   ],
-  "token_note": "Phase 3 COMPLETE through i07; C01\u2013C06/F01\u2013F04/H01\u2013H03/J01\u2013J02/K01\u2013K03/L01\u2013L03 accepted; production mutation seam removed; helper mutation coverage complete; candidate/evidence provenance reconciled; post-evidence validation passed; Phase 4 ready; Phase 5 not started; E10 not started; GHA absent"
+  "token_note": "Phase 4 COMPLETE at candidate 87599c3ab8bdfdbf459063f2a9377b74622abfea; Phase 5 planned; E09/M4 still in progress; E10 not started; GHA absent",
+  "expected_red_remaining": []
 }
