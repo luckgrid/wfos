@@ -1347,6 +1347,88 @@
         "new_modules_command": "cargo test -p takogami --test graph_cli --test bin_cli --test e2e_mvp",
         "production_behavior_changed": false
       }
+    },
+    {
+      "phase": "3-i05-test-hook-isolation",
+      "title": "E09.S7 Phase 3 i05 isolate test mutation seams from production (K01\u2013K03)",
+      "status": "done",
+      "addendum": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-3-i05-addendum.md",
+      "reviewed_addendum_workstreams_commit": "c3c9003e205761425562f9530e48dd886b2766f8",
+      "starting_commit": "fa875f7c4bef9950891efb6c531cba94d9d86848",
+      "final_candidate_commit": "9755e45",
+      "findings_addressed": [
+        "K01",
+        "K02",
+        "K03"
+      ],
+      "corrections": [
+        "K01: removed apply_projection_test_drift and all production TAKOGAMI_TEST_* mutation reads from execute_projection_inner",
+        "K02: ProjectionTestMutation + MutatingProjectionExecutor (cfg(test)) at executor entry before production preflight",
+        "K03: bin_cli legacy-env inertness regressions + production_mutation_guard source scan on process.rs"
+      ],
+      "removed_environment_variables": [
+        "TAKOGAMI_TEST_INJECT_EXE_DRIFT",
+        "TAKOGAMI_TEST_INJECT_CWD_DRIFT",
+        "TAKOGAMI_TEST_INJECT_SOURCE_DRIFT",
+        "TAKOGAMI_TEST_INJECT_SOURCE_REMOVED",
+        "TAKOGAMI_TEST_INJECT_SOURCE_SYMLINK",
+        "TAKOGAMI_TEST_INJECT_SOURCE_DANGLING_SYMLINK",
+        "TAKOGAMI_TEST_INJECT_SOURCE_FIFO",
+        "TAKOGAMI_TEST_INJECT_SOURCE_DIRECTORY",
+        "TAKOGAMI_TEST_INJECT_SOURCE_SAME_LENGTH",
+        "TAKOGAMI_TEST_INJECT_HELPER_DRIFT",
+        "TAKOGAMI_TEST_HELPER_PATH",
+        "TAKOGAMI_TEST_INJECT_HELPER_SHADOW",
+        "TAKOGAMI_TEST_HELPER_SHADOW_DIR",
+        "TAKOGAMI_TEST_HELPER_SHADOW_NAME",
+        "TAKOGAMI_TEST_HELPER_SHADOW_SAME_BYTES",
+        "TAKOGAMI_TEST_HELPER_SHADOW_SYMLINK",
+        "TAKOGAMI_TEST_HELPER_SHADOW_LINK_TO",
+        "TAKOGAMI_TEST_HELPER_SHADOW_MODE"
+      ],
+      "tests_migrated_to_in_process_hook": [
+        "hooked_executable_removal_fails_preflight_no_spawn",
+        "hooked_cwd_rename_fails_preflight_no_spawn",
+        "hooked_source_drift_fails_preflight_no_spawn",
+        "hooked_source_removal_fails_preflight_no_spawn",
+        "hooked_source_symlink_fails_preflight_no_spawn",
+        "hooked_source_dangling_symlink_fails_preflight_no_spawn",
+        "hooked_source_fifo_fails_without_blocking_no_spawn",
+        "hooked_source_directory_fails_preflight_no_spawn",
+        "hooked_same_length_source_drift_fails_preflight_no_spawn",
+        "hooked_helper_content_drift_fails_preflight_no_spawn",
+        "post_authorization_helper_shadow_* (typed mutation via run_bin_with_helper_shadow)"
+      ],
+      "tests_added_cli_inertness": [
+        "legacy_test_env_variables_are_ignored_by_bin_report",
+        "caller_test_injection_env_cannot_remove_projection_executable",
+        "caller_test_injection_env_cannot_rename_projection_cwd",
+        "caller_test_injection_env_cannot_modify_projection_sources",
+        "caller_test_injection_env_cannot_modify_helpers",
+        "caller_test_injection_env_cannot_create_helper_shadow",
+        "caller_test_injection_env_name_traversal_is_inert",
+        "production_execution_source_contains_no_test_mutation_reads"
+      ],
+      "tests_removed_env_driven_cli": [
+        "projection_executable_identity_drift_after_seal_fails_preflight",
+        "projection_cwd_identity_drift_after_seal_fails_preflight",
+        "projection_source_digest_drift_after_authorization_fails_preflight",
+        "post_authorization_source_* (env-driven CLI drift suite)",
+        "projection_preflight_failure_requires_safe_terminal_error"
+      ],
+      "validation": {
+        "focused_gate": "PASS (execution/projection/commands lib; bin_cli; execution_cli; contracts_roundtrip; session_store)",
+        "macos_gate": "PASS (cargo build/check/test matrix, clippy, fmt, moon takogami+ontarch+panoply, git diff --check)",
+        "platform_linux": {
+          "vm": "lima wfos-s61-alpine",
+          "writable_copy": "/tmp/wfos-i05-linux (rsync excluding target/)",
+          "moon_substitutions": "Moon not run in VM; cargo test/clippy invoked directly",
+          "lima_linux_local_gate": "PASS (lib + bin_cli + execution_cli + contracts_roundtrip + session_store + policy_cli + clippy)"
+        },
+        "expected_red": "e2e_mvp_path_includes_graph_projection (Phase 4 fixture debt)",
+        "github_actions_evidence": "absent"
+      },
+      "final_disposition": "Phase 3 COMPLETE; Phase 4 READY FOR KICKOFF; E09.S7 IN PROGRESS; M4 IN PROGRESS; E10 NOT STARTED"
     }
   ],
   "loaded_context": [
