@@ -1440,7 +1440,7 @@
       "reviewed_workstreams_addendum_head": "17b58141cef9810eb04ac3b81df6b477b7f70f28",
       "implementation_commit": "4b833dfbb5e3de3d96fc174ecdc65c4d50088d86",
       "validated_candidate_commit": "4b833dfbb5e3de3d96fc174ecdc65c4d50088d86",
-      "evidence_commit": null,
+      "evidence_commit": "d764c25a1f889188ed2b9196f013aa0886790a2e",
       "provenance_note": "implementation_commit and validated_candidate_commit are the same full SHA because Pattern A ran the complete macOS and Linux gates at the exact code/test snapshot before any evidence commit was written; the later evidence commit is never relabeled as the validated candidate.",
       "findings_addressed": [
         "L01",
