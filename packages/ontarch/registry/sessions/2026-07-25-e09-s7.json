@@ -1711,7 +1711,7 @@
       "starting_phase3_head": "5ddbe0b64306fb4bb54ba32d3b10db55dc7824d4",
       "implementation_commit": "87599c3ab8bdfdbf459063f2a9377b74622abfea",
       "validated_candidate_commit": "87599c3ab8bdfdbf459063f2a9377b74622abfea",
-      "evidence_commit": "<filled-after-evidence-commit>",
+      "evidence_commit": "e6e2208fe0f2640391b781ee52effaf6d4c3068e",
       "provenance_note": "Pattern A: implementation_commit and validated_candidate_commit are the same full SHA because the complete macOS and Linux gates ran at the exact code/test snapshot before any evidence commit was written; the later evidence commit is never relabeled as the validated candidate.",
       "changed_paths": [
         "packages/takogami/tests/e2e_mvp.rs",
