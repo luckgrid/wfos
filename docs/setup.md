@@ -3,6 +3,9 @@
 WfOS is local-first and modular. You can adopt the whole workspace or just one package — keep
 your own shell, prompt, and editor, and let WfOS slot in beside them.
 
+Short experienced-dev path: [workspace README § Quick start](../README.md#quick-start).
+This page is the full install, bootstrap, layout, and troubleshooting guide.
+
 ## Prerequisites
 
 Install **proto** and **moon** first; proto then installs the pinned toolchains.

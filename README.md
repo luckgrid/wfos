@@ -6,76 +6,54 @@ and exposes their meaning through a consistent local interface. It is modular an
 non-disruptive: adopt one package, keep your own environment, and grow into the rest when it
 earns its place.
 
-Full documentation lives in [`docs/`](docs/README.md). Start with
-[architecture](docs/architecture.md).
+Full docs: [`docs/`](docs/README.md). Start with [architecture](docs/architecture.md).
+Archetypes are stable roles; products are swappable implementations — see
+[architecture § archetypes](docs/architecture.md#archetypes-vs-products).
 
-## Products
+## Quick start
 
-| Archetype | Product | CLI | Role | Status |
-|-----------|---------|-----|------|--------|
-| `native-toolchain` | Panoply 🧰 | `panoply` (later `takogami native`) | Local Unix/Rust tool execution | implemented |
-| `metadata-plane` | Ontarch 📐 | build tasks (`ontarch:*`; later `takogami meta`) | Descriptors, registry, schemas, policies | implemented |
-| `runtime-controller` | Takogami 🐙 | `takogami` | Discovery, routing, sessions, rails, integrations (`runtime-integration` / Tendril) | in progress |
-| `package-translator` | Polytope 📦 | `takogami package` | Intent → packages and artifacts | planned |
-| `portable-component-runtime` | Wisp 🫧 | `takogami portable` (planned) | WASM/WASI sandboxed components | planned |
-
-Archetypes are stable roles; products are swappable implementations. Above the filesystem,
-three [interface layers](docs/architecture.md#interface-layers) — toolchain, agent, application
-— expose the system at the depth that matches how you work.
-
-## Monorepo & toolchain
-
-This workspace is a [moon](https://moonrepo.dev/moon) monorepo with toolchains pinned by
-[proto](https://moonrepo.dev/proto). Install proto + moon, then:
+Experienced-dev path (Rust + this workspace root):
 
 ```bash
-moon run wfos:setup     # proto install — fetch pinned toolchains
-moon run panoply:doctor    # detect tools + write the metadata-plane registry (read-only)
-moon query projects     # inspect the project graph
+curl -fsSL https://moonrepo.dev/install/proto.sh | bash   # once, if needed
+proto install                                             # .prototools pins (moon + rust)
+moon run wfos:setup
+moon run ontarch:sync
+moon run panoply:doctor
+cargo build -p takogami
+
+cargo run -p takogami -- doctor
+cargo run -p takogami -- graph
+cargo run -p takogami -- bin report
 ```
 
-Pins live in [`.prototools`](.prototools); graph and tasks in [`.moon/`](.moon/) and per-project
-`moon.yml`. See [docs/monorepo.md](docs/monorepo.md) and [docs/setup.md](docs/setup.md).
+`moon run takogami:build` / `takogami:test` work the same. This is a
+[moon](https://moonrepo.dev/moon) + [proto](https://moonrepo.dev/proto) monorepo
+([`.prototools`](.prototools), [`.moon/`](.moon/)). Details:
+[docs/setup.md](docs/setup.md) · [docs/monorepo.md](docs/monorepo.md).
 
 ## Packages
 
-| Package | Role | Status |
-|---------|------|--------|
-| [`ontarch/`](packages/ontarch/README.md) | metadata plane — descriptors, schemas, policies | implemented |
-| [`panoply/`](packages/panoply/README.md) | native toolchain — global low-level tools | implemented |
-| [`wisp/`](packages/wisp/README.md) | portable component runtime (WASM/WASI) | planned |
-| [`polytope/`](packages/polytope/README.md) | package translator (`takogami package`) | planned |
-| [`takogami/`](packages/takogami/README.md) | runtime controller (`takogami`) | in progress |
+| Package | Archetype | Product | CLI | Role | Status |
+|---------|-----------|---------|-----|------|--------|
+| [`panoply/`](packages/panoply/README.md) | `native-toolchain` | Panoply 🧰 | `panoply` (later `takogami native`) | Local Unix/Rust tool execution | implemented |
+| [`ontarch/`](packages/ontarch/README.md) | `metadata-plane` | Ontarch 📐 | build tasks (`ontarch:*`; later `takogami meta`) | Descriptors, registry, schemas, policies | implemented |
+| [`takogami/`](packages/takogami/README.md) | `runtime-controller` | Takogami 🐙 | `takogami` | Discovery, routing, policy, execute, graph/bin, command records | implemented |
+| [`polytope/`](packages/polytope/README.md) | `package-translator` | Polytope 📦 | `takogami package` | Intent → packages and artifacts | planned |
+| [`wisp/`](packages/wisp/README.md) | `portable-component-runtime` | Wisp 🫧 | `takogami portable` (planned) | WASM/WASI sandboxed components | planned |
 
 ## Apps
 
-| App | Purpose | Status |
-|-----|---------|--------|
-| [`apps/docs/`](apps/docs/README.md) | render the docs for humans (Zola) | planned |
-| [`apps/web/`](apps/web/README.md) | single-page marketing site (Zola) | planned |
+| App | Role | Status |
+|-----|------|--------|
+| [`apps/docs/`](apps/docs/README.md) | Render workspace docs for humans (Zola) | planned |
+| [`apps/web/`](apps/web/README.md) | Single-page marketing site (Zola) | planned |
 
-## Documentation matrix
+## Docs
 
-| Doc | Covers |
-|-----|--------|
-| [architecture](docs/architecture.md) | Archetypes vs products, interface layers, system map |
-| [runtime-architecture](docs/runtime-architecture.md) | Terminal-first engine: client-daemon, Rust stack |
-| [monorepo](docs/monorepo.md) | moon + proto graph, tasks, conventions |
-| [native-toolchain](docs/native-toolchain.md) | Native toolchain — tools, modules, config |
-| [metadata-plane](docs/metadata-plane.md) | Metadata plane — descriptors, registry, schemas, policies |
-| [runtime-controller](docs/runtime-controller.md) · [package-translator](docs/package-translator.md) · [portable-component-runtime](docs/portable-component-runtime.md) | Runtime controller in progress; Polytope/Wisp still planned |
-| [agent-configs](docs/agent-configs.md) | Shared agent profiles and lean AGENTS.md pattern |
-| [agent-skills](docs/agent-skills.md) | On-demand skill registry, templates, load logging |
-| [agent-rails](docs/agent-rails.md) | Agent rails, gates, MCP, skill scanning |
-| [apps](docs/apps.md) | Docs + marketing sites |
-| [tool-catalog](docs/tool-catalog.md) | Grouped tools, libraries, skills, crates |
-| [workflow-apps](docs/workflow-apps.md) | Core native workflow apps — notes, writing, AI engine, sessions |
-| [setup](docs/setup.md) | Developer and agent setup |
-
-For agents, see [AGENTS.md](AGENTS.md).
+Index and guides: [`docs/README.md`](docs/README.md). Agents: [AGENTS.md](AGENTS.md).
 
 ## Git
 
-This workspace is its own standalone git repository (`main`), local-first with no required
-remote. Generated, host-specific output (the metadata-plane tools registry, `target/`,
-`.moon/cache`) is gitignored; sources, contracts, and docs stay tracked.
+Standalone git repository (`main`), local-first. Generated host output (metadata-plane
+registry, `target/`, `.moon/cache`) is gitignored; sources, contracts, and docs stay tracked.

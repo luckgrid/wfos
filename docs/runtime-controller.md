@@ -11,7 +11,7 @@ Those belong to optional providers (tmux / Herdr for terminals; Hammerspoon and 
 desktop layout; an external gateway such as Push for message/schedule ingress). See
 [native-toolchain.md](native-toolchain.md).
 
-Status: **E09 runtime-controller MVP implemented (pending release closeout).** Discovery,
+Status: **E09 runtime-controller MVP implemented.** Discovery,
 list/info/tools/interfaces, doctor, dual-layer policy, sealed-plan resolution, direct
 `--execute` through one hardened Tokio executor, `session list|show|latest`, `takogami graph`,
 and supported `takogami bin` projections are in place. Lifecycle resolution is plan-only unless

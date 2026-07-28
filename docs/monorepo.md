@@ -44,13 +44,14 @@ folder as a project before it has any config.
 
 ## Tasks today
 
+Install and first-run live in [setup.md](setup.md). Once toolchains are present:
+
 ```bash
-moon run wfos:setup     # proto install — fetch pinned toolchains
 moon run panoply:doctor    # detect tools + write the Ontarch registry (read-only)
 moon run panoply:list      # list Panoply modules and tools
 moon run panoply:env       # print the shell activation snippet
-moon run wfos:doctor    # aggregate: depends on panoply:doctor
-moon query projects     # inspect the graph
+moon run wfos:doctor       # aggregate: depends on panoply:doctor
+moon query projects        # inspect the graph
 ```
 
 The `panoply:*` tasks are thin wrappers over `packages/panoply/bin/panoply` so the substrate joins
