@@ -2257,7 +2257,7 @@
       "gate": {
         "macos": {
           "platform": "macOS-aarch64 Darwin 25.5.0",
-          "toolchain": "rustc 1.95.0 / cargo 1.95.0 / moon 2.3.2",
+          "toolchain": "rustc 1.96.0 / cargo 1.96.0 / moon 2.3.2",
           "wfos_commit": "b628655eb80b54c2afc5afdf39e64459f2dc581a",
           "moon_takogami_build": "PASS",
           "moon_takogami_test": "PASS (lib 265; bin_cli 59; cli_smoke 17; contracts_roundtrip 19; e2e_mvp 10; execution_cli 16; graph_cli 89; ontarch_bin_contract 26; ontarch_graph_contract 27; policy_cli 17; resolution_cli 27; session_cli 12; session_store 21)",
@@ -2270,7 +2270,8 @@
           "moon_panoply_validate_substrate": "PASS",
           "git_diff_check": "PASS",
           "github_actions_status_checks": "absent",
-          "graph_fingerprint_flake": "not observed on this run"
+          "graph_fingerprint_flake": "not observed on this run",
+          "toolchain_note": "host PATH rustc was Homebrew 1.95.0; moon/rust-toolchain.toml used rustup 1.96.0 for the gate"
         },
         "linux_lima_wfos_s61_alpine": {
           "platform": "Lima Linux aarch64 (wfos-s61-alpine musl)",
