@@ -1355,7 +1355,7 @@
       "addendum": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-3-i05-addendum.md",
       "reviewed_addendum_workstreams_commit": "c3c9003e205761425562f9530e48dd886b2766f8",
       "starting_commit": "fa875f7c4bef9950891efb6c531cba94d9d86848",
-      "final_candidate_commit": "9755e45",
+      "final_candidate_commit": "a84519b",
       "findings_addressed": [
         "K01",
         "K02",
