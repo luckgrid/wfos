@@ -1,6 +1,31 @@
 {
-  "_pending": "S7-R13: replace with complete cleanup report envelope when Phase 3 lands",
   "schema_version": "0.1.0",
-  "command": "bin",
-  "status": "ok"
+  "command": "bin cleanup",
+  "status": "ok",
+  "exit_code": 0,
+  "data": {
+    "payload": {
+      "generated_at": "2026-07-25T00:00:00Z",
+      "mode": "report-only",
+      "scope": null,
+      "inventory_generated_at": "2026-07-25T00:00:00Z",
+      "inventory_refreshed": false,
+      "summary": {
+        "total": 0,
+        "advisory": 0,
+        "would_archive": 0,
+        "would_delete": 0,
+        "blocked": 0
+      },
+      "entries": [],
+      "mutation_executed": false
+    },
+    "policy_decision": {
+      "outcome": "allow"
+    }
+  },
+  "diagnostics": [],
+  "metrics": {
+    "compressor": "none"
+  }
 }

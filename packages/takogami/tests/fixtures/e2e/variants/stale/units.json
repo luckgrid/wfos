@@ -1,0 +1,22 @@
+{
+  "generated_at": "2026-07-25T00:00:00Z",
+  "registry_generation": {
+    "generated_at": "2026-07-25T00:00:00Z",
+    "source_fingerprints": [
+      {
+        "path": "registry/sources/descriptors/demo.descriptor.toml",
+        "algorithm": "sha256",
+        "digest": "1111111111111111111111111111111111111111111111111111111111111111"
+      }
+    ]
+  },
+  "summary": {
+    "total": 1
+  },
+  "units": [
+    {
+      "id": "demo",
+      "kind": "package"
+    }
+  ]
+}

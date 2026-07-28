@@ -1,6 +1,24 @@
 {
-  "_pending": "S7-R13: replace with complete bin report envelope when Phase 3 lands",
   "schema_version": "0.1.0",
-  "command": "bin",
-  "status": "ok"
+  "command": "bin report",
+  "status": "ok",
+  "exit_code": 0,
+  "data": {
+    "payload": {
+      "generated_at": "2026-07-25T00:00:00Z",
+      "root": "<workspace>",
+      "summary": {
+        "total": 0,
+        "with_manifest": 0
+      },
+      "workflows": []
+    },
+    "policy_decision": {
+      "outcome": "allow"
+    }
+  },
+  "diagnostics": [],
+  "metrics": {
+    "compressor": "none"
+  }
 }
