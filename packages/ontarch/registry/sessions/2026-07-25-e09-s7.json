@@ -1429,6 +1429,182 @@
         "github_actions_evidence": "absent"
       },
       "final_disposition": "Phase 3 COMPLETE; Phase 4 READY FOR KICKOFF; E09.S7 IN PROGRESS; M4 IN PROGRESS; E10 NOT STARTED"
+    },
+    {
+      "phase": "3-i06-test-hook-coverage-and-evidence",
+      "title": "E09.S7 Phase 3 i06 complete helper mutation hook coverage and candidate evidence (L01\u2013L03)",
+      "status": "done",
+      "addendum": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-3-i06-addendum.md",
+      "reviewed_i05_head": "c7d7c23b3709c7d69f844d5cd578f662e9a04db9",
+      "workstreams_addendum_commit": "17b58141cef9810eb04ac3b81df6b477b7f70f28",
+      "reviewed_workstreams_addendum_head": "17b58141cef9810eb04ac3b81df6b477b7f70f28",
+      "implementation_commit": "4b833dfbb5e3de3d96fc174ecdc65c4d50088d86",
+      "validated_candidate_commit": "4b833dfbb5e3de3d96fc174ecdc65c4d50088d86",
+      "evidence_commit": null,
+      "provenance_note": "implementation_commit and validated_candidate_commit are the same full SHA because Pattern A ran the complete macOS and Linux gates at the exact code/test snapshot before any evidence commit was written; the later evidence commit is never relabeled as the validated candidate.",
+      "findings_addressed": [
+        "L01",
+        "L02",
+        "L03"
+      ],
+      "findings_disposition_at_start": {
+        "L01": "still_valid",
+        "L02": "still_valid",
+        "L03": "still_valid"
+      },
+      "corrections": [
+        "L01: added hooked_helper_removal_fails_preflight_no_spawn and hooked_helper_symlink_replacement_fails_preflight_no_spawn using MutatingProjectionExecutor; removed dead_code allowances on RemoveHelper and HelperSymlinkReplacement",
+        "L02: complete writable-Linux gate at validated candidate with per-command results and exact Moon substitutions",
+        "L03: authority fields use full 40-character SHAs; implementation/candidate/evidence concepts separated"
+      ],
+      "tests_added": [
+        "hooked_helper_removal_fails_preflight_no_spawn",
+        "hooked_helper_symlink_replacement_fails_preflight_no_spawn"
+      ],
+      "changed_paths": [
+        "packages/takogami/src/commands.rs",
+        "packages/takogami/src/execution/test_mutation.rs",
+        "packages/ontarch/registry/sessions/2026-07-25-e09-s7.json"
+      ],
+      "boundary_sweep": {
+        "command": "rg -n 'TAKOGAMI_TEST_|apply_projection_test_drift|MutatingProjectionExecutor|MutationKind' packages/takogami",
+        "unexpected_production_occurrence": "none",
+        "classification": [
+          "test-only mutation implementation: packages/takogami/src/execution/test_mutation.rs (cfg(test))",
+          "test-only re-exports: packages/takogami/src/execution/mod.rs cfg(test)",
+          "test setup / coordinator: packages/takogami/src/commands.rs cfg(test) MutationKind usages + MutatingProjectionExecutor",
+          "legacy inertness regression: packages/takogami/tests/bin_cli.rs TAKOGAMI_TEST_* pairs",
+          "legacy inertness / env snapshot test: packages/takogami/src/execution/environment.rs TAKOGAMI_TEST_ENV_MISSING_XYZ_99",
+          "production mutation guard: packages/takogami/src/execution/mod.rs asserts process.rs lacks apply_projection_test_drift"
+        ]
+      },
+      "focused_gate": {
+        "cargo_test_lib_commands": "PASS 45",
+        "cargo_test_lib_execution": "PASS 24",
+        "cargo_test_lib_projection": "PASS 54",
+        "cargo_test_bin_cli": "PASS 59",
+        "cargo_test_execution_cli": "PASS 16",
+        "cargo_test_contracts_roundtrip": "PASS 19",
+        "cargo_test_session_store": "PASS 21",
+        "hooked_helper_filter": "PASS 3"
+      },
+      "gate": {
+        "macos": {
+          "platform": "macOS-aarch64 Darwin 25.5.0",
+          "toolchain": "rustc 1.96.0 / cargo 1.96.0 / moon 2.3.2",
+          "wfos_commit": "4b833dfbb5e3de3d96fc174ecdc65c4d50088d86",
+          "cargo_build": "PASS",
+          "cargo_check_tests": "PASS",
+          "cargo_lib": "PASS 265",
+          "bin_cli": "PASS 59",
+          "policy_cli": "PASS 17",
+          "execution_cli": "PASS 16",
+          "contracts_roundtrip": "PASS 19",
+          "session_store": "PASS 21",
+          "graph_cli": "PASS 89",
+          "ontarch_graph_contract": "PASS 27",
+          "ontarch_bin_contract": "PASS 26",
+          "cli_smoke": "PASS 17",
+          "resolution_cli": "PASS 27",
+          "session_cli": "PASS 12",
+          "clippy_all_targets_D_warnings": "PASS",
+          "cargo_fmt_check": "PASS",
+          "moon_takogami_build": "PASS",
+          "moon_takogami_lint": "PASS",
+          "moon_takogami_format_check": "PASS",
+          "moon_ontarch_sync": "PASS",
+          "moon_ontarch_scan": "PASS",
+          "moon_ontarch_validate": "PASS",
+          "moon_panoply_gen_check": "PASS",
+          "moon_panoply_validate_substrate": "PASS",
+          "git_diff_check": "PASS",
+          "github_actions_status_checks": "absent"
+        },
+        "linux_lima_wfos_s61_alpine": {
+          "platform": "Lima Linux aarch64 (wfos-s61-alpine musl)",
+          "toolchain": "rustc 1.96.0 / cargo 1.96.0",
+          "moon": "unavailable in guest",
+          "wfos_commit": "4b833dfbb5e3de3d96fc174ecdc65c4d50088d86",
+          "writable_copy": "/tmp/wfos-i06-linux (rsync of host WfOS tree excluding target/.git; CARGO_TARGET_DIR=/tmp/wfos-target-i06)",
+          "host_mount_limitation": "host virtiofs /Users/dvz is read-only; AppleDouble ._* / .DS_Store stripped after rsync; ontarch validate requires bin-report regeneration against copy root",
+          "appledouble_cleanup": "find ... -name '._*' -delete; find ... -name '.DS_Store' -delete",
+          "registry_regeneration_prerequisite": "packages/ontarch/bin/ontarch bin-report before validate",
+          "evidence_kind": "local Lima evidence, not hosted CI",
+          "cargo_build": "PASS",
+          "cargo_check_tests": "PASS",
+          "cargo_lib": "PASS 265",
+          "bin_cli": "PASS 59",
+          "policy_cli": "PASS 17",
+          "execution_cli": "PASS 16",
+          "contracts_roundtrip": "PASS 19",
+          "session_store": "PASS 21",
+          "graph_cli": "PASS 89",
+          "ontarch_graph_contract": "PASS 27",
+          "ontarch_bin_contract": "PASS 26",
+          "cli_smoke": "PASS 17",
+          "resolution_cli": "PASS 27",
+          "session_cli": "PASS 12",
+          "clippy_all_targets_D_warnings": "PASS",
+          "cargo_fmt_check": "PASS",
+          "moon_substitutions": {
+            "ontarch_sync": "PASS packages/ontarch/bin/ontarch sync",
+            "ontarch_scan": "PASS packages/ontarch/bin/ontarch scan",
+            "ontarch_bin_report_prereq": "PASS packages/ontarch/bin/ontarch bin-report",
+            "ontarch_validate": "PASS packages/ontarch/bin/ontarch validate",
+            "panoply_gen_check": "PASS packages/panoply/bin/panoply gen brewfile --check",
+            "panoply_validate_substrate": "PASS packages/panoply/bin/validate-substrate.sh",
+            "takogami_build": "PASS cargo build (packages/takogami)",
+            "takogami_lint": "PASS cargo clippy -- -D warnings (packages/takogami)",
+            "takogami_format_check": "PASS cargo fmt --check (packages/takogami)"
+          },
+          "direct_behavior": {
+            "human_bin_report": "PASS (bin_cli human_bin_report_is_not_json)",
+            "json_bin_report": "PASS (bin_cli json_bin_report_is_exactly_one_envelope)",
+            "human_cleanup_report_only": "PASS (bin_cli human_cleanup_report_only_is_not_json)",
+            "json_cleanup_report_only": "PASS (bin_cli valid_report_only_cleanup_json_mutation_executed_false)",
+            "dry_run_gate_no_spawn": "PASS (bin_cli bin_cleanup_dry_run_is_gate_with_zero_spawns)",
+            "archive_deny_deferred_no_spawn": "PASS (bin_cli bin_cleanup_archive_is_deny_deferred_with_zero_spawns)",
+            "delete_approved_deny_deferred_no_spawn": "PASS (bin_cli bin_cleanup_delete_approved_is_deny_deferred_with_zero_spawns)",
+            "legacy_mutation_env_inert": "PASS (bin_cli legacy_test_env_variables_are_ignored_by_bin_report)",
+            "caller_path_decoy_inert": "PASS (bin_cli caller_path_decoys_remain_unreachable)",
+            "typed_helper_removal": "PASS (lib hooked_helper_removal_fails_preflight_no_spawn)",
+            "typed_helper_symlink_replacement": "PASS (lib hooked_helper_symlink_replacement_fails_preflight_no_spawn)"
+          },
+          "git_diff_check": "PASS recorded on macOS host checkout (writable copy has no .git authority)",
+          "github_actions_status_checks": "absent"
+        }
+      },
+      "expected_red_remaining": [
+        "e2e_mvp_path_includes_graph_projection (Phase 4 fixture debt \u2014 incoherent registry overlay; do not weaken graph freshness)"
+      ],
+      "github_actions_evidence": "absent",
+      "preserved": {
+        "phase1": "COMPLETE",
+        "phase2": "COMPLETE",
+        "C01_C06": "accepted",
+        "F01_F04": "accepted",
+        "H01_H03": "accepted",
+        "J01_J02": "accepted",
+        "K01": "accepted",
+        "K02_architecture": "accepted",
+        "K03": "accepted",
+        "D9_option_B": "done",
+        "schema": "0.1.0",
+        "phase4": "not started",
+        "E10": "not started"
+      },
+      "final_disposition": {
+        "phase1": "COMPLETE",
+        "phase2": "COMPLETE",
+        "phase3": "COMPLETE",
+        "phase4": "READY FOR KICKOFF",
+        "E09_S7": "IN PROGRESS",
+        "M4": "IN PROGRESS",
+        "E10": "NOT STARTED"
+      },
+      "next": "E09.S7 Phase 4 hermetic E2E fixture and M4 closure",
+      "completed_at": "2026-07-28T02:37:47Z",
+      "notes": "Phase 3 i06 closed L01\u2013L03. Do not mark E09/M4 complete. GitHub Actions evidence: absent. Phase 4 and E10 remain unimplemented. i04/i05 history not rewritten."
     }
   ],
   "loaded_context": [
