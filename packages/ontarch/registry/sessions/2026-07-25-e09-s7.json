@@ -3,7 +3,7 @@
   "epic": "E09",
   "story": "S7",
   "title": "Graph/bin projections and MVP hardening",
-  "status": "in_progress",
+  "status": "done",
   "started_at": "2026-07-26T04:53:00Z",
   "plan": "Build/bin/wfos/2026-07-25-wfos-e09-s7-graph-bin-projections-mvp-hardening-implementation-plan.md",
   "baseline": {
@@ -99,6 +99,130 @@
     "Build/bin/wfos/SESSIONS.md"
   ],
   "progress": [
+    {
+      "phase": "5-documentation-evidence-e09-closure",
+      "title": "E09.S7 Phase 5 documentation, release evidence, and E09/M4 closure",
+      "status": "done",
+      "plan": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-5-documentation-evidence-closure-plan.md",
+      "phase5_docs_candidate": "4eba70fc8282dd93f3fcadd3d43e75b670fa82ac",
+      "phase5_evidence_commit": "PENDING_AFTER_THIS_COMMIT",
+      "reviewed_phase4_i01_candidate": "b2b0057cecdf48d6b7d3f67baafb9c51a135553b",
+      "reviewed_phase4_i01_evidence": "bfebc062d45d3a1016d476f98d3e9a0bf6e513f4",
+      "reviewed_phase4_i01_evidence_followup": "9e9c890c723ed1ee4f350871a0d39291ed8b761c",
+      "provenance_note": "Docs-only candidate is distinct from evidence commits. Complete macOS and Linux gates ran at phase5_docs_candidate before any session-evidence commit; evidence commits are never relabeled as the docs candidate. Phase 4 i01 code/test candidate remains frozen at b2b0057cecdf48d6b7d3f67baafb9c51a135553b.",
+      "changed_docs": [
+        "packages/takogami/README.md",
+        "packages/ontarch/README.md",
+        "packages/ontarch/graphs/README.md",
+        "docs/runtime-controller.md",
+        "docs/runtime-architecture.md",
+        "docs/bin-archive.md",
+        "docs/metadata-plane.md",
+        "docs/README.md",
+        "docs/architecture.md"
+      ],
+      "agent_rails_touch": "none — targeted sweep found no contradiction with accepted E09 behavior",
+      "stale_language_sweep": {
+        "patterns": [
+          "future H09",
+          "bin routing remains ahead",
+          "Command::Bin remains unavailable",
+          "not_implemented until projection authorization",
+          "spawn/records deferred",
+          "child processes and command records are not yet started",
+          "discovery/routing/sessions are still ahead",
+          "runtime command interception is deferred",
+          "implemented pair"
+        ],
+        "current_doc_hits_after_edit": 0,
+        "historical_session_hits_preserved": [
+          "packages/ontarch/registry/sessions/2026-07-17-e07-s5.json",
+          "packages/ontarch/registry/sessions/2026-07-25-e09-s7.json (prior phase prose)"
+        ],
+        "aspirational_post_mvp_preserved": true,
+        "bin_scope_invalid_note": "Documented as usage exit 2 with bin_scope_invalid in message text; not a ControllerError::diagnostic_code() value — truthful documentation nuance, no code change."
+      },
+      "production_delta": "none — docs only; no Rust/tests/policies/schemas/shell/adapters/authz/executor/record changes",
+      "gate": {
+        "macos": {
+          "platform": "macOS-aarch64 Darwin 25.5.0",
+          "toolchain": "rustc 1.96.0 / cargo 1.96.0 / moon 2.3.2",
+          "wfos_commit": "4eba70fc8282dd93f3fcadd3d43e75b670fa82ac",
+          "moon_takogami_build": "PASS",
+          "moon_takogami_test": "PASS (lib 265; bin_cli 59; cli_smoke 17; contracts_roundtrip 19; e2e_mvp 10; execution_cli 16; graph_cli 89; ontarch_bin_contract 26; ontarch_graph_contract 27; policy_cli 17; resolution_cli 27; session_cli 12; session_store 21)",
+          "moon_takogami_lint": "PASS",
+          "moon_takogami_format_check": "PASS",
+          "moon_ontarch_sync": "PASS",
+          "moon_ontarch_scan": "PASS",
+          "moon_ontarch_validate": "PASS",
+          "moon_panoply_gen_check": "PASS",
+          "moon_panoply_validate_substrate": "PASS",
+          "git_diff_check": "PASS",
+          "github_actions_status_checks": "absent",
+          "graph_fingerprint_flake": "not observed on this run"
+        },
+        "linux_lima_wfos_s61_alpine": {
+          "platform": "Lima Linux aarch64 (wfos-s61-alpine musl)",
+          "toolchain": "rustc 1.96.0 / cargo 1.96.0",
+          "moon": "unavailable in guest",
+          "wfos_commit": "4eba70fc8282dd93f3fcadd3d43e75b670fa82ac",
+          "writable_copy": "/tmp/wfos-phase5-linux (rsync of host WfOS tree excluding target/.git; CARGO_TARGET_DIR=/tmp/wfos-target-phase5)",
+          "host_mount_limitation": "host virtiofs /Users/dvz is read-only; AppleDouble ._* / .DS_Store stripped after rsync; ontarch validate preceded by bin-report regeneration against copy root",
+          "appledouble_cleanup": "find ... -name '._*' -delete; find ... -name '.DS_Store' -delete",
+          "evidence_kind": "local Lima evidence; GitHub Actions absent",
+          "direct_command_substitutions": {
+            "takogami_build": "cargo build -p takogami",
+            "takogami_test": "cargo test -p takogami",
+            "takogami_lint": "cargo clippy -p takogami --all-targets -- -D warnings",
+            "takogami_format_check": "cargo fmt -p takogami -- --check",
+            "ontarch_sync": "packages/ontarch/bin/ontarch sync",
+            "ontarch_scan": "packages/ontarch/bin/ontarch scan",
+            "ontarch_bin_report": "packages/ontarch/bin/ontarch bin-report",
+            "ontarch_validate": "packages/ontarch/bin/ontarch validate",
+            "panoply_gen_check": "packages/panoply/bin/panoply gen brewfile --check",
+            "panoply_validate_substrate": "packages/panoply/bin/validate-substrate.sh"
+          },
+          "cargo_build": "PASS",
+          "cargo_test": "PASS (lib 265; bin_cli 59; cli_smoke 17; contracts_roundtrip 19; e2e_mvp 10; execution_cli 16; graph_cli 89; ontarch_bin_contract 26; ontarch_graph_contract 27; policy_cli 17; resolution_cli 27; session_cli 12; session_store 21)",
+          "cargo_clippy_all_targets_D_warnings": "PASS",
+          "cargo_fmt_check": "PASS",
+          "ontarch_sync": "PASS",
+          "ontarch_scan": "PASS",
+          "ontarch_bin_report": "PASS",
+          "ontarch_validate": "PASS",
+          "panoply_gen_check": "PASS",
+          "panoply_validate_substrate": "PASS",
+          "git_diff_check": "skipped_no_git_in_writable_copy",
+          "graph_fingerprint_flake": "not observed on this run"
+        }
+      },
+      "github_actions_evidence": "absent (.github/ not present in WfOS repo; local macOS + Lima remain release authority)",
+      "historical_secrets_scan": {
+        "status": "open / preserved / non-gating",
+        "finding": "ontarch:secrets-scan still reports the pre-existing age-secret-key in git history (commit a3a4978, 2026-06-24; redacted in HEAD)",
+        "gate_impact": "outside E09 acceptance gate; unchanged by Phase 5"
+      },
+      "expected_red_remaining": [],
+      "blockers_limitations": [
+        "ontarch:secrets-scan still reports the pre-existing age-secret-key in git history (commit a3a4978) — unrelated to S7, not an E09 gate blocker",
+        "GitHub Actions evidence absent; Linux evidence is local Lima alpine aarch64",
+        "D6–D8 remain open / non-blocking (unchanged by Phase 5)"
+      ],
+      "preserved": [
+        "RuntimeCommandRecord schema 0.1.0 unchanged",
+        "no production Rust / test / policy / schema / shell adapter changes",
+        "no second process runner",
+        "no widened authorization constructors",
+        "archive/delete remain Deny/deferred/no-spawn",
+        "graph remains zero-spawn / no-record / no-implicit-sync",
+        "Phase 0–4 progress history preserved (append-only)",
+        "historical secrets-scan finding preserved verbatim / non-gating"
+      ],
+      "final_disposition": "Phase 5 COMPLETE; docs candidate frozen and dual-platform validated; S7 status done; E09 and M4 COMPLETE after Build ledger closure; E10 named next but not started",
+      "next": "E10 planning/kickoff (not started)",
+      "completed_at": "2026-07-28T05:56:02Z",
+      "notes": "Stop after E09/M4 closure. Do not implement archive/delete, approval transport, human-actor inference, terminal-provider ownership, work-session restore, daemon, MCP, a second process runner, record-schema migration, or E10."
+    },
     {
       "phase": "4-i01-hermetic-acceptance-corrections",
       "title": "E09.S7 Phase 4 i01 hermetic acceptance and evidence corrections",
@@ -2117,7 +2241,7 @@
     "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-4-evidence-review-addendum.md",
     "packages/ontarch/registry/sessions/2026-07-25-e09-s7.json"
   ],
-  "next": "E09.S7 Phase 5 documentation, release evidence, and E09/M4 closure",
+  "next": "E10 planning/kickoff (not started)",
   "blockers": [
     "ontarch:secrets-scan still reports pre-existing age-secret-key in git history (commit a3a4978) — unrelated to S7"
   ],
