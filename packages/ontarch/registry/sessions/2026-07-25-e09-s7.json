@@ -1605,6 +1605,103 @@
       "next": "E09.S7 Phase 4 hermetic E2E fixture and M4 closure",
       "completed_at": "2026-07-28T02:37:47Z",
       "notes": "Phase 3 i06 closed L01\u2013L03. Do not mark E09/M4 complete. GitHub Actions evidence: absent. Phase 4 and E10 remain unimplemented. i04/i05 history not rewritten."
+    },
+    {
+      "phase": "3-i07-final-evidence-reconciliation",
+      "title": "E09.S7 Phase 3 i07 final evidence reconciliation and Phase 4/Phase 5 handoff",
+      "status": "done",
+      "addendum": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-3-i07-addendum.md",
+      "reviewed_wfos_head": "857247f82a7f48f6350b8ef79a05a6bcb342f2ff",
+      "reviewed_workstreams_head": "4c403c824dd29efcb524babd407727e3ec54024d",
+      "workstreams_addendum_commit": "4c403c824dd29efcb524babd407727e3ec54024d",
+      "validated_phase3_candidate": "4b833dfbb5e3de3d96fc174ecdc65c4d50088d86",
+      "i06_evidence_commit": "d764c25a1f889188ed2b9196f013aa0886790a2e",
+      "i06_evidence_followup_commit": "857247f82a7f48f6350b8ef79a05a6bcb342f2ff",
+      "findings_addressed": [
+        "S7-P3-M01",
+        "S7-P3-M02",
+        "S7-P3-M03"
+      ],
+      "findings_disposition_at_start": {
+        "S7-P3-M01": "still_valid",
+        "S7-P3-M02": "still_valid",
+        "S7-P3-M03": "still_valid"
+      },
+      "corrections": [
+        "S7-P3-M01: recorded post-evidence validation at the evidence-bearing WfOS head after session JSON edits",
+        "S7-P3-M02: replaced stale top-level token_note/next/loaded_context with Phase 3 i07 closeout wording",
+        "S7-P3-M03: separated Phase 4 hermetic MVP acceptance fixture/portability from Phase 5 docs/evidence/E09/M4 closure in handoff"
+      ],
+      "summary_fields_changed": [
+        "token_note",
+        "next",
+        "loaded_context"
+      ],
+      "pre_edit_validation": {
+        "wfos_head": "857247f82a7f48f6350b8ef79a05a6bcb342f2ff",
+        "platform": "macOS-aarch64 Darwin 25.5.0",
+        "toolchain": "rustc 1.96.0 / cargo 1.96.0 / moon 2.3.2",
+        "commands": {
+          "python3_-m_json.tool_session_json": "PASS",
+          "cargo_test_takogami_cli_smoke": "PASS 17",
+          "moon_run_ontarch_validate": "PASS",
+          "git_diff_check": "PASS"
+        }
+      },
+      "post_evidence_validation": {
+        "platform": "macOS-aarch64 Darwin 25.5.0",
+        "toolchain": "rustc 1.96.0 / cargo 1.96.0 / moon 2.3.2",
+        "scope": "repository validation at evidence-bearing head after session JSON edits; not a complete macOS/Linux candidate-matrix rerun",
+        "commands": {
+          "python3_-m_json.tool_session_json": "PASS",
+          "cargo_test_takogami_cli_smoke": "PASS 17",
+          "moon_run_ontarch_validate": "PASS",
+          "cargo_check_takogami_tests": "PASS",
+          "cargo_fmt_all_check": "PASS",
+          "git_diff_check": "PASS"
+        }
+      },
+      "evidence_scope_note": "Complete macOS/Linux candidate gates remain attributed only to validated code candidate 4b833dfbb5e3de3d96fc174ecdc65c4d50088d86. i07 adds repository validation at the evidence-bearing head after session-record edits; it does not relabel either documentation commit as the validated candidate.",
+      "expected_red_remaining": [
+        "e2e_mvp_path_includes_graph_projection (Phase 4 fixture debt \u2014 incoherent registry overlay; do not weaken graph freshness; no longer a Phase 3 blocker after i07)"
+      ],
+      "github_actions_evidence": "absent",
+      "preserved": {
+        "phase1": "COMPLETE",
+        "phase2": "COMPLETE",
+        "C01_C06": "accepted",
+        "F01_F04": "accepted",
+        "H01_H03": "accepted",
+        "J01_J02": "accepted",
+        "K01_K03": "accepted",
+        "L01_L03": "accepted",
+        "production_mutation_seam": "removed",
+        "legacy_TAKOGAMI_TEST_mutation_vars": "inert",
+        "test_mutation_cfg_test_only": "preserved",
+        "helper_mutation_coverage": "complete",
+        "D9_option_B": "done",
+        "schema": "0.1.0",
+        "validated_phase3_candidate": "4b833dfbb5e3de3d96fc174ecdc65c4d50088d86",
+        "i06_evidence_commit": "d764c25a1f889188ed2b9196f013aa0886790a2e",
+        "i06_evidence_followup_commit": "857247f82a7f48f6350b8ef79a05a6bcb342f2ff",
+        "phase4": "not started",
+        "phase5": "not started",
+        "E10": "not started"
+      },
+      "final_disposition": {
+        "phase1": "COMPLETE",
+        "phase2": "COMPLETE",
+        "phase3": "COMPLETE",
+        "phase4": "READY FOR KICKOFF",
+        "phase5": "NOT STARTED",
+        "E09_S7": "IN PROGRESS",
+        "M4": "IN PROGRESS",
+        "E10": "NOT STARTED"
+      },
+      "next": "E09.S7 Phase 4 hermetic MVP acceptance fixture and portability",
+      "phase5_planned": "E09.S7 Phase 5 documentation, release evidence, and E09/M4 closure",
+      "completed_at": "2026-07-28T03:23:38Z",
+      "notes": "Phase 3 COMPLETE through i07. Post-evidence validation recorded. Phase 4 and Phase 5 remain separately defined. Do not mark E09/M4 complete. GitHub Actions evidence: absent. E10 not started. Historical i04\u2013i06 progress entries not rewritten."
     }
   ],
   "loaded_context": [
@@ -1619,12 +1716,14 @@
     "Build/bin/wfos/2026-07-26-wfos-e09-s7-phase-0-follow-up-review-phase-1-completion-addendum.md",
     "Build/bin/wfos/2026-07-26-wfos-e09-s7-phase-1-implementation-review-closure-corrections-addendum.md",
     "Build/bin/wfos/2026-07-26-wfos-e09-s7-phase-1-closure-follow-up-review-final-corrections.md",
-    "Build/bin/wfos/2026-07-26-wfos-e09-s7-phase-2-readiness-review-and-implementation-acceptance-addendum.md"
+    "Build/bin/wfos/2026-07-26-wfos-e09-s7-phase-2-readiness-review-and-implementation-acceptance-addendum.md",
+    "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-3-i06-addendum.md",
+    "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-3-i07-addendum.md"
   ],
-  "next": "E09.S7 Phase 4 hermetic E2E fixture and M4 closure",
+  "next": "E09.S7 Phase 4 hermetic MVP acceptance fixture and portability",
   "blockers": [
     "ontarch:secrets-scan still reports pre-existing age-secret-key in git history (commit a3a4978) \u2014 unrelated to S7",
     "Phase 4 graph E2E fixture debt remains expected-red"
   ],
-  "token_note": "Phase 3 i04 J01\u2013J02 closed; stop before Phase 4/E10; do not mark E09/M4 complete; GHA absent"
+  "token_note": "Phase 3 COMPLETE through i07; C01\u2013C06/F01\u2013F04/H01\u2013H03/J01\u2013J02/K01\u2013K03/L01\u2013L03 accepted; production mutation seam removed; helper mutation coverage complete; candidate/evidence provenance reconciled; post-evidence validation passed; Phase 4 ready; Phase 5 not started; E10 not started; GHA absent"
 }
