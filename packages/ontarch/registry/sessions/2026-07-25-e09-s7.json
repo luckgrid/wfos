@@ -2233,6 +2233,93 @@
       "phase5_planned": true,
       "completed_at": "2026-07-28T04:26:40Z",
       "notes": "Stop before Phase 5 documentation closure. Do not begin E10. Do not mark E09/M4 complete."
+    },
+    {
+      "phase": "5-i01-documentation-contract-and-release-provenance-corrections",
+      "title": "E09.S7 Phase 5 i01 documentation corrections",
+      "status": "done",
+      "plan": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-5-i01-documentation-corrections-addendum.md",
+      "phase5_i01_docs_candidate": "b628655eb80b54c2afc5afdf39e64459f2dc581a",
+      "phase5_i01_evidence_commit": "PENDING_AFTER_THIS_COMMIT",
+      "phase5_i01_evidence_followup": null,
+      "reviewed_phase5_docs_candidate": "4eba70fc8282dd93f3fcadd3d43e75b670fa82ac",
+      "reviewed_phase5_evidence": "10b36462a0b518e3f1edb3310bff5953d4de9d7e",
+      "reviewed_phase5_evidence_followup": "3c14beef352e89149ed5f68c72d9a1a7497c7a40",
+      "post_closure_docs_baseline": "ba20161bddcba5f98ad7f3f97d1e813afd5215c2",
+      "production_delta": "none — documentation and evidence only",
+      "corrections": [
+        "plan-only lifecycle attempts documented as planned terminal command records with no child spawn",
+        "session --limit and bin cleanup --scope command forms corrected",
+        "--explain limited to lifecycle dev/build/check",
+        "first-run order changed to panoply doctor before ontarch sync",
+        "post-closure documentation consolidation incorporated into newly validated candidate"
+      ],
+      "gate": {
+        "macos": {
+          "platform": "macOS-aarch64 Darwin 25.5.0",
+          "toolchain": "rustc 1.95.0 / cargo 1.95.0 / moon 2.3.2",
+          "wfos_commit": "b628655eb80b54c2afc5afdf39e64459f2dc581a",
+          "moon_takogami_build": "PASS",
+          "moon_takogami_test": "PASS (lib 265; bin_cli 59; cli_smoke 17; contracts_roundtrip 19; e2e_mvp 10; execution_cli 16; graph_cli 89; ontarch_bin_contract 26; ontarch_graph_contract 27; policy_cli 17; resolution_cli 27; session_cli 12; session_store 21)",
+          "moon_takogami_lint": "PASS",
+          "moon_takogami_format_check": "PASS",
+          "moon_ontarch_sync": "PASS",
+          "moon_ontarch_scan": "PASS",
+          "moon_ontarch_validate": "PASS",
+          "moon_panoply_gen_check": "PASS",
+          "moon_panoply_validate_substrate": "PASS",
+          "git_diff_check": "PASS",
+          "github_actions_status_checks": "absent",
+          "graph_fingerprint_flake": "not observed on this run"
+        },
+        "linux_lima_wfos_s61_alpine": {
+          "platform": "Lima Linux aarch64 (wfos-s61-alpine musl)",
+          "toolchain": "rustc 1.96.0 / cargo 1.96.0",
+          "moon": "unavailable in guest",
+          "wfos_commit": "b628655eb80b54c2afc5afdf39e64459f2dc581a",
+          "writable_copy": "/tmp/wfos-i01-linux (rsync of host WfOS tree excluding target/.git; CARGO_TARGET_DIR=/tmp/wfos-target-i01)",
+          "host_mount_limitation": "host virtiofs /Users/dvz is read-only; AppleDouble ._* / .DS_Store stripped after rsync; ontarch validate preceded by bin-report regeneration against copy root",
+          "appledouble_cleanup": "find ... -name '._*' -delete; find ... -name '.DS_Store' -delete",
+          "evidence_kind": "local Lima evidence; GitHub Actions absent",
+          "direct_command_substitutions": {
+            "takogami_build": "cargo build -p takogami",
+            "takogami_test": "cargo test -p takogami",
+            "takogami_lint": "cargo clippy -p takogami --all-targets -- -D warnings",
+            "takogami_format_check": "cargo fmt -p takogami -- --check",
+            "ontarch_sync": "packages/ontarch/bin/ontarch sync",
+            "ontarch_scan": "packages/ontarch/bin/ontarch scan",
+            "ontarch_bin_report": "packages/ontarch/bin/ontarch bin-report",
+            "ontarch_validate": "packages/ontarch/bin/ontarch validate",
+            "panoply_gen_check": "packages/panoply/bin/panoply gen brewfile --check",
+            "panoply_validate_substrate": "packages/panoply/bin/validate-substrate.sh"
+          },
+          "cargo_build": "PASS",
+          "cargo_test": "PASS (lib 265; bin_cli 59; cli_smoke 17; contracts_roundtrip 19; e2e_mvp 10; execution_cli 16; graph_cli 89; ontarch_bin_contract 26; ontarch_graph_contract 27; policy_cli 17; resolution_cli 27; session_cli 12; session_store 21)",
+          "cargo_clippy_all_targets_D_warnings": "PASS",
+          "cargo_fmt_check": "PASS",
+          "ontarch_sync": "PASS",
+          "ontarch_scan": "PASS",
+          "ontarch_bin_report": "PASS",
+          "ontarch_validate": "PASS",
+          "panoply_gen_check": "PASS",
+          "panoply_validate_substrate": "PASS",
+          "git_diff_check": "PASS recorded on macOS host checkout (writable copy has no .git authority)",
+          "graph_fingerprint_flake": "not observed on this run"
+        }
+      },
+      "historical_secrets_scan": {
+        "status": "open / preserved / non-gating"
+      },
+      "preserved": [
+        "Phase 4 i01 candidate unchanged",
+        "RuntimeCommandRecord schema 0.1.0 unchanged",
+        "E09 and M4 remain complete",
+        "D6-D8 remain open/non-blocking",
+        "E10 not started",
+        "original Phase 5 docs candidate/evidence preserved as historical accepted evidence"
+      ],
+      "final_disposition": "Phase 5 i01 COMPLETE; documentation contracts and current release provenance corrected without reopening E09/M4",
+      "next": "E10 planning/kickoff (not started)"
     }
   ],
   "loaded_context": [
