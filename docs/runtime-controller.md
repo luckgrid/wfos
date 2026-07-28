@@ -11,14 +11,15 @@ Those belong to optional providers (tmux / Herdr for terminals; Hammerspoon and 
 desktop layout; an external gateway such as Push for message/schedule ingress). See
 [native-toolchain.md](native-toolchain.md).
 
-Status: **in progress; direct native execution, command records, and graph projection are
-implemented.** Discovery, list/info/tools/interfaces, doctor, dual-layer policy, sealed-plan
-resolution, `session list|show|latest`, and `takogami graph` are in place. Allowed direct
-`--execute` writes a durable pending `command_execution` record, then runs the sealed program
-with literal argv and a cleared environment. Gate/Deny never spawn. Optional RTK postprocesses
-bounded human streams only. Bin routing, interactive providers, and work-session restore remain
-ahead. See [`packages/takogami/README.md`](../packages/takogami/README.md); provenance lives in
-[`packages/ontarch/registry/sessions/`](../packages/ontarch/registry/sessions/).
+Status: **E09 runtime-controller MVP implemented (pending release closeout).** Discovery,
+list/info/tools/interfaces, doctor, dual-layer policy, sealed-plan resolution, direct
+`--execute` through one hardened Tokio executor, `session list|show|latest`, `takogami graph`,
+and supported `takogami bin` projections are in place. Lifecycle resolution is plan-only unless
+`--execute` is supplied. Only evaluator-minted dual-Allow authorization reaches execution.
+Gate/Deny/deferred paths never spawn. Graph is a separate zero-spawn/no-record path with no
+implicit sync. Optional RTK postprocesses bounded human streams only. Interactive providers and
+work-session restore remain post-MVP. See [`packages/takogami/README.md`](../packages/takogami/README.md);
+provenance lives in [`packages/ontarch/registry/sessions/`](../packages/ontarch/registry/sessions/).
 
 ## Responsibilities
 
@@ -54,12 +55,28 @@ freshness. Upstream fingerprints use Ontarch `registry_root`; authored unit fing
 
 Hit / miss / stale never trigger an implicit sync. On miss or stale, run
 `moon run ontarch:sync` (or `ontarch sync`) explicitly, then re-query. Graph queries spawn no
-child and write no operational command record. Sibling `graph.dot` is not trusted.
+child and write no operational command record. Sibling `graph.dot` is not trusted. Graph machine
+JSON is never RTK transformed.
 
-### Bin projection helper trust
+### Bin projection
 
-`takogami bin report|cleanup` seals a controller-owned helper PATH for Ontarch child scripts.
-The accepted trust model:
+`takogami bin report|cleanup` seals a controller-owned Ontarch identity and helper PATH.
+Caller `PATH` has no authority. Projection children receive controller-owned `PANOPLY_AGENT=1`.
+
+| Operation | Request/child decision | Ontarch child | Record outcome |
+|-----------|------------------------|---------------|----------------|
+| `bin report` | Allow / Allow | executes once | completed / controller error / failure as truthful |
+| cleanup `report-only` | Allow / Allow | executes once | completed / controller error / failure as truthful |
+| cleanup `dry-run` | Gate | no spawn | gated |
+| cleanup `archive` | Deny + `deferred_unavailable` | no spawn | denied |
+| cleanup `delete-approved` | Deny + `deferred_unavailable` | no spawn | denied |
+
+Explicit `--scope` requires `namespace/bin/<segment>[/<segment>...]`. Omitting `--scope` keeps
+workspace-wide non-mutating report/planning behavior. Bin machine JSON is never RTK transformed;
+full inventory/plan payloads are not persisted in command records. Archive/delete mutation is
+not available in E09.
+
+Helper trust model:
 
 - caller `PATH` has no authority;
 - helper search directories are a closed controller-owned list;
@@ -71,14 +88,17 @@ The accepted trust model:
 - same-user mutation after the final preflight is not claimed to be atomically impossible;
 - no root-owned or package-manager provenance claim is made.
 
+### Lifecycle and policy
+
 Lifecycle verbs resolve a sealed plan, then evaluate dual-layer policy (Takogami request +
-child intent) with Deny > Gate > Allow. `--explain` prints resolution and policy provenance;
-resolution failures print the safely completed portion without a digest. Gate fails closed (no
-CLI/env/file approval bypass). Allowed direct `--execute` persists a pending command record,
-then spawns the sealed executable exactly (no shell, no PATH re-search). Interactive classes
-still return `execution_class_unavailable`. Profile precedence is CLI `--profile` →
-`TAKOGAMI_PROFILE` → `workspace-dev` → fail closed. Policy does not claim an OS sandbox after
-spawn.
+child intent) with Deny > Gate > Allow. Resolution is plan-only unless `--execute` is
+supplied. `--explain` prints resolution and policy provenance; resolution failures print the
+safely completed portion without a digest. Gate fails closed (no CLI/env/file approval bypass).
+Allowed direct `--execute` persists a pending `RuntimeCommandRecord` (schema `0.1.0`), then
+spawns the sealed executable through the single hardened Tokio executor (no shell, no PATH
+re-search). Interactive classes still return `execution_class_unavailable`. Profile precedence
+is CLI `--profile` → `TAKOGAMI_PROFILE` → `workspace-dev` → fail closed. Policy does not claim
+an OS sandbox after spawn.
 
 Child authorization requires an explicit matching command Allow. An allowed cwd, manifest, or
 operand path only satisfies path scope; it never grants command authority. Unknown command forms
@@ -129,19 +149,33 @@ sequenceDiagram
   participant K as runtime-controller
   participant C as metadata-plane
   participant D as native-toolchain
-  U->>K: takogami build unit
+  U->>K: takogami build unit --execute
   K->>C: read descriptor and policy
   C-->>K: unit metadata
-  Note over K: Seal plan, evaluate policy, explain
-  Note over K,D: Spawn/records deferred
-  K--xD: deferred until native execution
+  Note over K: Seal plan, evaluate request+child policy
+  alt dual-Allow
+    K->>K: pending RuntimeCommandRecord
+    K->>D: hardened executor spawn
+    D-->>K: streams, exit, signals
+    K->>K: terminal record
+  else Gate or Deny or deferred
+    Note over K: stop before executor
+  end
 ```
 
-The current phase stops after policy: dual-layer Allow/Gate/Deny is enforced against one opaque,
-resolver-owned handoff; `AuthorizedExecutionPlan` and its proof can be created only inside the
-evaluator after both layers Allow. Rejected and authorized outcomes are distinct types. Child
-processes and command records are not yet started. Registry write-back after every routed command
-is **not** runtime MVP; Ontarch remains the registry owner.
+Graph is a separate path: read `registry/graph.json`, validate freshness, project text/DOT/JSON,
+and return — no child, no record, no implicit sync.
+
+Lifecycle and supported bin projections share one hardened executor. Request and child policy
+both evaluate. Only evaluator-minted dual-Allow authorization reaches execution. Pending →
+PID-bearing pending → terminal transitions are recorded truthfully under schema `0.1.0`.
+Registry write-back after every routed command is **not** runtime MVP; Ontarch remains the
+registry owner. Pre-spawn revalidation seals Ontarch helper identity; projection children receive
+controller-owned `PANOPLY_AGENT=1`.
+
+Controller exit categories: `0` success, `1` internal, `2` usage, `3` contract, `4` resolution,
+`5` policy deny, `6` policy gate, `7` state I/O, `8` execution I/O, `10` not implemented /
+unavailable execution class.
 
 ## Composition boundary
 
@@ -149,10 +183,14 @@ is **not** runtime MVP; Ontarch remains the registry owner.
 |-------|--------|
 | Resolve / policy / direct spawn / command records | Takogami |
 | Tool install and detection | Panoply |
-| Lightweight terminal persistence | tmux (default) |
+| Lightweight terminal persistence | tmux (default; optional) |
 | Rich agent workspaces | Herdr (optional additive; not required for doctor) |
 | Desktop window geometry | Desktop providers (post-MVP) |
 | Message/schedule ingress to an existing agent | Push or another narrow gateway (optional; post-MVP) |
+
+Optional providers are discovery/readiness inputs, not owned services. Takogami does not start
+tmux or Herdr servers in E09. Missing Herdr is nonfatal unless a later profile explicitly
+requires it.
 
 A gateway authenticates who may ask an agent to act; it does not authorize the resulting WfOS
 operation. The spawned agent must use the same profile-bound CLI/MCP surface as a local caller.
@@ -166,8 +204,8 @@ The runtime controller is built on the Rust stack described in
 
 - **[starbase](https://crates.io/crates/starbase)** as the application shell, with
   **[clap](https://crates.io/crates/clap)** for command and argument parsing.
-- **[Tokio](https://crates.io/crates/tokio)** + `tokio::process` for non-blocking native tool
-  proxying.
+- **[Tokio](https://crates.io/crates/tokio)** + `tokio::process` for the single hardened
+  native-execution path shared by lifecycle and supported bin projections.
 - A later TUI (e.g. Ratatui), if any, is for cross-provider operator UX — **not** a clone of
   Herdr's multiplexer UI. Persistent terminals stay with Herdr/tmux.
 

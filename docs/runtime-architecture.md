@@ -14,6 +14,28 @@ providers (tmux or Herdr), not to Takogami. Desktop window geometry belongs to d
 providers. Takogami records command attempts and may later coordinate providers; it must not
 become a second terminal server.
 
+## Implemented v0 boundary
+
+The E09 runtime-controller MVP is a single-process CLI. What is implemented today:
+
+- **One hardened Tokio executor** shared by lifecycle `--execute` and supported bin projections
+  (`bin report`, cleanup `report-only`). Literal argv, no shell, cleared environment rebuilt
+  from sealed non-sensitive keys, bounded streams, signal forwarding, and exit fidelity.
+- **A distinct no-spawn graph path** that reads `registry/graph.json`, validates freshness,
+  projects text/DOT/JSON, and never creates an operational command record or syncs implicitly.
+- **Evaluator-owned authorization.** Only dual-Allow proofs minted inside the policy evaluator
+  reach the executor. Private sealed runnable views are not constructible from outside.
+- **Command-record transitions** under `RuntimeCommandRecord` schema `0.1.0`: pending →
+  PID-bearing pending → terminal (`completed` / controller error / failure / gated / denied as
+  truthful). `session list|show|latest` queries those operational records.
+- **Bin Gate/Deny paths** stop before executor reachability: cleanup `dry-run` is Gate/no-spawn;
+  `archive` / `delete-approved` are Deny + `deferred_unavailable` / no-spawn.
+- **Optional providers.** RTK, tmux, and Herdr remain optional. Graph/bin machine JSON is never
+  RTK transformed.
+
+Daemon, multi-panel TUI, MCP embedding, and federation remain later architecture — not E09
+commitments.
+
 ## Client-daemon model
 
 To stay responsive under dense workloads, a later phase may split a lightweight CLI client from
@@ -116,17 +138,22 @@ The classification of what data may cross which boundary is
 [metadata-plane (Ontarch)](metadata-plane.md) stream policy (`private … federated`), and
 promotion scope is the abstract Leader policy — neither is a folder.
 
-## Core engine prototype
+## Core engine prototype (conceptual only)
 
-A minimal sketch of the structural mechanic: isolate a profile, launch a native tool, and
-stream its output without blocking. An AI interception hook fits naturally on the stream.
+The sketch below illustrates the structural idea — isolate a profile, launch a native tool,
+and stream output without blocking. It is **not** the production contract. Production
+execution requires a sealed plan, dual-layer policy evaluation, an evaluator-minted dual-Allow
+authorization, a pending `RuntimeCommandRecord` before spawn, environment clearing with sealed
+inherited keys plus fixed controller-owned values, bounded stream capture, and terminal-record
+finalization. See [runtime-controller.md](runtime-controller.md) and the Takogami package README
+for the implemented path.
 
 ```rust
 use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 
-/// Active profile/brand context applied at the process boundary.
+/// Conceptual profile/brand context — production uses sealed plans + policy proofs.
 struct WorkstreamContext {
     tenant_id: String,
     brand_domain: String,
@@ -137,7 +164,7 @@ struct WorkstreamContext {
 async fn execute_proxied_workflow(
     ctx: WorkstreamContext,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    // Enforce the profile's environment on the child process.
+    // Conceptual only: production clears the environment and rebuilds sealed keys.
     let mut child = Command::new(&ctx.target_tool)
         .args(&ctx.args)
         .env("WFOS_TENANT", &ctx.tenant_id)
@@ -149,11 +176,8 @@ async fn execute_proxied_workflow(
     let stdout = child.stdout.take().ok_or("failed to capture stdout")?;
     let mut lines = BufReader::new(stdout).lines();
 
-    // Stream output back into the active session, non-blocking.
     while let Some(line) = lines.next_line().await? {
         println!("[{}] {}", ctx.tenant_id, line);
-        // AI interception hook fits here, e.g.:
-        // if line.contains("error") { trigger_remediation(&line).await?; }
     }
 
     let status = child.wait().await?;

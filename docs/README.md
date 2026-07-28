@@ -16,7 +16,7 @@ This folder is the self-contained reference for the workspace. Start with
 | [monorepo.md](monorepo.md) | moon project graph + proto toolchains, tasks, conventions |
 | [native-toolchain.md](native-toolchain.md) | Native toolchain — Unix/Rust tools, modules, config templates |
 | [metadata-plane.md](metadata-plane.md) | Metadata plane — descriptors, registry, schemas, policies |
-| [runtime-controller.md](runtime-controller.md) | Runtime controller (`takogami`) — MVP discovery/routing/command records; providers for terminals |
+| [runtime-controller.md](runtime-controller.md) | Runtime controller (`takogami`) — E09 MVP: discovery/routing/execute/graph/bin/command records; providers for terminals |
 | [package-translator.md](package-translator.md) | Package translator (`takogami package`) — intent → packages (planned) |
 | [portable-component-runtime.md](portable-component-runtime.md) | Portable component runtime — WASM/WASI components (planned) |
 | [agent-configs.md](agent-configs.md) | Shared agent profiles, app-integration pattern, lean AGENTS.md |
@@ -45,8 +45,10 @@ swappable — the archetype id is what other layers depend on.
 
 ## Status
 
-Implemented today: **`native-toolchain` (Panoply)** and **`metadata-plane` (Ontarch)**.
-In progress: **`runtime-controller` (Takogami)**.
-Planned: **`package-translator` (Polytope)**, **`portable-component-runtime` (Wisp)**.
+Implemented today: **`native-toolchain` (Panoply)**, **`metadata-plane` (Ontarch)**, and the
+**`runtime-controller` MVP (Takogami)** — discovery, dual-layer policy, direct `--execute`,
+command-execution sessions, graph projection, and supported bin routing.
+Planned: **`package-translator` (Polytope)**, **`portable-component-runtime` (Wisp)**, plus
+post-MVP runtime surfaces (workstream routing, work-session restore, daemon/MCP).
 See each guide for scope and roadmap; build-session provenance lives in
 `packages/ontarch/registry/sessions/`.

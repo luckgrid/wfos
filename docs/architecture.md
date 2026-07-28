@@ -150,4 +150,5 @@ the execution layer as a privileged side door.
 
 - Engine internals and the CLI/daemon/TUI plan: [runtime-architecture.md](runtime-architecture.md)
 - How the workspace is built and tasks run: [monorepo.md](monorepo.md)
-- The implemented pair: [native-toolchain.md](native-toolchain.md) and [metadata-plane.md](metadata-plane.md)
+- The implemented Level 0 trio: [native-toolchain.md](native-toolchain.md),
+  [metadata-plane.md](metadata-plane.md), and [runtime-controller.md](runtime-controller.md)

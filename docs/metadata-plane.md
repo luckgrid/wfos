@@ -33,6 +33,8 @@ Packages      define package-translator-managed deliverable interfaces (planned)
 | `schemas/skill.schema.json` | schema | contract for curated skill/template/pattern records (authored under `$AGENTS_HOME/skills/`) |
 | `schemas/command-output.schema.json` | schema | Takogami `--json` `CommandEnvelope` contract |
 | `schemas/runtime-command-record.schema.json` | schema | operational Takogami command-execution record contract (distinct from build-session records) |
+| `schemas/bin-inventory.schema.json` | schema | report-only bin inventory machine contract consumed by Takogami |
+| `schemas/bin-cleanup-plan.schema.json` | schema | cleanup plan machine contract consumed by Takogami |
 | `schemas/panoply.tools.schema.json` | schema | contract for the generated tools registry |
 | `policies/panoply.agent.policy.toml` | policy | Panoply agent rails (allow/block, gates) |
 | `policies/no-agent-git-push.policy.toml` | policy | agents never push or publish (human-only) |
@@ -40,9 +42,10 @@ Packages      define package-translator-managed deliverable interfaces (planned)
 | `descriptors/takogami.descriptor.toml` | descriptor | runtime-controller unit (`kind = "runtime-controller"`) |
 | `patterns/agents/` | pattern | agents navigation seed — materialize with `ontarch agents-init` into `$AGENTS_HOME` |
 | `registry/{units,skills,profiles,policies,tools}.json` | registry | generated indexes (gitignored — host-specific) |
-| `registry/graph.{json,dot}` | registry | generated project graph (gitignored — host-specific) |
+| `registry/graph.{json,dot}` | registry | generated project graph (gitignored — host-specific); `graph.json` is trusted, `graph.dot` is not |
+| `registry/bin-inventory.json`, `BIN-INVENTORY.md` | registry | generated bin inventory (gitignored — host-specific) |
 | `registry/QUERIES.md`, `registry/queries/*.jq` | query | jq cookbook over the registry |
-| `registry/sessions/*.json` | record | build-session records (tracked for provenance) |
+| `registry/sessions/*.json` | record | build-session records (tracked for provenance; distinct from runtime command records) |
 
 The native toolchain produces `tools.json` (`panoply doctor`) and is governed by the agent
 policy here; `ontarch sync` reads it and the descriptors/policies to emit the rest of the
@@ -80,6 +83,11 @@ implicit sync. On miss or stale, run `moon run ontarch:sync` (or `ontarch sync`)
 Graph projection is zero-spawn and writes no operational command record; sibling `graph.dot`
 is not trusted by Takogami.
 
+Ontarch machine JSON (graph, bin inventory, cleanup plan) is the source Takogami validates as
+a consumer — Takogami is not a second generator. Supported `takogami bin` paths seal a
+controller-owned Ontarch helper and validate bounded child stdout against the bin schemas
+before success.
+
 The registry is a **pre-computed context cache**. One filtered query answers what a repo scan
 otherwise would:
 
@@ -116,10 +124,11 @@ can appear on disk only when filesystem expression is actually needed.
 
 - **`native-toolchain` (Panoply)** produces the registry (`panoply doctor`) and is governed by
   the agent policy here.
-- **`runtime-controller` (Takogami, `takogami`)** is **in progress** — discovery, routing,
-  policy, direct execute, command-execution sessions, and graph projection ship today; bin
-  routing and interactive providers remain ahead. **`package-translator` (Polytope,
-  `takogami package`)** remains planned and will read metadata-plane data when implemented.
+- **`runtime-controller` (Takogami, `takogami`)** ships the E09 MVP — discovery, dual-layer
+  policy, direct `--execute`, command-execution sessions, graph projection, and supported bin
+  routing. Interactive providers and work-session restore remain post-MVP.
+  **`package-translator` (Polytope, `takogami package`)** remains planned and will read
+  metadata-plane data when implemented.
 - **Native manifests stay authoritative.** The metadata plane describes meaning, routing,
   policy, and relationships; it does not replace `Cargo.toml`, `package.json`, `mise.toml`, or
   lockfiles.

@@ -56,6 +56,37 @@ See `packages/ontarch/schemas/manifest.schema.json` and the fixture at
 `packages/ontarch/registry/fixtures/example-manifest.json`.
 
 
+## Takogami routing (authoritative for E09)
+
+When cleanup or inventory is routed through the runtime controller, Takogami evaluates
+request and child policy, then applies this table:
+
+| Takogami operation | Request/child decision | Ontarch child | Record outcome |
+|---|---|---|---|
+| `bin report` | Allow / Allow | executes once | completed/controller error/failure as truthful |
+| cleanup `report-only` | Allow / Allow | executes once | completed/controller error/failure as truthful |
+| cleanup `dry-run` | Gate | no spawn | gated |
+| cleanup `archive` | Deny + deferred | no spawn | denied |
+| cleanup `delete-approved` | Deny + deferred | no spawn | denied |
+
+Additional Takogami contracts:
+
+- Ontarch machine JSON on stdout is the source Takogami validates; machine JSON is never RTK
+  transformed.
+- Inventory refresh semantics and payload validation run before success; full inventory/plan
+  payloads are not persisted in command records.
+- Explicit `--scope` requires `namespace/bin/<segment>[/<segment>...]`; omitted scope is
+  workspace-wide non-mutating behavior.
+- Projection children receive controller-owned `PANOPLY_AGENT=1`.
+- No archive/delete mutation in E09.
+
+**Direct Ontarch vs routed Takogami.** Calling `ontarch bin-cleanup --mode dry-run` directly
+prints a plan and exits 0 with no filesystem mutation. Routing the same intent through
+`takogami bin cleanup --mode dry-run` evaluates policy first and returns Gate/no-spawn because
+approval transport does not exist. Direct Ontarch `archive` / `delete-approved` still validate
+then refuse at the draft gateway; Takogami denies them with `deferred_unavailable` and never
+spawns Ontarch for those modes.
+
 ## Takogami `--scope` (D9 Option B)
 
 When routing cleanup through the runtime controller (`takogami bin cleanup`), an explicit
@@ -94,7 +125,7 @@ outputs. Missing inventory refreshes via validated `bin-report` and sets
 
 At the current draft gateway, `archive` and `delete-approved` validate arguments and then
 refuse (no filesystem mutation). Agents under `PANOPLY_AGENT=1` are refused those modes
-outright. Real archive/delete execution is deferred to later automation (runtime-controller (Takogami) / H12).
+outright. Real archive/delete execution remains deferred beyond E09.
 
 ## Cleanup classification (Phase 1)
 
@@ -154,5 +185,7 @@ manifest records the destination when applicable:
 
 Report-only inventory is agent-safe. Cleanup mutation (`archive`, `delete-approved`) is
 human-only. The `agent-bin` metadata-plane (Ontarch) policy records allow/gate/block tiers for bin/archive
-commands; see [agent-rails.md](agent-rails.md). Runtime command interception is deferred to
-the runtime-controller (Takogami) — the same boundary as git and secret rails.
+commands; see [agent-rails.md](agent-rails.md). Takogami evaluates those tiers for routed
+`takogami bin` commands (see the routing table above). Direct shell `rm`/`mv` on `PATH`
+outside the router remains unconstrained by Takogami's OS-level authority — the same boundary
+as git and secret rails.
