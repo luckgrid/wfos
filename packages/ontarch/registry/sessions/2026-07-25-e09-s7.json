@@ -105,7 +105,7 @@
       "status": "done",
       "plan": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-5-documentation-evidence-closure-plan.md",
       "phase5_docs_candidate": "4eba70fc8282dd93f3fcadd3d43e75b670fa82ac",
-      "phase5_evidence_commit": "PENDING_AFTER_THIS_COMMIT",
+      "phase5_evidence_commit": "10b36462a0b518e3f1edb3310bff5953d4de9d7e",
       "reviewed_phase4_i01_candidate": "b2b0057cecdf48d6b7d3f67baafb9c51a135553b",
       "reviewed_phase4_i01_evidence": "bfebc062d45d3a1016d476f98d3e9a0bf6e513f4",
       "reviewed_phase4_i01_evidence_followup": "9e9c890c723ed1ee4f350871a0d39291ed8b761c",
