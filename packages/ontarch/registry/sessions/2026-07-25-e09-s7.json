@@ -2240,7 +2240,7 @@
       "status": "done",
       "plan": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-5-i01-documentation-corrections-addendum.md",
       "phase5_i01_docs_candidate": "b628655eb80b54c2afc5afdf39e64459f2dc581a",
-      "phase5_i01_evidence_commit": "PENDING_AFTER_THIS_COMMIT",
+      "phase5_i01_evidence_commit": "70e2a0dfbae7e87d21ab2cad07e2b74c794bc2ed",
       "phase5_i01_evidence_followup": null,
       "reviewed_phase5_docs_candidate": "4eba70fc8282dd93f3fcadd3d43e75b670fa82ac",
       "reviewed_phase5_evidence": "10b36462a0b518e3f1edb3310bff5953d4de9d7e",
