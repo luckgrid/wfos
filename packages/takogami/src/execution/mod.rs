@@ -5,6 +5,14 @@ mod process;
 mod signals;
 mod streams;
 
+#[cfg(test)]
+mod test_mutation;
+
+#[cfg(test)]
+pub(crate) use test_mutation::{
+    HelperShadowSpec, MutatingProjectionExecutor, MutationKind, ProjectionTestMutation,
+};
+
 pub use environment::{
     EnvError, EnvSnapshot, build_child_env, snapshot_env, validate_controller_path,
 };
@@ -224,5 +232,21 @@ impl ProjectionExecutor for SpyProjectionExecutor {
 impl SpyProjectionExecutor {
     pub fn calls(&self) -> u32 {
         self.calls.load(Ordering::SeqCst)
+    }
+}
+
+#[cfg(test)]
+mod production_mutation_guard {
+    #[test]
+    fn production_execution_source_contains_no_test_mutation_reads() {
+        let src = include_str!("process.rs");
+        assert!(
+            !src.contains("TAKOGAMI_TEST"),
+            "production executor must not read test mutation env"
+        );
+        assert!(
+            !src.contains("apply_projection_test_drift"),
+            "production drift hook must be removed"
+        );
     }
 }

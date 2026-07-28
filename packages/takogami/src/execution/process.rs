@@ -43,10 +43,17 @@ impl super::ProjectionExecutor for TokioExecutor {
         authorized: &AuthorizedProjectionPlan,
         options: &ExecutionOptions,
     ) -> ExecutionReport {
-        match execute_projection_inner(authorized, options, &default_signal_factory).await {
-            Ok(report) => report,
-            Err(err) => err.into_report(),
-        }
+        run_projection(authorized, options).await
+    }
+}
+
+pub(super) async fn run_projection(
+    authorized: &AuthorizedProjectionPlan,
+    options: &ExecutionOptions,
+) -> ExecutionReport {
+    match execute_projection_inner(authorized, options, &default_signal_factory).await {
+        Ok(report) => report,
+        Err(err) => err.into_report(),
     }
 }
 
@@ -171,9 +178,6 @@ async fn execute_projection_inner(
 ) -> Result<ExecutionReport, ExecFailure> {
     let sealed = authorized.plan();
 
-    // Test-only post-seal drift seams (honored only when explicitly requested).
-    apply_projection_test_drift(sealed.executable_path(), sealed.cwd_path())?;
-
     sealed.preflight_identities().map_err(|e| ExecFailure {
         outcome: "failed_to_spawn".into(),
         diagnostics: vec![DiagnosticRecord {
@@ -233,131 +237,6 @@ async fn execute_projection_inner(
         None,
     )
     .await
-}
-
-fn apply_projection_test_drift(exe: &Path, cwd: &Path) -> Result<(), ExecFailure> {
-    if std::env::var_os("TAKOGAMI_TEST_INJECT_EXE_DRIFT").is_some() {
-        let _ = fs::remove_file(exe);
-    }
-    if std::env::var_os("TAKOGAMI_TEST_INJECT_CWD_DRIFT").is_some() {
-        let bogey = cwd.with_extension("drifted");
-        let _ = fs::rename(cwd, &bogey);
-    }
-    let common = exe
-        .parent()
-        .and_then(|pkg_bin| pkg_bin.parent())
-        .map(|pkg| pkg.join("lib/common.sh"));
-    let Some(common) = common else {
-        return Ok(());
-    };
-    if std::env::var_os("TAKOGAMI_TEST_INJECT_SOURCE_DRIFT").is_some() {
-        let _ = fs::write(&common, b"# drifted\n");
-    }
-    if std::env::var_os("TAKOGAMI_TEST_INJECT_SOURCE_REMOVED").is_some() {
-        let _ = fs::remove_file(&common);
-    }
-    if std::env::var_os("TAKOGAMI_TEST_INJECT_SOURCE_SYMLINK").is_some() {
-        let backup = common.with_extension("bak");
-        let _ = fs::rename(&common, &backup);
-        let _ = std::os::unix::fs::symlink(&backup, &common);
-    }
-    if std::env::var_os("TAKOGAMI_TEST_INJECT_SOURCE_DANGLING_SYMLINK").is_some() {
-        let _ = fs::remove_file(&common);
-        let _ = std::os::unix::fs::symlink(common.with_extension("missing"), &common);
-    }
-    if std::env::var_os("TAKOGAMI_TEST_INJECT_SOURCE_FIFO").is_some() {
-        let _ = fs::remove_file(&common);
-        let _ = std::process::Command::new("/usr/bin/mkfifo")
-            .arg(&common)
-            .status();
-    }
-    if std::env::var_os("TAKOGAMI_TEST_INJECT_SOURCE_DIRECTORY").is_some() {
-        let _ = fs::remove_file(&common);
-        let _ = fs::create_dir(&common);
-    }
-    if std::env::var_os("TAKOGAMI_TEST_INJECT_SOURCE_SAME_LENGTH").is_some() {
-        // Same length as a typical short common.sh stub, different bytes.
-        let original = fs::read(&common).unwrap_or_else(|_| b"#\n".to_vec());
-        let mut replacement = vec![b'X'; original.len()];
-        if let Some(last) = replacement.last_mut() {
-            *last = b'\n';
-        }
-        let _ = fs::write(&common, replacement);
-    }
-    if std::env::var_os("TAKOGAMI_TEST_INJECT_HELPER_DRIFT").is_some() {
-        // Best-effort: mutate a sealed helper only when it lives under the workspace
-        // (unit tests with fake tool dirs). System helpers are left untouched.
-        if let Ok(path) = std::env::var("TAKOGAMI_TEST_HELPER_PATH") {
-            let p = Path::new(&path);
-            if p.is_file() {
-                let _ = fs::write(p, b"#!/bin/sh\necho drifted-helper\n");
-                #[cfg(unix)]
-                {
-                    use std::os::unix::fs::PermissionsExt;
-                    if let Ok(meta) = fs::metadata(p) {
-                        let mut perms = meta.permissions();
-                        perms.set_mode(0o755);
-                        let _ = fs::set_permissions(p, perms);
-                    }
-                }
-            }
-        }
-    }
-    // Post-authorization helper shadow: insert an executable into an earlier sealed PATH
-    // directory so first-match diverges from the sealed lookup_path. Only writes into the
-    // explicit test-provided directory (never system locations).
-    if std::env::var_os("TAKOGAMI_TEST_INJECT_HELPER_SHADOW").is_some() {
-        let Ok(dir) = std::env::var("TAKOGAMI_TEST_HELPER_SHADOW_DIR") else {
-            return Ok(());
-        };
-        let Ok(name) = std::env::var("TAKOGAMI_TEST_HELPER_SHADOW_NAME") else {
-            return Ok(());
-        };
-        let dir = Path::new(&dir);
-        if !dir.is_absolute() || !dir.is_dir() {
-            return Ok(());
-        }
-        // Refuse obvious system roots — shadows belong in temporary fake helper dirs only.
-        let forbidden = [
-            "/usr/bin",
-            "/bin",
-            "/usr/sbin",
-            "/sbin",
-            "/opt/homebrew/bin",
-            "/usr/local/bin",
-        ];
-        if forbidden.iter().any(|p| dir == Path::new(p)) {
-            return Ok(());
-        }
-        let target = dir.join(&name);
-        if std::env::var_os("TAKOGAMI_TEST_HELPER_SHADOW_SYMLINK").is_some()
-            && let Ok(link_to) = std::env::var("TAKOGAMI_TEST_HELPER_SHADOW_LINK_TO")
-        {
-            let _ = std::os::unix::fs::symlink(Path::new(&link_to), &target);
-            return Ok(());
-        }
-        let bytes = if let Ok(src) = std::env::var("TAKOGAMI_TEST_HELPER_SHADOW_SAME_BYTES") {
-            fs::read(Path::new(&src)).unwrap_or_else(|_| b"#!/bin/sh\necho shadow\n".to_vec())
-        } else {
-            b"#!/bin/sh\necho shadow\n".to_vec()
-        };
-        let _ = fs::write(&target, bytes);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            if let Ok(meta) = fs::metadata(&target) {
-                let mut perms = meta.permissions();
-                // Optional octal mode (e.g. "0757") for world-writable first-match tests.
-                let mode = std::env::var("TAKOGAMI_TEST_HELPER_SHADOW_MODE")
-                    .ok()
-                    .and_then(|s| u32::from_str_radix(s.trim_start_matches('0'), 8).ok())
-                    .unwrap_or(0o755);
-                perms.set_mode(mode);
-                let _ = fs::set_permissions(&target, perms);
-            }
-        }
-    }
-    Ok(())
 }
 
 async fn spawn_and_reap(

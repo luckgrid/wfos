@@ -562,38 +562,6 @@ fn missing_canonical_ontarch_fails_before_spawn_even_when_path_replacement_exist
 }
 
 #[test]
-fn projection_executable_identity_drift_after_seal_fails_preflight() {
-    let h = BinHarness::new();
-    write_executable(
-        &h.path_dir.join("ontarch"),
-        "#!/bin/sh\necho path-rescue\nexit 0\n",
-    );
-    let out = h.run_env(
-        &["--json", "bin", "report"],
-        &[("TAKOGAMI_TEST_INJECT_EXE_DRIFT", "1")],
-    );
-    assert_not_still_unimplemented(&out);
-    assert_ne!(out.status.code(), Some(SUCCESS as i32));
-    assert!(
-        !h.path_decoy_marker.exists(),
-        "must not rescue via PATH after identity loss"
-    );
-    h.assert_marker_untouched();
-}
-
-#[test]
-fn projection_cwd_identity_drift_after_seal_fails_preflight() {
-    let h = BinHarness::new();
-    let out = h.run_env(
-        &["--json", "bin", "report"],
-        &[("TAKOGAMI_TEST_INJECT_CWD_DRIFT", "1")],
-    );
-    assert_not_still_unimplemented(&out);
-    assert_ne!(out.status.code(), Some(SUCCESS as i32));
-    h.assert_marker_untouched();
-}
-
-#[test]
 fn pending_write_failure_prevents_spawn() {
     let h = BinHarness::new();
     fs::write(&h.state_home, b"not-a-directory").unwrap();
@@ -968,6 +936,203 @@ fn validated_scope_record_stores_only_scope_provided() {
     assert!(!blob.contains("Build/bin/demo"));
 }
 
+// --- E09.S7 Phase 3 i05: legacy test env inertness (production boundary) ---
+
+fn file_sha256_hex(path: &std::path::Path) -> String {
+    use sha2::{Digest, Sha256};
+    format!("{:x}", Sha256::digest(fs::read(path).unwrap()))
+}
+
+fn legacy_test_mutation_env_pairs(h: &BinHarness) -> Vec<(&'static str, String)> {
+    let common = h.workspace.join("packages/ontarch/lib/common.sh");
+    let shadow_dir = h.workspace.join("shadow-nest/a/b/c");
+    fs::create_dir_all(&shadow_dir).unwrap();
+    let helper_probe = h.workspace.join("helper-probe-jq");
+    write_executable(&helper_probe, "#!/bin/sh\nexit 0\n");
+    let outside = h.workspace.join("helper-outside/jq-ww");
+    fs::create_dir_all(outside.parent().unwrap()).unwrap();
+    write_executable(&outside, "#!/bin/sh\nexit 0\n");
+    vec![
+        ("TAKOGAMI_TEST_INJECT_EXE_DRIFT", "1".into()),
+        ("TAKOGAMI_TEST_INJECT_CWD_DRIFT", "1".into()),
+        ("TAKOGAMI_TEST_INJECT_SOURCE_DRIFT", "1".into()),
+        ("TAKOGAMI_TEST_INJECT_SOURCE_REMOVED", "1".into()),
+        ("TAKOGAMI_TEST_INJECT_SOURCE_SYMLINK", "1".into()),
+        ("TAKOGAMI_TEST_INJECT_SOURCE_DANGLING_SYMLINK", "1".into()),
+        ("TAKOGAMI_TEST_INJECT_SOURCE_FIFO", "1".into()),
+        ("TAKOGAMI_TEST_INJECT_SOURCE_DIRECTORY", "1".into()),
+        ("TAKOGAMI_TEST_INJECT_SOURCE_SAME_LENGTH", "1".into()),
+        ("TAKOGAMI_TEST_INJECT_HELPER_DRIFT", "1".into()),
+        (
+            "TAKOGAMI_TEST_HELPER_PATH",
+            helper_probe.display().to_string(),
+        ),
+        ("TAKOGAMI_TEST_INJECT_HELPER_SHADOW", "1".into()),
+        (
+            "TAKOGAMI_TEST_HELPER_SHADOW_DIR",
+            shadow_dir.display().to_string(),
+        ),
+        (
+            "TAKOGAMI_TEST_HELPER_SHADOW_NAME",
+            "../../../ESCAPED_SHADOW".into(),
+        ),
+        (
+            "TAKOGAMI_TEST_HELPER_SHADOW_SAME_BYTES",
+            common.display().to_string(),
+        ),
+        ("TAKOGAMI_TEST_HELPER_SHADOW_SYMLINK", "1".into()),
+        (
+            "TAKOGAMI_TEST_HELPER_SHADOW_LINK_TO",
+            outside.display().to_string(),
+        ),
+        ("TAKOGAMI_TEST_HELPER_SHADOW_MODE", "0757".into()),
+    ]
+}
+
+#[test]
+fn legacy_test_env_variables_are_ignored_by_bin_report() {
+    let h = BinHarness::new();
+    let cwd_sentinel = h.workspace.join("CWD_SENTINEL");
+    fs::write(&cwd_sentinel, b"ok").unwrap();
+    let exe_digest = file_sha256_hex(&h.canonical_ontarch);
+    let common = h.workspace.join("packages/ontarch/lib/common.sh");
+    let common_digest = file_sha256_hex(&common);
+    let pairs = legacy_test_mutation_env_pairs(&h);
+    let helper_digest = file_sha256_hex(&h.workspace.join("helper-probe-jq"));
+    let out = h.run_env(
+        &["--json", "bin", "report"],
+        &pairs
+            .iter()
+            .map(|(k, v)| (*k, v.as_str()))
+            .collect::<Vec<_>>(),
+    );
+    assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
+    assert!(h.canonical_ontarch.is_file());
+    assert_eq!(file_sha256_hex(&h.canonical_ontarch), exe_digest);
+    assert!(h.workspace.is_dir());
+    assert!(cwd_sentinel.exists());
+    assert_eq!(file_sha256_hex(&common), common_digest);
+    assert_eq!(file_sha256_hex(&helper_probe_path(&h)), helper_digest);
+    let escaped = h.workspace.join("ESCAPED_SHADOW");
+    assert!(!escaped.exists());
+    h.assert_marker_once();
+}
+
+fn helper_probe_path(h: &BinHarness) -> PathBuf {
+    h.workspace.join("helper-probe-jq")
+}
+
+#[test]
+fn caller_test_injection_env_cannot_remove_projection_executable() {
+    let h = BinHarness::new();
+    let digest = file_sha256_hex(&h.canonical_ontarch);
+    let out = h.run_env(
+        &["--json", "bin", "report"],
+        &[("TAKOGAMI_TEST_INJECT_EXE_DRIFT", "1")],
+    );
+    assert!(h.canonical_ontarch.is_file());
+    assert_eq!(file_sha256_hex(&h.canonical_ontarch), digest);
+    assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
+    h.assert_marker_once();
+}
+
+#[test]
+fn caller_test_injection_env_cannot_rename_projection_cwd() {
+    let h = BinHarness::new();
+    let sentinel = h.workspace.join("CWD_SENTINEL");
+    fs::write(&sentinel, b"x").unwrap();
+    let out = h.run_env(
+        &["--json", "bin", "report"],
+        &[("TAKOGAMI_TEST_INJECT_CWD_DRIFT", "1")],
+    );
+    assert!(h.workspace.is_dir());
+    assert!(sentinel.exists());
+    assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
+    h.assert_marker_once();
+}
+
+#[test]
+fn caller_test_injection_env_cannot_modify_projection_sources() {
+    let h = BinHarness::new();
+    let common = h.workspace.join("packages/ontarch/lib/common.sh");
+    let digest = file_sha256_hex(&common);
+    let out = h.run_env(
+        &["--json", "bin", "report"],
+        &[
+            ("TAKOGAMI_TEST_INJECT_SOURCE_DRIFT", "1"),
+            ("TAKOGAMI_TEST_INJECT_SOURCE_REMOVED", "1"),
+            ("TAKOGAMI_TEST_INJECT_SOURCE_FIFO", "1"),
+        ],
+    );
+    assert!(common.is_file());
+    assert_eq!(file_sha256_hex(&common), digest);
+    assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
+}
+
+#[test]
+fn caller_test_injection_env_cannot_modify_helpers() {
+    let h = BinHarness::new();
+    let probe = helper_probe_path(&h);
+    write_executable(&probe, "#!/bin/sh\nexit 0\n");
+    let digest = file_sha256_hex(&probe);
+    let out = h.run_env(
+        &["--json", "bin", "report"],
+        &[
+            ("TAKOGAMI_TEST_INJECT_HELPER_DRIFT", "1"),
+            (
+                "TAKOGAMI_TEST_HELPER_PATH",
+                probe.to_string_lossy().as_ref(),
+            ),
+        ],
+    );
+    assert_eq!(file_sha256_hex(&probe), digest);
+    assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
+}
+
+#[test]
+fn caller_test_injection_env_cannot_create_helper_shadow() {
+    let h = BinHarness::new();
+    let shadow_dir = h.workspace.join("shadow-nest/a/b/c");
+    fs::create_dir_all(&shadow_dir).unwrap();
+    let escaped = h.workspace.join("ESCAPED_SHADOW");
+    let out = h.run_env(
+        &["--json", "bin", "report"],
+        &[
+            ("TAKOGAMI_TEST_INJECT_HELPER_SHADOW", "1"),
+            (
+                "TAKOGAMI_TEST_HELPER_SHADOW_DIR",
+                shadow_dir.to_string_lossy().as_ref(),
+            ),
+            (
+                "TAKOGAMI_TEST_HELPER_SHADOW_NAME",
+                "../../../ESCAPED_SHADOW",
+            ),
+        ],
+    );
+    assert!(!escaped.exists());
+    assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
+}
+
+#[test]
+fn caller_test_injection_env_name_traversal_is_inert() {
+    let h = BinHarness::new();
+    let shadow_dir = h.workspace.join("nested/a/b/c");
+    fs::create_dir_all(&shadow_dir).unwrap();
+    let out = h.run_env(
+        &["--json", "bin", "report"],
+        &[
+            ("TAKOGAMI_TEST_INJECT_HELPER_SHADOW", "1"),
+            (
+                "TAKOGAMI_TEST_HELPER_SHADOW_DIR",
+                shadow_dir.to_string_lossy().as_ref(),
+            ),
+            ("TAKOGAMI_TEST_HELPER_SHADOW_NAME", "../../../traversal"),
+        ],
+    );
+    assert!(!h.workspace.join("traversal").exists());
+    assert_eq!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
+}
+
 // --- E09.S7 Phase 3 closure corrections (C01–C05) ---
 
 fn write_helper_decoy(path_dir: &std::path::Path, name: &str, marker: &std::path::Path) {
@@ -1009,143 +1174,6 @@ fn caller_path_decoy_find_or_fd_does_not_run() {
 }
 
 #[test]
-fn projection_source_digest_drift_after_authorization_fails_preflight() {
-    let h = BinHarness::new();
-    let out = h.run_env(
-        &["--json", "bin", "report"],
-        &[("TAKOGAMI_TEST_INJECT_SOURCE_DRIFT", "1")],
-    );
-    assert_ne!(out.status.code(), Some(SUCCESS as i32), "{}", stderr(&out));
-    h.assert_marker_untouched();
-    let blob = format!("{}{}", stdout(&out), stderr(&out));
-    assert!(
-        !blob.contains(h.workspace.to_string_lossy().as_ref()),
-        "diagnostics must omit absolute workspace root: {blob}"
-    );
-}
-
-#[test]
-fn post_authorization_source_removal_is_terminal_no_spawn() {
-    let h = BinHarness::new();
-    let out = h.run_env(
-        &["--json", "bin", "report"],
-        &[("TAKOGAMI_TEST_INJECT_SOURCE_REMOVED", "1")],
-    );
-    assert_eq!(
-        out.status.code(),
-        Some(EXECUTION_IO as i32),
-        "{}",
-        stderr(&out)
-    );
-    h.assert_marker_untouched();
-    let rec = &h.load_records()[0];
-    assert_eq!(rec["execution"]["outcome"], "failed_to_spawn");
-    assert_eq!(rec["execution"]["started"], false);
-    assert!(rec["execution"]["pid"].is_null());
-    assert_eq!(rec["error"]["code"], "projection_contract_changed");
-    let blob = format!("{}{}{}", stdout(&out), stderr(&out), rec);
-    assert!(!blob.contains(h.workspace.to_string_lossy().as_ref()));
-}
-
-#[test]
-fn post_authorization_source_symlink_is_terminal_no_spawn() {
-    let h = BinHarness::new();
-    let out = h.run_env(
-        &["--json", "bin", "report"],
-        &[("TAKOGAMI_TEST_INJECT_SOURCE_SYMLINK", "1")],
-    );
-    assert_eq!(
-        out.status.code(),
-        Some(EXECUTION_IO as i32),
-        "{}",
-        stderr(&out)
-    );
-    h.assert_marker_untouched();
-    let rec = &h.load_records()[0];
-    assert_eq!(rec["execution"]["outcome"], "failed_to_spawn");
-    assert_eq!(rec["error"]["code"], "projection_contract_changed");
-}
-
-#[test]
-fn post_authorization_source_dangling_symlink_is_terminal_no_spawn() {
-    let h = BinHarness::new();
-    let out = h.run_env(
-        &["--json", "bin", "report"],
-        &[("TAKOGAMI_TEST_INJECT_SOURCE_DANGLING_SYMLINK", "1")],
-    );
-    assert_eq!(
-        out.status.code(),
-        Some(EXECUTION_IO as i32),
-        "{}",
-        stderr(&out)
-    );
-    h.assert_marker_untouched();
-    let rec = &h.load_records()[0];
-    assert_eq!(rec["execution"]["outcome"], "failed_to_spawn");
-}
-
-#[test]
-fn post_authorization_source_fifo_is_terminal_no_spawn() {
-    let h = BinHarness::new();
-    let start = std::time::Instant::now();
-    let out = h.run_env(
-        &["--json", "bin", "report"],
-        &[("TAKOGAMI_TEST_INJECT_SOURCE_FIFO", "1")],
-    );
-    assert!(
-        start.elapsed() < std::time::Duration::from_secs(5),
-        "FIFO source mutation blocked"
-    );
-    assert_eq!(
-        out.status.code(),
-        Some(EXECUTION_IO as i32),
-        "{}",
-        stderr(&out)
-    );
-    h.assert_marker_untouched();
-    let rec = &h.load_records()[0];
-    assert_eq!(rec["execution"]["outcome"], "failed_to_spawn");
-    assert_eq!(rec["execution"]["started"], false);
-}
-
-#[test]
-fn post_authorization_source_directory_is_terminal_no_spawn() {
-    let h = BinHarness::new();
-    let out = h.run_env(
-        &["--json", "bin", "report"],
-        &[("TAKOGAMI_TEST_INJECT_SOURCE_DIRECTORY", "1")],
-    );
-    assert_eq!(
-        out.status.code(),
-        Some(EXECUTION_IO as i32),
-        "{}",
-        stderr(&out)
-    );
-    h.assert_marker_untouched();
-    let rec = &h.load_records()[0];
-    assert_eq!(rec["execution"]["outcome"], "failed_to_spawn");
-}
-
-#[test]
-fn post_authorization_same_length_source_drift_is_terminal_no_spawn() {
-    let h = BinHarness::new();
-    let out = h.run_env(
-        &["--json", "bin", "report"],
-        &[("TAKOGAMI_TEST_INJECT_SOURCE_SAME_LENGTH", "1")],
-    );
-    assert_eq!(
-        out.status.code(),
-        Some(EXECUTION_IO as i32),
-        "{}",
-        stderr(&out)
-    );
-    h.assert_marker_untouched();
-    let rec = &h.load_records()[0];
-    assert_eq!(rec["execution"]["outcome"], "failed_to_spawn");
-    assert_eq!(rec["error"]["code"], "projection_contract_changed");
-}
-
-#[test]
 fn seal_time_missing_source_fails_before_authorization() {
     // Contrasts with post-authorization removal: mutation before process start.
     let h = BinHarness::new();
@@ -1158,32 +1186,6 @@ fn seal_time_missing_source_fails_before_authorization() {
         h.load_records().is_empty(),
         "seal-time failure must not install a pending record"
     );
-}
-
-#[test]
-fn source_drift_never_runs_path_decoy_or_canonical_child() {
-    let h = BinHarness::new();
-    let decoy = h.workspace.join("MARKER_JQ");
-    write_helper_decoy(&h.path_dir, "jq", &decoy);
-    let out = h.run_env(
-        &["--json", "bin", "report"],
-        &[("TAKOGAMI_TEST_INJECT_SOURCE_DRIFT", "1")],
-    );
-    assert_ne!(out.status.code(), Some(SUCCESS as i32));
-    h.assert_marker_untouched();
-    assert!(!decoy.exists());
-}
-
-#[test]
-fn source_drift_diagnostic_omits_absolute_roots() {
-    let h = BinHarness::new();
-    let out = h.run_env(
-        &["--json", "bin", "report"],
-        &[("TAKOGAMI_TEST_INJECT_SOURCE_DRIFT", "1")],
-    );
-    let blob = format!("{}{}", stdout(&out), stderr(&out));
-    assert!(!blob.contains(h.workspace.to_string_lossy().as_ref()));
-    assert!(!blob.contains(h.registry.to_string_lossy().as_ref()));
 }
 
 #[test]
@@ -1346,36 +1348,6 @@ fn projection_terminal_retains_request_policy_and_fingerprints() {
         assert!(path.starts_with("packages/ontarch/"));
         assert!(!path.starts_with('/'));
     }
-}
-
-#[test]
-fn projection_preflight_failure_requires_safe_terminal_error() {
-    let h = BinHarness::new();
-    let out = h.run_env(
-        &["--json", "bin", "report"],
-        &[("TAKOGAMI_TEST_INJECT_SOURCE_DRIFT", "1")],
-    );
-    assert_eq!(
-        out.status.code(),
-        Some(EXECUTION_IO as i32),
-        "{}",
-        stderr(&out)
-    );
-    let records = h.load_records();
-    assert_eq!(
-        records.len(),
-        1,
-        "exactly one durable terminal record required"
-    );
-    let rec = &records[0];
-    assert_eq!(rec["execution"]["outcome"], "failed_to_spawn");
-    assert_eq!(rec["execution"]["started"], false);
-    assert!(rec["execution"]["pid"].is_null());
-    assert_eq!(rec["error"]["code"], "projection_contract_changed");
-    let blob = format!("{}{}{}", stdout(&out), stderr(&out), rec);
-    assert!(!blob.contains(h.workspace.to_string_lossy().as_ref()));
-    assert!(!blob.contains(h.registry.to_string_lossy().as_ref()));
-    h.assert_marker_untouched();
 }
 
 #[test]

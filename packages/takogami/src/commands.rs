@@ -1508,7 +1508,8 @@ mod tests {
     use super::*;
     use crate::contracts::{RegistryGeneration, fingerprint_file};
     use crate::execution::{
-        ExecutionReport, ProjectionExecutor, SpyExecutor, SpyProjectionExecutor,
+        ExecutionReport, HelperShadowSpec, MutatingProjectionExecutor, MutationKind,
+        ProjectionExecutor, ProjectionTestMutation, SpyExecutor, SpyProjectionExecutor,
         UnavailableExecutor,
     };
     use crate::exit_codes::{
@@ -2331,6 +2332,7 @@ adapter = "direct""#,
     /// Minimal packages/ontarch layout for projection store-fault injection.
     struct BinFaultFixture {
         _temp: tempfile::TempDir,
+        fixture_root: PathBuf,
         workspace: PathBuf,
         _registry: PathBuf,
         state_home: PathBuf,
@@ -2396,8 +2398,10 @@ adapter = "direct""#,
                 std::env::set_var("TAKOGAMI_STATE_HOME", state_home.display().to_string());
                 std::env::remove_var("TAKOGAMI_PROFILE");
             }
+            let fixture_root = temp.path().to_path_buf();
             Self {
                 _temp: temp,
+                fixture_root,
                 workspace,
                 _registry: registry,
                 state_home,
@@ -2582,6 +2586,7 @@ adapter = "direct""#,
     }
 
     async fn run_bin_with_helper_shadow(
+        fixture_root: &Path,
         early: &Path,
         late: &Path,
         state_home: &Path,
@@ -2594,62 +2599,242 @@ adapter = "direct""#,
     ) {
         let sink = std::sync::Arc::new(std::sync::Mutex::new(None));
         let factory = observing_factory(sink.clone());
-        let exe = CountingProjectionExecutor::new(crate::execution::TokioExecutor);
         let late_jq = late.join("jq");
-        unsafe {
-            std::env::set_var("TAKOGAMI_TEST_INJECT_HELPER_SHADOW", "1");
-            std::env::set_var(
-                "TAKOGAMI_TEST_HELPER_SHADOW_DIR",
-                early.display().to_string(),
-            );
-            std::env::set_var("TAKOGAMI_TEST_HELPER_SHADOW_NAME", "jq");
-            std::env::remove_var("TAKOGAMI_TEST_HELPER_SHADOW_SAME_BYTES");
-            std::env::remove_var("TAKOGAMI_TEST_HELPER_SHADOW_SYMLINK");
-            std::env::remove_var("TAKOGAMI_TEST_HELPER_SHADOW_LINK_TO");
-            std::env::remove_var("TAKOGAMI_TEST_HELPER_SHADOW_MODE");
-            match kind {
-                HelperShadowKind::DistinctBytes => {}
-                HelperShadowKind::SameBytes => {
-                    std::env::set_var(
-                        "TAKOGAMI_TEST_HELPER_SHADOW_SAME_BYTES",
-                        late_jq.display().to_string(),
-                    );
-                }
-                HelperShadowKind::WorldWritable => {
-                    std::env::set_var("TAKOGAMI_TEST_HELPER_SHADOW_MODE", "0757");
-                }
-                HelperShadowKind::SymlinkToWorldWritableTarget => {
-                    let outside = outside.expect("outside dir required for symlink shadow");
-                    fs::create_dir_all(outside).unwrap();
-                    let target = outside.join("jq-ww");
-                    write_exe_file(&target);
-                    use std::os::unix::fs::PermissionsExt;
-                    let mut perms = fs::metadata(&target).unwrap().permissions();
-                    perms.set_mode(0o757);
-                    fs::set_permissions(&target, perms).unwrap();
-                    std::env::set_var("TAKOGAMI_TEST_HELPER_SHADOW_SYMLINK", "1");
-                    std::env::set_var(
-                        "TAKOGAMI_TEST_HELPER_SHADOW_LINK_TO",
-                        target.display().to_string(),
-                    );
-                }
+        let shadow = match kind {
+            HelperShadowKind::DistinctBytes => HelperShadowSpec::DistinctBytes,
+            HelperShadowKind::SameBytes => HelperShadowSpec::SameBytesAs(late_jq),
+            HelperShadowKind::WorldWritable => HelperShadowSpec::WorldWritable,
+            HelperShadowKind::SymlinkToWorldWritableTarget => {
+                let outside = outside.expect("outside dir required for symlink shadow");
+                fs::create_dir_all(outside).unwrap();
+                let target = outside.join("jq-ww");
+                write_exe_file(&target);
+                use std::os::unix::fs::PermissionsExt;
+                let mut perms = fs::metadata(&target).unwrap().permissions();
+                perms.set_mode(0o757);
+                fs::set_permissions(&target, perms).unwrap();
+                HelperShadowSpec::SymlinkTo(target)
             }
-        }
+        };
+        let mutation = ProjectionTestMutation::new(
+            fixture_root.to_path_buf(),
+            MutationKind::InsertHelperShadow {
+                dir: early.to_path_buf(),
+                name: "jq".into(),
+                shadow,
+            },
+        );
+        let exe = CountingProjectionExecutor::new(MutatingProjectionExecutor::new(mutation));
         crate::projection::install_test_search_dirs(vec![early.to_path_buf(), late.to_path_buf()]);
         let result = run_bin_with(BinCommand::Report, &exe, &factory, state_home).await;
         crate::projection::clear_test_search_dirs();
-        unsafe {
-            std::env::remove_var("TAKOGAMI_TEST_INJECT_HELPER_SHADOW");
-            std::env::remove_var("TAKOGAMI_TEST_HELPER_SHADOW_DIR");
-            std::env::remove_var("TAKOGAMI_TEST_HELPER_SHADOW_NAME");
-            std::env::remove_var("TAKOGAMI_TEST_HELPER_SHADOW_SAME_BYTES");
-            std::env::remove_var("TAKOGAMI_TEST_HELPER_SHADOW_SYMLINK");
-            std::env::remove_var("TAKOGAMI_TEST_HELPER_SHADOW_LINK_TO");
-            std::env::remove_var("TAKOGAMI_TEST_HELPER_SHADOW_MODE");
-        }
         let observer = sink.lock().unwrap().clone().expect("observer installed");
         let calls = exe.calls();
         (result, observer, calls)
+    }
+
+    async fn run_bin_with_mutation(
+        fx: &BinFaultFixture,
+        kind: MutationKind,
+    ) -> (
+        Result<u8, ControllerError>,
+        std::sync::Arc<ObservingRecordWriter>,
+        u32,
+    ) {
+        let sink = std::sync::Arc::new(std::sync::Mutex::new(None));
+        let factory = observing_factory(sink.clone());
+        let mutation = ProjectionTestMutation::new(fx.fixture_root.clone(), kind);
+        let exe = CountingProjectionExecutor::new(MutatingProjectionExecutor::new(mutation));
+        let result = run_bin_with(BinCommand::Report, &exe, &factory, &fx.state_home).await;
+        let observer = sink.lock().unwrap().clone().expect("observer installed");
+        (result, observer, exe.calls())
+    }
+
+    fn assert_hooked_preflight_terminal(
+        result: &Result<u8, ControllerError>,
+        observer: &ObservingRecordWriter,
+        calls: u32,
+        child_spawns: usize,
+        workspace: &Path,
+        err_code: &str,
+    ) {
+        assert_eq!(
+            result.as_ref().unwrap().clone(),
+            crate::exit_codes::EXECUTION_IO
+        );
+        assert_eq!(calls, 1);
+        assert_eq!(child_spawns, 0);
+        let snaps = observer.snapshots();
+        assert_eq!(snaps.len(), 2);
+        assert_eq!(snaps[0].execution.outcome, "pending");
+        assert!(snaps[0].execution.pid.is_none());
+        let terminal = &snaps[1];
+        assert_eq!(terminal.execution.outcome, "failed_to_spawn");
+        assert!(!terminal.execution.started);
+        assert!(terminal.execution.pid.is_none());
+        assert!(terminal.execution.exit_code.is_none());
+        let err = terminal.error.as_ref().expect("terminal error required");
+        assert_eq!(err.code, err_code);
+        assert_immutable_fields_byte_identical(&snaps[0], terminal);
+        assert!(!err.message.contains(workspace.to_string_lossy().as_ref()));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn hooked_executable_removal_fails_preflight_no_spawn() {
+        let fx = BinFaultFixture::new();
+        let (result, observer, calls) =
+            run_bin_with_mutation(&fx, MutationKind::RemoveExecutable).await;
+        assert_hooked_preflight_terminal(
+            &result,
+            &observer,
+            calls,
+            fx.child_spawn_count(),
+            &fx.workspace,
+            "projection_contract_changed",
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn hooked_cwd_rename_fails_preflight_no_spawn() {
+        let fx = BinFaultFixture::new();
+        let (result, observer, calls) = run_bin_with_mutation(&fx, MutationKind::RenameCwd).await;
+        assert_hooked_preflight_terminal(
+            &result,
+            &observer,
+            calls,
+            fx.child_spawn_count(),
+            &fx.workspace,
+            "projection_contract_changed",
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn hooked_source_drift_fails_preflight_no_spawn() {
+        let fx = BinFaultFixture::new();
+        let (result, observer, calls) =
+            run_bin_with_mutation(&fx, MutationKind::RewriteSource).await;
+        assert_hooked_preflight_terminal(
+            &result,
+            &observer,
+            calls,
+            fx.child_spawn_count(),
+            &fx.workspace,
+            "projection_contract_changed",
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn hooked_source_removal_fails_preflight_no_spawn() {
+        let fx = BinFaultFixture::new();
+        let (result, observer, calls) =
+            run_bin_with_mutation(&fx, MutationKind::RemoveSource).await;
+        assert_hooked_preflight_terminal(
+            &result,
+            &observer,
+            calls,
+            fx.child_spawn_count(),
+            &fx.workspace,
+            "projection_contract_changed",
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn hooked_source_symlink_fails_preflight_no_spawn() {
+        let fx = BinFaultFixture::new();
+        let (result, observer, calls) =
+            run_bin_with_mutation(&fx, MutationKind::SourceSymlink).await;
+        assert_hooked_preflight_terminal(
+            &result,
+            &observer,
+            calls,
+            fx.child_spawn_count(),
+            &fx.workspace,
+            "projection_contract_changed",
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn hooked_source_dangling_symlink_fails_preflight_no_spawn() {
+        let fx = BinFaultFixture::new();
+        let (result, observer, calls) =
+            run_bin_with_mutation(&fx, MutationKind::SourceDanglingSymlink).await;
+        assert_hooked_preflight_terminal(
+            &result,
+            &observer,
+            calls,
+            fx.child_spawn_count(),
+            &fx.workspace,
+            "projection_contract_changed",
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn hooked_source_fifo_fails_without_blocking_no_spawn() {
+        let fx = BinFaultFixture::new();
+        let start = std::time::Instant::now();
+        let (result, observer, calls) = run_bin_with_mutation(&fx, MutationKind::SourceFifo).await;
+        assert!(
+            start.elapsed() < std::time::Duration::from_secs(5),
+            "FIFO mutation must not block"
+        );
+        assert_hooked_preflight_terminal(
+            &result,
+            &observer,
+            calls,
+            fx.child_spawn_count(),
+            &fx.workspace,
+            "projection_contract_changed",
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn hooked_source_directory_fails_preflight_no_spawn() {
+        let fx = BinFaultFixture::new();
+        let (result, observer, calls) =
+            run_bin_with_mutation(&fx, MutationKind::SourceDirectory).await;
+        assert_hooked_preflight_terminal(
+            &result,
+            &observer,
+            calls,
+            fx.child_spawn_count(),
+            &fx.workspace,
+            "projection_contract_changed",
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn hooked_same_length_source_drift_fails_preflight_no_spawn() {
+        let fx = BinFaultFixture::new();
+        let (result, observer, calls) =
+            run_bin_with_mutation(&fx, MutationKind::SourceSameLengthDrift).await;
+        assert_hooked_preflight_terminal(
+            &result,
+            &observer,
+            calls,
+            fx.child_spawn_count(),
+            &fx.workspace,
+            "projection_contract_changed",
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn hooked_helper_content_drift_fails_preflight_no_spawn() {
+        let fx = BinFaultFixture::new();
+        let early = fx.workspace.join("helper-early");
+        let late = fx.workspace.join("helper-late");
+        write_split_projection_helpers(&early, &late);
+        crate::projection::install_test_search_dirs(vec![early.clone(), late.clone()]);
+        let (result, observer, calls) =
+            run_bin_with_mutation(&fx, MutationKind::RewriteHelper { name: "jq".into() }).await;
+        crate::projection::clear_test_search_dirs();
+        assert_hooked_preflight_terminal(
+            &result,
+            &observer,
+            calls,
+            fx.child_spawn_count(),
+            &fx.workspace,
+            "projection_contract_changed",
+        );
     }
 
     fn assert_untrusted_helper_terminal(
@@ -2692,6 +2877,7 @@ adapter = "direct""#,
         let late = fx.workspace.join("helper-late");
         write_split_projection_helpers(&early, &late);
         let (result, observer, calls) = run_bin_with_helper_shadow(
+            &fx.fixture_root,
             &early,
             &late,
             &fx.state_home,
@@ -2716,6 +2902,7 @@ adapter = "direct""#,
         let late = fx.workspace.join("helper-late");
         write_split_projection_helpers(&early, &late);
         let (result, observer, calls) = run_bin_with_helper_shadow(
+            &fx.fixture_root,
             &early,
             &late,
             &fx.state_home,
@@ -2740,6 +2927,7 @@ adapter = "direct""#,
         let late = fx.workspace.join("helper-late");
         write_split_projection_helpers(&early, &late);
         let (result, observer, calls) = run_bin_with_helper_shadow(
+            &fx.fixture_root,
             &early,
             &late,
             &fx.state_home,
@@ -2764,6 +2952,7 @@ adapter = "direct""#,
         let late = fx.workspace.join("helper-late");
         write_split_projection_helpers(&early, &late);
         let (result, observer, calls) = run_bin_with_helper_shadow(
+            &fx.fixture_root,
             &early,
             &late,
             &fx.state_home,
@@ -2784,6 +2973,7 @@ adapter = "direct""#,
         let late = fx.workspace.join("helper-late");
         write_split_projection_helpers(&early, &late);
         let (_result, _observer, calls) = run_bin_with_helper_shadow(
+            &fx.fixture_root,
             &early,
             &late,
             &fx.state_home,
@@ -2802,6 +2992,7 @@ adapter = "direct""#,
         let late = fx.workspace.join("helper-late");
         write_split_projection_helpers(&early, &late);
         let (result, observer, calls) = run_bin_with_helper_shadow(
+            &fx.fixture_root,
             &early,
             &late,
             &fx.state_home,
@@ -2828,6 +3019,7 @@ adapter = "direct""#,
         let late = fx.workspace.join("helper-late");
         write_split_projection_helpers(&early, &late);
         let (result, observer, calls) = run_bin_with_helper_shadow(
+            &fx.fixture_root,
             &early,
             &late,
             &fx.state_home,
@@ -2853,6 +3045,7 @@ adapter = "direct""#,
         let outside = fx.workspace.join("helper-outside");
         write_split_projection_helpers(&early, &late);
         let (result, observer, calls) = run_bin_with_helper_shadow(
+            &fx.fixture_root,
             &early,
             &late,
             &fx.state_home,
@@ -2880,6 +3073,7 @@ adapter = "direct""#,
         let late = fx.workspace.join("helper-late");
         write_split_projection_helpers(&early, &late);
         let (result, observer, _) = run_bin_with_helper_shadow(
+            &fx.fixture_root,
             &early,
             &late,
             &fx.state_home,
@@ -2908,6 +3102,7 @@ adapter = "direct""#,
         let late = fx.workspace.join("helper-late");
         write_split_projection_helpers(&early, &late);
         let (result, observer, _) = run_bin_with_helper_shadow(
+            &fx.fixture_root,
             &early,
             &late,
             &fx.state_home,
@@ -2927,18 +3122,10 @@ adapter = "direct""#,
     #[tokio::test]
     async fn projection_preflight_failure_observer_requires_safe_terminal() {
         let fx = BinFaultFixture::new();
-        let sink = std::sync::Arc::new(std::sync::Mutex::new(None));
-        let factory = observing_factory(sink.clone());
-        let exe = crate::execution::TokioExecutor;
-        unsafe {
-            std::env::set_var("TAKOGAMI_TEST_INJECT_SOURCE_REMOVED", "1");
-        }
-        let result = run_bin_with(BinCommand::Report, &exe, &factory, &fx.state_home).await;
-        unsafe {
-            std::env::remove_var("TAKOGAMI_TEST_INJECT_SOURCE_REMOVED");
-        }
+        let (result, observer, calls) =
+            run_bin_with_mutation(&fx, MutationKind::RemoveSource).await;
+        assert_eq!(calls, 1);
         assert_eq!(result.unwrap(), crate::exit_codes::EXECUTION_IO);
-        let observer = sink.lock().unwrap().clone().expect("observer installed");
         let snaps = observer.snapshots();
         assert_eq!(snaps.len(), 2, "pending then terminal only (no PID)");
         assert_eq!(snaps[0].execution.outcome, "pending");

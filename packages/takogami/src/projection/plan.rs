@@ -250,6 +250,11 @@ impl SealedProjectionPlan {
     pub(crate) fn source_fingerprints(&self) -> &[SourceFingerprint] {
         &self.source_fingerprints
     }
+
+    #[cfg(test)]
+    pub(crate) fn source_abs_paths(&self) -> &[PathBuf] {
+        &self.source_abs_paths
+    }
     #[allow(dead_code)] // exercised by unit tests; retained for preflight diagnostics
     pub(crate) fn helper_identities(&self) -> &[HelperIdentity] {
         &self.helper_identities
