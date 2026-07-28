@@ -33,12 +33,9 @@ pub(crate) enum MutationKind {
     RewriteHelper {
         name: String,
     },
-    #[allow(dead_code)]
-    // reserved for extended helper drift matrix; RewriteHelper covers content drift
     RemoveHelper {
         name: String,
     },
-    #[allow(dead_code)]
     HelperSymlinkReplacement {
         name: String,
         link_target: PathBuf,

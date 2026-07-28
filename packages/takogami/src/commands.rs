@@ -2837,6 +2837,54 @@ adapter = "direct""#,
         );
     }
 
+    #[tokio::test(flavor = "current_thread")]
+    async fn hooked_helper_removal_fails_preflight_no_spawn() {
+        let fx = BinFaultFixture::new();
+        let early = fx.workspace.join("helper-early");
+        let late = fx.workspace.join("helper-late");
+        write_split_projection_helpers(&early, &late);
+        crate::projection::install_test_search_dirs(vec![early.clone(), late.clone()]);
+        let (result, observer, calls) =
+            run_bin_with_mutation(&fx, MutationKind::RemoveHelper { name: "jq".into() }).await;
+        crate::projection::clear_test_search_dirs();
+        assert_hooked_preflight_terminal(
+            &result,
+            &observer,
+            calls,
+            fx.child_spawn_count(),
+            &fx.workspace,
+            "projection_contract_changed",
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn hooked_helper_symlink_replacement_fails_preflight_no_spawn() {
+        let fx = BinFaultFixture::new();
+        let early = fx.workspace.join("helper-early");
+        let late = fx.workspace.join("helper-late");
+        write_split_projection_helpers(&early, &late);
+        let link_target = fx.workspace.join("helper-replacement/jq-alt");
+        write_exe_file(&link_target);
+        crate::projection::install_test_search_dirs(vec![early.clone(), late.clone()]);
+        let (result, observer, calls) = run_bin_with_mutation(
+            &fx,
+            MutationKind::HelperSymlinkReplacement {
+                name: "jq".into(),
+                link_target,
+            },
+        )
+        .await;
+        crate::projection::clear_test_search_dirs();
+        assert_hooked_preflight_terminal(
+            &result,
+            &observer,
+            calls,
+            fx.child_spawn_count(),
+            &fx.workspace,
+            "projection_contract_changed",
+        );
+    }
+
     fn assert_untrusted_helper_terminal(
         result: &Result<u8, ControllerError>,
         observer: &ObservingRecordWriter,
