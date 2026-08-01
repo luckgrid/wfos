@@ -71,25 +71,21 @@ rather than rigidly linear.
 flowchart LR
   Plan[Plan — Decisions]
 
-  %% A transparent middle column keeps the production wrapper centered while
-  %% providing a separate junction for the lower bidirectional loop.
-  subgraph ProductionColumn[" "]
+  subgraph Prod [Build and Brand — parallel production]
     direction TB
+    Build[Build]
+    Brand[Brand]
+    Build <-.->|shared context| Brand
+    Brand -->|approved| Build
 
-    subgraph Prod [Build and Brand — parallel production]
-      direction TB
-      Build[Build]
-      Brand[Brand]
-      Build <-.->|shared context| Brand
-      Brand -->|approved| Build
-    end
-
+    %% Transparent lower anchor keeps the loop gate below the solid gates.
     LoopGate(( ))
+    Brand ~~~ LoopGate
   end
 
   Control[Control — Operations]
 
-  Plan -->|validated| Prod
+  Plan -->|validated| Build
   Build -->|released| Control
 
   Plan <-.->|ops context| Control
@@ -98,7 +94,6 @@ flowchart LR
 
   classDef loopAnchor fill:transparent,stroke:transparent,color:transparent,stroke-width:0px;
   class LoopGate loopAnchor;
-  style ProductionColumn fill:none,stroke:none
 ```
 
 Shape in short: `Plan ←[gates]→ | ←[gates]→ Build ←[gates]→ Brand ←[gates]→ | ←[gates]→ Control`.
