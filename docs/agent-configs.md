@@ -1,126 +1,159 @@
-# Agent configs & profiles
+# Agent configs and profiles
 
-Agent apps (Claude, Cursor, Zed, Factory, OpenCode, CLI agents) each have their own prose config.
-Left alone, the same intent — what an agent may touch, which commands it may run, whether it can
-read secrets — gets restated five times. WfOS consolidates that intent into **shared profiles**
-and keeps each `AGENTS.md` lean.
+Agent applications—Claude, Cursor, Zed, Factory, OpenCode, CLI agents, and future interfaces—each
+have their own configuration syntax. WfOS keeps that syntax at the application edge while
+consolidating shared operating intent into **agent profiles**, Ontarch policies, and generated
+registry data.
+
+Repository and namespace instructions are not agent-only. Humans and automated workers enter
+through the same maintained `README.md` files.
+
+## Instruction placement
+
+| Concern | Home |
+|---|---|
+| Repository purpose, namespace map, first commands, and authority links | root or nearest `README.md` |
+| Detailed product, architecture, setup, and runbook material | normal `docs/` and package documentation |
+| Session scope, allowed paths, command classes, validators, isolation, skills, and logs | `.agents/profiles/*.toml` |
+| Reusable command and resource rails | `packages/ontarch/policies/*.toml` |
+| Reusable profile, skill, tool, and graph navigation contracts | `packages/ontarch/patterns/agents/` |
+| App-specific settings and rendering syntax | each application's own config |
+| Generated profile, policy, skill, tool, and relationship projections | Ontarch registry and graph |
+
+This prevents a parallel instruction hierarchy. README files explain the workspace to everyone;
+profiles and policies narrow automated behavior without duplicating the workspace manual.
 
 ## Shared profiles
 
-A profile is one declaration consumed by every app. Profiles live in the **working** agent
-navigation layer at [`Workstreams/.agents/profiles/`](../../../../../.agents/profiles/README.md)
-(tracked TOML; `$AGENTS_HOME` when overridden). Each declares scope (allowed/blocked paths),
-command allow/gate/block lists, secret access, a remote-write policy, an `[isolation]` field
-(worktree/branch scope + jj opt-in), required validators, an output compressor, and a session-log
-target. Apps consume the shared intent through their own (chezmoi-rendered) config syntax — they
-never become a second policy source of truth.
+A profile is one declaration consumed by every compatible agent application. Profiles live in the
+working agent-navigation layer at `$AGENTS_HOME/profiles/`—commonly
+`Workstreams/.agents/profiles/` when WfOS is embedded in that layout.
 
-The reusable **seed** (generic examples + README contracts + `AGENTS.template.md`) lives in
-[`packages/ontarch/patterns/agents/`](../packages/ontarch/patterns/agents/README.md). Materialize
-or refresh a working `.agents/` with `moon run ontarch:agents-init` (skips existing files;
-`--force` overwrites). Working copies pin the seed via `.pattern-lock`.
+Each profile may declare:
 
-[metadata-plane (Ontarch)](metadata-plane.md) policies remain the enforcement authority. A profile *selects* a
-policy through its `rails` field and *scopes* it. The cross-cutting
-[`agent-git`](../packages/ontarch/policies/agent-git.policy.toml) policy (`applies_to = "agent"`)
-governs git allow/gate/block via the graph; profiles keep `panoply.agent` / `no-agent-git-push` as
-`rails` and must not contradict `agent-git` in `[commands]`. Scoped agents declare
-`[isolation] mode` as `worktree` or `branch` (not `main`) with `jj = "opt-in"` — see
-[agent-rails.md](agent-rails.md#worktree-isolation). `ontarch validate` checks every profile against
-`schemas/profile.schema.json`; `ontarch sync` flattens them into `registry/profiles.json` and draws
-`profile → selects → policy` edges in the project graph.
+- allowed and blocked paths;
+- allowed, gated, and blocked command patterns;
+- secret access and remote-write posture;
+- worktree or branch isolation intent;
+- required validators;
+- allowed skills and external-skill loading;
+- output-compressor intent;
+- build-session log targets;
+- optional runtime-controller session-state location.
+
+Applications consume this shared intent through their own configuration syntax. They must not
+become a second policy authority or duplicate secrets.
+
+The reusable seed lives in
+[`packages/ontarch/patterns/agents/`](../packages/ontarch/patterns/agents/README.md). Materialize or
+refresh a working `.agents/` layer with:
+
+```bash
+moon run ontarch:agents-init
+```
+
+The command skips existing files unless `--force` is supplied and records the source pattern in
+`.pattern-lock`.
+
+## Policy relationship
+
+Ontarch policies remain the reusable rule authority. A profile selects and scopes those policies.
+For example:
+
+- `panoply.agent` describes native-toolchain restrictions in agent mode;
+- `agent-git` governs cross-cutting Git allow, gate, and block behavior;
+- `no-agent-git-push` records the default publish boundary;
+- `agent-bin` describes bin/archive behavior.
+
+`ontarch validate` checks profiles against `schemas/profile.schema.json` and verifies policy,
+skill, and command relationships. `ontarch sync` flattens valid authored inputs into generated
+registry projections and graph edges.
 
 ## App integration pattern
 
 ```mermaid
 flowchart TD
-  Pol["metadata-plane (Ontarch) policies"] -->|selected via rails| Reg[.agents/profiles]
-  Reg --> Cursor[Cursor]
-  Reg --> Zed[Zed]
-  Reg --> Factory[Factory]
-  Reg --> Claude[Claude]
-  Reg --> OpenCode[OpenCode]
-  Reg --> Shell[CLI agents]
-  AppSyntax[app-specific syntax stays in app config] -. consumes .-> Reg
+  Readme["Repository and namespace READMEs"] --> Human[Human worker]
+  Readme --> Agent[Automated worker]
+
+  Policies["Ontarch policies"] -->|selected by| Profiles[".agents/profiles"]
+  Profiles --> Agent
+
+  Profiles --> Cursor[Cursor config]
+  Profiles --> Zed[Zed config]
+  Profiles --> Factory[Factory config]
+  Profiles --> Claude[Claude config]
+  Profiles --> OpenCode[OpenCode config]
+  Profiles --> Shell[CLI agent config]
+
+  AppSyntax["App-specific syntax"] -. consumes .-> Profiles
 ```
 
 Rules:
 
-- Keep shared policy in the registry.
+- Keep universal workspace guidance in README files and normal docs.
+- Keep shared automated intent in profiles and policies.
 - Keep app-specific syntax in app config.
 - Do not duplicate secrets across agent configs.
-- Do not let app configs bypass toolkit rails.
-- Prefer one task per agent session.
-- Require logs for autonomous routines.
+- Do not let app configs bypass WfOS rails.
+- Prefer one bounded task per automated session.
+- Require provenance records for autonomous routines.
 
-The wiring from each app to the profile data is recorded in the routing contract
-([`packages/panoply/dotfiles/.chezmoidata/routing.toml`](../packages/panoply/dotfiles/.chezmoidata/routing.toml)):
-for every app, `consumes_profile_data = true` and `holds_secrets = false`.
+The app-routing contract lives at
+[`packages/panoply/dotfiles/.chezmoidata/routing.toml`](../packages/panoply/dotfiles/.chezmoidata/routing.toml).
+Every app declares that it consumes profile data and does not hold secrets.
 
-Chezmoi app templates that exist today: Claude Code (`dot_claude/settings.json.tmpl`) and Zed
-(`dot_config/zed/settings.json.tmpl`). Others are declared in the routing contract and land as
-templates are added.
+## Two profile layers
 
-## Two profile layers (machine vs agent)
+WfOS carries two different profile concepts:
 
-WfOS carries **two** profile concepts. They answer different questions and must not be conflated:
+| Layer | Home | Question answered | Consumed by |
+|---|---|---|---|
+| **Agent operating profile** | `$AGENTS_HOME/profiles/*.toml` | What may this automated session touch and run? | Agents, Ontarch validation/sync, app renderers |
+| **Machine or chezmoi profile** | `packages/panoply/dotfiles/.chezmoidata/profiles.toml` | Which configuration targets render on this host? | chezmoi templates |
 
-| Layer | Home | Question it answers | Consumed by |
-|-------|------|-------------------|-------------|
-| **Agent operating profile** | `Workstreams/.agents/profiles/*.toml` | What may this agent session touch? (scope, commands, rails, validators, compressor intent) | Agents, metadata-plane (`ontarch validate` / `ontarch sync` → `profiles.json`), app renderers that read registry data |
-| **Machine / chezmoi profile** | `packages/panoply/dotfiles/.chezmoidata/profiles.toml` | What config targets render on this host? (GUI, secrets, `rtk` shell hook) | chezmoi at render time (`local-macos-full`, `agent-safe`, …) |
+Do not conflate them. An agent profile expresses session intent and policy selection. A machine
+profile controls host rendering.
 
-```mermaid
-flowchart TD
-  AgentProf["Agent profile\n.agents/profiles/*.toml"]
-  MachineProf["Machine profile\n.chezmoidata/profiles.toml"]
-  Registry["registry/profiles.json"]
-  Chezmoi["chezmoi templates\nper-app syntax"]
-  AgentProf --> Registry
-  AgentProf -. compressor intent .-> Registry
-  MachineProf --> Chezmoi
-  Registry -. read by apps/agents .-> Chezmoi
+Output-compressor intent is currently recorded in the generated profile registry, while the
+Claude and shell RTK integrations gate on machine-profile rendering. Until those paths are fully
+bridged, keep the active machine setting aligned with the selected agent profile.
+
+## README-first entrypoint pattern
+
+A maintained namespace uses this small shape:
+
+```text
+workspace-or-package/
+├── README.md          shared entrypoint for humans and automated workers
+├── docs/              detailed explanations and runbooks
+├── native manifests  authoritative build and dependency contracts
+└── child/
+    └── README.md      child namespace entrypoint
 ```
 
-**RTK wiring today:** the agent profile `[output] compressor` field records compressor intent in
-the registry (`output_compressor` in `profiles.json`). The Claude Code hook and the shell RTK
-layer (`config/shell/rtk.zsh`) gate on the **machine** profile `rtk` flag in
-`.chezmoidata/profiles.toml` (from the native-toolchain module). Until chezmoi bridges registry
-data at render time, keep them aligned manually: set machine `rtk = true` when the active agent
-profile declares `compressor = "rtk"`; set machine `rtk = false` to opt out on disk regardless of
-registry intent. Skill-loading dev profiles (`workspace-dev`, `agent-safe-maintenance`) declare
-`compressor = "rtk"`; `docs-only` omits it.
+The README should remain concise:
 
-See [`packages/panoply/dotfiles/ROUTING.md`](../packages/panoply/dotfiles/ROUTING.md) for how app
-templates consume machine profile data without becoming a policy source of truth.
+- purpose and scope;
+- namespace or package map;
+- first commands;
+- important authority boundaries;
+- links to detailed docs, manifests, policies, state, and tests.
 
-## The lean `AGENTS.md` pattern
+It should not restate full profile command lists, secret rules, or application-specific agent
+configuration. Those details remain queryable from their actual contracts.
 
-`AGENTS.md` is a **pointer, not a manual**. It carries only:
+## Why this reduces context cost
 
-- core rules (substrate, run-from-root, native manifests stay authoritative, stay within rails),
-- a short may / may-not table,
-- key paths,
-- the profile the workspace runs under,
-- a skills note.
-
-Detailed commands and architecture live in `README.md` and `docs/`, loaded on demand — so opening
-`AGENTS.md` stays cheap. No app-specific prose duplicates profile intent: scope, command
-allow/block lists, and secret rules are declared once in the profile, not retold per app or per
-`AGENTS.md`. The copy-ready template is seed-owned at
-[`patterns/agents/profiles/AGENTS.template.md`](../packages/ontarch/patterns/agents/profiles/AGENTS.template.md);
-the reference instance is this workspace's [`AGENTS.md`](../AGENTS.md).
-
-## Why it matters for token cost
-
-Every app's prose config is context an agent loads. One profile means the same intent is declared
-once and consumed everywhere, instead of duplicated as prose in five places. Scoped profiles also
-load only the allowed paths and commands for a task, so irrelevant context never enters the
-prompt, and a lean `AGENTS.md` keeps per-workspace instructions short. Shared profile + lean
-`AGENTS.md` replaces per-app prose sprawl.
+One README entrypoint avoids separate human and agent manuals drifting apart. One shared profile
+avoids restating the same scope and policy intent in every agent application's prose format.
+Generated registry queries then provide compact task-specific context without requiring a full
+repository scan.
 
 ## Related
 
-- [Agent rails and gates](agent-rails.md) — the rails, gates, and the SkillSpector skill gate.
-- [Metadata plane](metadata-plane.md) — descriptors, policies, registry, and graph.
-- [`.agents/profiles/README.md`](../../../../../.agents/profiles/README.md) — the profile contract.
+- [Worker guidance](worker-guidance.md)
+- [Agent rails and gates](agent-rails.md)
+- [Agent skills](agent-skills.md)
+- [Metadata plane](metadata-plane.md)
+- [Agents-navigation pattern](../packages/ontarch/patterns/agents/README.md)
