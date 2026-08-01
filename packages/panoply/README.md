@@ -1,80 +1,96 @@
 # `native-toolchain` — Panoply 🧰
 
-The native-toolchain (Panoply) is the layer of small native Unix/Rust tools that make the machine usable for developers
-and AI agents. It is shell-first and installs tools **globally** (Homebrew + mise); only the
-manifest, scripts, config templates, and metadata live here.
+Panoply is WfOS's native-toolchain package: small Unix and Rust tools that make a developer
+machine usable without replacing the shell, operating system, or package managers. It installs
+host tools globally through Homebrew and mise; this package owns the manifest, scripts,
+configuration templates, and validation logic.
 
-Deep dive: [`../../docs/native-toolchain.md`](../../docs/native-toolchain.md).
+This README is the entrypoint for every worker touching the package. Deep reference:
+[`../../docs/native-toolchain.md`](../../docs/native-toolchain.md).
+
+## Authority and safety
+
+- `manifest/panoply.tools.toml` is the single source of truth for modules and tools.
+- Generated Brewfile, registry, and shell artifacts are derived from the manifest; regenerate
+  them instead of hand-editing them.
+- Run package tasks from the WfOS workspace root unless a command below uses a package-local path.
+- `panoply bootstrap` changes the host and is human-gated.
+- Automated workers must obey the selected profile and
+  [`../ontarch/policies/panoply.agent.policy.toml`](../ontarch/policies/panoply.agent.policy.toml).
 
 ## Layout
 
-```txt
-manifest/panoply.tools.toml   single source of truth — modules + tools
-bin/                       panoply, panoply-doctor, panoply-bootstrap, panoply-env, panoply-gen, validate-substrate.sh
-lib/                       manifest parser, generate.sh, shared helpers, per-module logic
-config/                    Brewfile (generated) + shell fragment + tool config templates
-moon.yml                   doctor/list/env/gen-check/validate-substrate tasks
+```text
+manifest/panoply.tools.toml   authoritative modules and tools
+bin/                           CLI, doctor, bootstrap, env, generation, validation
+lib/                           parser, generation, helpers, and module logic
+config/                        generated Brewfile, shell fragment, and templates
+dotfiles/                      chezmoi source and routing contracts
+secrets/                       sops and age fixtures
+moon.yml                       package tasks
 ```
 
-The generated tool registry is written to the [metadata-plane (Ontarch)](../ontarch/README.md) package
-(`packages/ontarch/registry/tools.json`) — host-specific and gitignored.
+The generated tool registry is written under the
+[metadata-plane package](../ontarch/README.md) at `packages/ontarch/registry/tools.json`. It is
+host-specific and gitignored.
 
-## Quick start
+## First commands
 
 ```bash
-moon run panoply:doctor          # detect + report (read-only); writes the metadata-plane registry
-moon run panoply:list            # list modules and tools
-bin/panoply bootstrap            # install missing tools + wire shell (human-only; --dry-run to preview)
+moon run panoply:doctor              # detect and report; writes the generated tool registry
+moon run panoply:list                # list modules and tools
+moon run panoply:gen-check           # prove generated install artifacts match the manifest
+moon run panoply:validate-substrate  # package validation gate
+
+packages/panoply/bin/panoply bootstrap --dry-run  # human preview
 ```
 
-After `bootstrap`, `panoply` is on `PATH` (symlinked into `~/.local/bin`).
+After a human runs `bootstrap`, `panoply` is symlinked into `~/.local/bin`.
 
-## PANOPLY_HOME
+## Commands and rails
 
-The shell fragment sets a suggested default (`~/Workstreams/Build/src/workspaces/wfos/packages/panoply`)
-when `PANOPLY_HOME` is unset. Override in `~/.zshenv` if your layout differs; `bootstrap` exports
-the resolved package path into `~/.zshrc` automatically. See [`../../docs/setup.md`](../../docs/setup.md#panoply_home-and-workstreams-layout).
+| Command | Mutating | Automated-worker default | Purpose |
+|---|---:|---|---|
+| `panoply doctor [--json] [--no-write]` | no | allowed | detect tools and report readiness |
+| `panoply list [module]` | no | allowed | list manifest modules and tools |
+| `panoply gen <brewfile\|mise>` | no | allowed | derive install artifacts to stdout |
+| `panoply env [--shell\|--json]` | no | allowed | print resolved environment data |
+| `panoply bootstrap` | yes | blocked | install tools, link config, and modify shell setup |
 
-## Commands
+With `PANOPLY_AGENT=1`, Panoply permits the read-only commands and blocks bootstrap, installs,
+secret reads, and shell or dotfile mutation. The policy—not this reminder table—is authoritative.
+See [`../../docs/agent-rails.md`](../../docs/agent-rails.md).
 
-| Command | Mutating | Agent-safe | Purpose |
-|---------|----------|------------|---------|
-| `panoply doctor [--json] [--no-write]` | no | yes | detect tools, print readiness (`--json` = parseable), write the registry |
-| `panoply list [module]` | no | yes | list modules and tools from the manifest |
-| `panoply gen <brewfile\|mise>` | no | yes | derive install artifacts from the manifest (dry-run, stdout) |
-| `panoply env [--shell\|--json]` | no | yes | print the resolved environment (paths, module map, `PANOPLY_AGENT`); `--shell` = activation snippet |
-| `panoply bootstrap` | yes | no | install (brew + mise), symlink configs, wire `~/.zshrc` |
+## Editing rules
 
-The manifest is the single source of truth: `panoply gen brewfile` reproduces `config/Brewfile`
-exactly (enforced by `panoply gen brewfile --check` / `moon run panoply:gen-check`).
+- Add or change tools in `manifest/panoply.tools.toml`.
+- Keep scripts POSIX/bash compatible and `shellcheck` clean.
+- Preserve guarded shell activation so configuration remains safe when an optional tool is absent.
+- Never read `pass`, `age`, or `sops` secrets from an automated session unless the selected
+  profile and policy explicitly elevate that boundary.
+- Never edit `~/.zshrc`, `~/.config`, or host symlinks as a side effect of a read-only task.
+
+## `PANOPLY_HOME`
+
+The shell fragment suggests
+`~/Workstreams/Build/src/workspaces/wfos/packages/panoply` when `PANOPLY_HOME` is unset. This is a
+convention, not a mandatory layout. Override it in `~/.zshenv` when needed. Details:
+[`../../docs/setup.md`](../../docs/setup.md#panoply_home-and-workstreams-layout).
 
 ## Modules
 
-`shell, git, nav, system, session, secrets, tools, dotfiles, js, rust, wisp, logs, agent` —
-each replaceable (fzf ↔ skim, tmux ↔ zellij, mise ↔ proto, git ↔ jj). The manifest holds
-per-tool `brew`, `detect`, `agent_safe`, and `alternatives`. Descriptions and links:
+```text
+shell · git · nav · system · session · secrets · tools · dotfiles · js · rust · wisp · logs · agent
+```
+
+Implementations are replaceable. The manifest records package source, detection, automated-worker
+safety, and alternatives. Tool descriptions and links live in
 [`../../docs/tool-catalog.md`](../../docs/tool-catalog.md).
-
-The `agent` module wires **RTK** as the recommended-default output compressor (60-90% token
-savings), swappable via `PANOPLY_RTK` / profile data — see
-[`../../docs/native-toolchain.md`](../../docs/native-toolchain.md#output-compression-rtk).
-
-## mise / proto coexistence
-
-The native-toolchain standardizes on **mise** for day-to-day runtimes and activates it in
-`config/shell/panoply.zsh`; an existing **proto** setup is left intact. (proto also pins the
-workspace build toolchains — see [`../../docs/monorepo.md`](../../docs/monorepo.md).)
-
-## Agent rails
-
-`panoply` reads `PANOPLY_AGENT`. In agent mode, read-only commands run; mutating ones are blocked
-per `../ontarch/policies/panoply.agent.policy.toml`. See [`AGENTS.md`](AGENTS.md) and
-[`../../docs/agent-rails.md`](../../docs/agent-rails.md).
 
 ## Related
 
-- [`dotfiles/README.md`](dotfiles/README.md) — chezmoi source (profiles, validation, promotion)
-- [`dotfiles/SECRETS.md`](dotfiles/SECRETS.md) — tiered vault model + agent secret-read hard block
-- [`secrets/README.md`](secrets/README.md) — sops + age fixtures (files vault)
-- [`../ontarch/README.md`](../ontarch/README.md) — metadata this package produces and is governed by
-- [`../../docs/native-toolchain.md`](../../docs/native-toolchain.md) · [`../../docs/setup.md`](../../docs/setup.md)
+- [`dotfiles/README.md`](dotfiles/README.md) — chezmoi source, profiles, validation, and promotion
+- [`dotfiles/SECRETS.md`](dotfiles/SECRETS.md) — vault model and secret-read boundary
+- [`secrets/README.md`](secrets/README.md) — sops and age fixtures
+- [`../ontarch/README.md`](../ontarch/README.md) — metadata and policy authority
+- [`../../docs/worker-guidance.md`](../../docs/worker-guidance.md) — repository-wide conventions
