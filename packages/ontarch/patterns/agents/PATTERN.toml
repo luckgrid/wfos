@@ -1,10 +1,10 @@
 # Agents navigation pattern — seed for a working `$AGENTS_HOME` (.agents/).
 # Materialized by `ontarch agents-init`. Working copies pin this via `.pattern-lock`.
 id = "agents-navigation"
-version = "0.1.0"
+version = "0.2.0"
 kind = "pattern"
 title = "Agent navigation layer"
-purpose = "Seed profiles, skills index, tools, and graphs navigation contracts for a consuming workspace"
+purpose = "Seed profiles, skills, tools, and graph navigation contracts beneath repository-owned README entrypoints"
 
 # Schema contracts live in the metadata-plane package (not duplicated here).
 profile_schema = "schemas/profile.schema.json"
