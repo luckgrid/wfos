@@ -70,25 +70,36 @@ rather than rigidly linear.
 ```mermaid
 flowchart LR
   Plan[Plan — Decisions]
-  subgraph Prod [Build and Brand — parallel production]
+
+  %% A transparent middle column keeps the production wrapper centered while
+  %% providing a separate junction for the lower outward loop.
+  subgraph ProductionColumn[" "]
     direction TB
-    Build[Build]
-    Brand[Brand]
-    Build <-.->|shared context| Brand
-    Brand -->|approved| Build
+
+    subgraph Prod [Build and Brand — parallel production]
+      direction TB
+      Build[Build]
+      Brand[Brand]
+      Build <-.->|shared context| Brand
+      Brand -->|approved| Build
+    end
+
+    LoopGate(( ))
   end
+
   Control[Control — Operations]
+
   Plan -->|validated| Build
   Plan -->|validated| Brand
   Build -->|released| Control
 
-  %% Invisible ordering links preserve Plan → production → Control columns.
-  Plan ~~~ Prod
-  Prod ~~~ Control
-
   Plan <-.->|ops context| Control
-  Prod -.->|loop gate| Plan
-  Prod -.->|loop gate| Control
+  Plan <-.-|loop gate| LoopGate
+  LoopGate -.->|loop gate| Control
+
+  classDef loopAnchor fill:transparent,stroke:transparent,color:transparent,stroke-width:0px;
+  class LoopGate loopAnchor;
+  style ProductionColumn fill:none,stroke:none
 ```
 
 Shape in short: `Plan ←[gates]→ | Build ←→ Brand | ←[gates]→ Control`.
