@@ -58,14 +58,18 @@ lives on disk: full abstraction for higher levels, direct access for lower level
 ## Workstreams collection
 
 The **`Workstreams/`** tree lives outside this workspace. It organizes work across four
-namespaces — each with its own role, typical artifacts, and promotion gates between them.
-The metadata plane registers units from these namespaces so the runtime controller and agents
-can route without crawling raw paths.
+namespaces — each with its own role, typical artifacts, internal workflows, and promotion
+gates. The metadata plane registers units from these namespaces so the runtime controller and
+agents can route without crawling raw paths.
+
+Workstreams is a separate operating system and semantic authority. WfOS may discover, route,
+control, and record its units, but does not own or redefine the Workstreams model.
 
 Plan sits on the left and Control on the right. Between them, **Build and Brand work in
-parallel** inside one production cluster: each gated from Plan, integrating with each other,
-and releasing into Control. Context and feedback also circulate so the loop stays agile
-rather than rigidly linear.
+parallel** inside one production cluster: each binds independently from Plan, they iterate
+with each other, and Build releases into Control. Context, evidence, priorities, and feedback
+circulate around the entire shape. The solid arrows below show promotion gates; the dotted
+arrows show the wider recirculating operating loop.
 
 ```mermaid
 flowchart LR
@@ -86,6 +90,7 @@ flowchart LR
   Control[Control — Operations]
 
   Plan -->|validated| Build
+  Plan -->|validated| Brand
   Build -->|released| Control
 
   Plan <-.->|ops context| Control
@@ -100,34 +105,45 @@ Shape in short: `↻ Plan ←[gates]→ | ←[gates]→ Build ←[gates]→ Bran
 
 | Namespace | Role | Typical artifacts | Gate |
 |-----------|------|-------------------|------|
-| **Plan** | Decisions — briefs, specs, strategy | fleeting capture (`bin/`), validated foundation (`src/`) | **`validated`** → Build and Brand in parallel |
-| **Brand** | Expressions — design, content, voice | design tokens, copy, export-ready assets | **`approved`** → Build (integration) |
-| **Build** | Implementations — code, workspaces, data science | repos (`src/workspaces/`), packages, pipelines | **`released`** → Control |
-| **Control** | Operations — records, sync, release | ledgers, deployment records, sync state | feeds vision / priorities back to Plan |
+| **Plan** | Decisions — foundations, strategy, architecture | fleeting capture (`bin/`), validated foundations and canon (`src/`) | **`validated`** → Build and Brand in parallel |
+| **Brand** | Expressions — design, content, voice, marketing | design tokens, copy, campaign packages, export-ready assets | **`approved`** → Build integration |
+| **Build** | Implementations — code, infrastructure, systems, data and assurance | repos (`src/workspaces/`), packages, pipelines, implementation specs, test evidence | **`released`** → Control |
+| **Control** | Operations — records, deployment, governance, finance and coordination | ledgers, deployment records, sync state, policies | operational evidence and priorities recirculate through the system |
 
 **Interface layers and gates.** Content moves through the same three interface layers described
-above (toolchain → agent → application). Promotion between namespaces is gated: Plan foundation
-must be **validated** before Build and Brand each start their own specs (Build does not wait on
-Brand); Brand assets must be **approved** before Build integrates them; Build artifacts must be
-**released** before Control records a shipment. Solid arrows are those checkpoints. Dotted edges
-carry shared context, feedback, and ops priorities — the agile inner loop inside the production
-container, while Control still sees a clean outer waterfall.
+above (toolchain → agent → application). Promotion between namespaces is gated: a Plan foundation
+must be **validated** before Build and Brand each start their own downstream planning and production
+(Build does not wait on Brand); Brand assets must be **approved** before Build integrates them;
+Build artifacts must be **released** before Control records and operates a shipment. Solid arrows
+are those checkpoints. Dotted edges carry shared context, evidence, feedback, and operating
+priorities.
+
+The left-to-right gate path is a **bounded promotion projection**, not the complete architecture.
+Each workstream contains its own internal loops, and the four workstreams together form a
+recirculating loop of loops. A release-facing observer may see a clean handoff into Control,
+but the operating system itself is not a waterfall.
 
 The `runtime-controller` (Takogami, `takogami`) is the design target for exposing these gates as
-routable commands via `takogami workstream` (with profile aliases such as `takogami plan`, `takogami qa`, and
-`takogami release`; Build-namespace entry is `takogami workstream build` — top-level `takogami build` stays
-unit lifecycle). See [runtime-controller.md#workstream-routing](runtime-controller.md#workstream-routing).
+routable commands via `takogami workstream` (with profile aliases such as `takogami plan`,
+`takogami qa`, and `takogami release`; Build-namespace entry is `takogami workstream build` —
+top-level `takogami build` stays unit lifecycle). See
+[runtime-controller.md#workstream-routing](runtime-controller.md#workstream-routing).
 
 **Filesystem layout.** On a typical machine, Workstreams roots sit alongside each other under
 `~/Workstreams/` (or your chosen mount — the namespace names are conventions, not requirements).
 WfOS itself often lives under `Build/src/workspaces/wfos/` in that layout; if yours differs,
-set `PANOPLY_HOME` to your native-toolchain package path (see [setup.md](setup.md#panoply_home-and-workstreams-layout)).
+set `PANOPLY_HOME` to your native-toolchain package path (see
+[setup.md](setup.md#panoply_home-and-workstreams-layout)). Implementation placement does not make
+Build or WfOS the semantic owner of the wider Workstreams system.
 
-## System map
+## WfOS runtime integration projection
+
+The following diagram is a WfOS-scoped command, metadata, and provider integration view. It is
+not the Luckgrid business-system topology and does not replace the Workstreams loop above.
 
 ```mermaid
 flowchart TD
-  WS["Workstreams<br/>Plan · Brand · Build · Control"]
+  WS["External Workstreams system<br/>Plan · Brand · Build · Control"]
   Gateway["Optional message/schedule gateway"] -. trigger .-> Dev
   Dev[Developer / Agent] --> TKO["runtime-controller\nTakogami · takogami"]
   TKO --> WS
@@ -137,20 +153,23 @@ flowchart TD
   TKO --> WSP["portable-component-runtime\nWisp"]
   PLT --> CX
   PANOPLY --> CX
-  WS --> CX
+  WS -->|registered units and relationships| CX
   CX --> Reg[registry + descriptors + policies]
 ```
 
 The runtime controller reads the metadata plane, routes commands, runs native tools through the
 native toolchain and portable components through the portable-component runtime, and asks the
 package translator to turn higher-level intent into packages. The metadata plane is the shared
-meaning underneath all of it. Optional gateways terminate at an existing agent; they do not call
-the execution layer as a privileged side door.
+meaning used by WfOS routing, but provider-native and workstream-owned sources remain authoritative.
+Optional gateways terminate at an existing agent; they do not call the execution layer as a
+privileged side door.
 
 ## Principles
 
 - **Native manifests stay authoritative.** The metadata plane describes meaning, routing, policy,
   and relationships; it never replaces `Cargo.toml`, `package.json`, `mise.toml`, or a lockfile.
+- **External systems retain semantic authority.** WfOS integrates with Workstreams and other
+  systems through declared interfaces; implementation placement does not transfer ownership.
 - **Swappable by default.** fzf ↔ skim, tmux ↔ zellij, mise ↔ proto, git ↔ jj. Nothing
   hard-locks a workflow; the controller detects and routes.
 - **Local-first scope.** Everything works offline. Remotes, sync, and federation are layers
