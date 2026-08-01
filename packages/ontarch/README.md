@@ -1,115 +1,103 @@
 # `metadata-plane` — Ontarch 📐
 
-Ontarch stores WfOS's machine-readable meaning: descriptors, registries, schemas, policies,
-profiles, graphs, patterns, and package contracts. It is data and build-time tooling rather than
-an end-user runtime. Other packages read its contracts and generated projections.
+The metadata-plane (Ontarch) stores the machine-readable meaning of the system: **descriptors, registry, schemas,
+policies, graphs, models, and package contracts**. It exposes no end-user runtime CLI — it is
+data and contracts the other products read and write, plus build-time metadata tasks that
+generate and validate the registry from those contracts.
 
-This README is the entrypoint for every worker touching the package. Deep reference:
-[`../../docs/metadata-plane.md`](../../docs/metadata-plane.md).
-
-## Authority and safety
-
-- Authored descriptors, schemas, policies, profiles, and pattern contracts are source material.
-- Generated registry files and graphs are projections; regenerate them instead of hand-editing
-  them.
-- Native manifests remain authoritative for build, dependency, and package behavior.
-- Reading contracts is safe. Mutations must stay within the selected profile and policy.
-- `moon run ontarch:validate` is the package gate.
+Deep dive: [`../../docs/metadata-plane.md`](../../docs/metadata-plane.md).
 
 ## Tasks
 
 | Task | Purpose |
-|---|---|
-| `moon run ontarch:validate` | Validate descriptors, policies, profiles, skills, graphs, and bin contracts |
-| `moon run ontarch:sync` | Generate unit, skill, profile, policy, tool, and graph projections |
-| `moon run ontarch:scan` | Emit the read-only polyrepo scan report |
-| `moon run ontarch:bin-report` | Emit bin inventory JSON and Markdown projections |
-| `moon run ontarch:bin-cleanup` | Produce report, dry-run, archive, or approved-delete cleanup plans under policy |
-| `moon run ontarch:agents-init` | Seed a working `$AGENTS_HOME` from `patterns/agents/` |
+|------|---------|
+| `moon run ontarch:validate` | gate — validate descriptors, policies, profiles, skills, graph, and bin contracts against their JSON schemas |
+| `moon run ontarch:sync` | generate the registry (`units/skills/profiles/policies.json` + graph) |
+| `moon run ontarch:scan` | emit the read-only polyrepo scan report |
+| `moon run ontarch:bin-report` | emit report-only bin inventory (`bin-inventory.json` + `BIN-INVENTORY.md`) |
+| `moon run ontarch:bin-cleanup` | cleanup plan modes (report-only / dry-run / deferred archive & delete-approved) |
+| `moon run ontarch:agents-init` | seed a working `$AGENTS_HOME` (`.agents/`) from `patterns/agents/` |
 
-The tasks use bash, `awk`, and `jq`. Registry writers modify only generated output under
-`registry/`; `agents-init` modifies only the selected navigation layer.
+All are dependency-free (bash + `awk` + `jq`), read-only over sources (except agents-init, which
+writes only the navigation layer, and registry emitters that write under `registry/`), and
+agent-safe where applicable.
 
-## Package map
+## What lives here now
 
-| Path | Role |
-|---|---|
-| `descriptors/` | Central descriptors and overrides |
-| `schemas/` | Unit, policy, profile, skill, command, runtime-record, and bin contracts |
-| `policies/` | Reusable command, secret, publish, runtime, and bin rails |
-| `graphs/` | Generated graph contract |
-| `patterns/agents/` | Reusable profile, skill, tool, and graph navigation seed |
-| `bin/`, `lib/` | Ontarch task entrypoints and shared parsing/generation helpers |
-| `registry/` | Generated indexes and graphs plus tracked build-session provenance |
-| `registry/QUERIES.md` | jq query cookbook over generated data |
+| Path | Kind | Purpose |
+|------|------|---------|
+| `descriptors/*.descriptor.toml` | descriptor | central unit descriptors (`panoply`, planned `ds`); colocated descriptors live beside their units (e.g. `wfos.descriptor.toml` at the workspace root) |
+| `schemas/unit.schema.json` | schema | contract for unit descriptors (metadata-plane) |
+| `schemas/policy.schema.json` | schema | contract for policies (agent-rails + command styles) |
+| `schemas/profile.schema.json` | schema | contract for agent operating profiles |
+| `schemas/command-output.schema.json` | schema | Takogami `--json` `CommandEnvelope` contract |
+| `schemas/runtime-command-record.schema.json` | schema | operational Takogami command-execution record contract (distinct from build-session records) |
+| `schemas/bin-inventory.schema.json` | schema | report-only bin inventory machine contract |
+| `schemas/bin-cleanup-plan.schema.json` | schema | cleanup plan machine contract |
+| `schemas/panoply.tools.schema.json` | schema | contract for the generated tools registry |
+| `policies/panoply.agent.policy.toml` | policy | native-toolchain agent rails (allow/block, gates) |
+| `policies/takogami.agent.policy.toml` | policy | runtime-controller request/child rails (incl. bin modes) |
+| `policies/agent-bin.policy.toml` | policy | bin/archive allow/gate/block tiers |
+| `policies/no-agent-git-push.policy.toml` | policy | agents never push or publish (human-only) |
+| `graphs/edges.schema.json` | schema | contract for the project graph (metadata-plane graphs) |
+| `lib/`, `bin/ontarch{,-sync,-validate,-scan,-bin-report,-bin-cleanup,-agents-init}` | code | registry generator + validator + scan/bin adapters + agents pattern seeder (bash/awk/jq) |
+| `patterns/agents/` | pattern | agents navigation seed (contracts, templates, generic examples) — materialize with `agents-init` |
+| `registry/QUERIES.md`, `registry/queries/*.jq` | query | the jq cookbook over the registry |
+| `registry/{units,skills,profiles,policies,tools}.json` | registry | generated indexes (gitignored — host-specific) |
+| `registry/graph.{json,dot}` | registry | generated project graph (gitignored — host-specific) |
+| `registry/bin-inventory.json`, `BIN-INVENTORY.md` | registry | generated bin inventory (gitignored — host-specific) |
+| `registry/sessions/*.json` | record | build-session provenance records (tracked; distinct from runtime command records) |
+| `registry/.gitkeep` | — | keeps the registry directory tracked |
 
-## Core contracts
+## Concepts
 
-```text
-Descriptors  describe how units connect.
-Registries   index what exists.
-Schemas      define machine contracts.
-Policies     define reusable allow, gate, and block intent.
-Profiles     scope policies to an automated session.
-Graphs       expose capability, dependency, policy, and profile relationships.
-Patterns     seed reusable navigation and configuration contracts.
-Models       define domain meaning (planned).
-Packages     define package-translator interfaces (planned).
+```txt
+Descriptors  describe how things connect.
+Registries   index what exists (tools, workspaces, apps, patterns, and their kinds).
+Schemas      define contracts.
+Policies     define rules — including agent rails and gates.
+Graphs       define relationships — project deps + capability + policy edges.
+Models       define machine-readable domain meaning (planned).
+Packages     define package-translator (Polytope)-managed deliverable interfaces (planned).
 ```
-
-## Generated data rule
-
-The registry is host-specific and mostly gitignored:
-
-```text
-registry/units.json
-registry/skills.json
-registry/profiles.json
-registry/policies.json
-registry/tools.json
-registry/graph.json
-registry/graph.dot
-registry/bin-inventory.json
-registry/BIN-INVENTORY.md
-```
-
-Regenerate these with `ontarch sync`, `panoply doctor`, or the appropriate report task. Do not
-edit them by hand. `registry/sessions/*.json` is different: those tracked files are authored
-build-session provenance records.
-
-## Automated-worker profiles
-
-Working profiles are authored under `$AGENTS_HOME/profiles/`, commonly
-`Workstreams/.agents/profiles/` in an embedded layout. Ontarch validates them against
-`schemas/profile.schema.json`, resolves their selected policies and skills, emits compact registry
-data, and draws relationship edges.
-
-The reusable seed is [`patterns/agents/`](patterns/agents/README.md). It does not create a
-repository instruction file. Repository and package orientation belongs in README files; the
-pattern supplies automated-worker profile, skill, tool, and graph contracts.
-
-## Editing rules
-
-- Follow the schema-compatible TOML subset used by Ontarch's parser.
-- Keep descriptor and policy IDs stable unless an explicit migration changes them.
-- Add generated artifact schemas before consumers depend on those artifacts.
-- Keep policy metadata honest about current enforcement boundaries; do not claim runtime
-  enforcement that is still deferred.
-- Keep registry paths and outputs out of authored package contracts when they are host-specific.
-- Validate after changing descriptors, schemas, policies, profiles, skills, graphs, patterns, or
-  registry-generation code.
 
 ## Relationships
 
-- [Panoply](../panoply/README.md) produces tool facts and is governed by Ontarch policies.
-- [Takogami](../takogami/README.md) consumes trusted graph and bin contracts, applies runtime
-  policy, and records command execution.
-- [Polytope](../polytope/README.md) remains a planned package translator that will consume
-  metadata-plane contracts.
+- **[native-toolchain (Panoply)](../panoply/README.md)** produces the tools registry (`panoply doctor`) and is governed by the
+  agent policy here. Today Panoply, Ontarch, and the **runtime-controller MVP (Takogami)** are the
+  implemented Level 0 trio.
+- **runtime-controller (Takogami)** (`takogami`) is the validated graph/bin consumer: discovery,
+  dual-layer policy, direct `--execute`, command-execution sessions (`session list|show|latest`),
+  `takogami graph`, and supported `takogami bin` projections ship as the E09 MVP. Ontarch remains
+  the metadata owner and never becomes the runtime executor. Interactive providers and
+  work-session restore remain post-MVP.
+  **package-translator (Polytope)** (`takogami package`) remains planned and will read metadata-plane
+  data when implemented.
+- **Native manifests stay authoritative** — the metadata-plane describes meaning, routing, policy, and
+  relationships; it does not replace `Cargo.toml`, `package.json`, `mise.toml`, or lockfiles.
+
+## Interface-layer exposure
+
+```txt
+Toolchain layer (low)     paths, native manifests, adapter contracts, registry scans
+Agent layer   (mid)       descriptors, policies, scoped graphs, session context
+Application layer (high)  workflow intent, domain/system labels — minimal path surface
+```
+
+## Worker rules
+
+This README is the package entrypoint for humans and automated workers. The detailed metadata-plane architecture remains in [`../../docs/metadata-plane.md`](../../docs/metadata-plane.md).
+
+- Reading descriptors, schemas, policies, and registry contracts is safe.
+- Generated registry files are never hand-edited; regenerate them with `ontarch sync`, `panoply doctor`, or the owning report task.
+- `moon run ontarch:validate` is the gate after changes to descriptors, schemas, policies, profiles, skills, graph contracts, or generators.
+- Profiles live in the working `$AGENTS_HOME/profiles/` navigation layer and select Ontarch policies; profiles do not replace policy authority.
+- Skill records live under `$AGENTS_HOME/skills/`; reusable pattern material lives under [`patterns/agents/`](patterns/agents/README.md).
+- Native manifests remain authoritative and must not be duplicated or overridden by metadata-plane records.
+- Keep policy metadata honest about current enforcement boundaries, especially remote writes, secrets, and runtime command blocking.
 
 ## Related
 
-- [`../../docs/metadata-plane.md`](../../docs/metadata-plane.md) — detailed architecture
-- [`../../docs/agent-configs.md`](../../docs/agent-configs.md) — profile and app integration
-- [`../../docs/agent-rails.md`](../../docs/agent-rails.md) — policy and enforcement model
-- [`../../docs/worker-guidance.md`](../../docs/worker-guidance.md) — repository-wide conventions
+- [`../panoply/README.md`](../panoply/README.md) — the producer/consumer of this metadata
+- [`../takogami/README.md`](../takogami/README.md) — runtime-controller MVP consumer
+- [`../../docs/metadata-plane.md`](../../docs/metadata-plane.md) · [`../../docs/agent-rails.md`](../../docs/agent-rails.md)
