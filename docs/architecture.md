@@ -81,6 +81,11 @@ flowchart LR
   Plan -->|validated| Build
   Plan -->|validated| Brand
   Build -->|released| Control
+
+  %% Invisible ordering links preserve Plan → production → Control columns.
+  Plan ~~~ Prod
+  Prod ~~~ Control
+
   Plan <-.->|ops context| Control
   Prod -.->|loop gate| Plan
   Prod -.->|loop gate| Control
