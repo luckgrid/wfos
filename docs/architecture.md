@@ -82,6 +82,8 @@ flowchart LR
   Plan -->|validated| Brand
   Build -->|released| Control
   Plan <-.->|ops context| Control
+  Prod -.->|loop gate| Plan
+  Prod -.->|loop gate| Control
 ```
 
 Shape in short: `Plan ←[gates]→ | Build ←→ Brand | ←[gates]→ Control`.
