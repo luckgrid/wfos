@@ -1,250 +1,400 @@
-# Core workflow apps & tools
+# Core workflow apps and provider profiles
 
-The essential native, local-first apps and tools WfOS recommends for low-level writing,
-note-taking, and AI-assisted document workflows — and how they fit together. These are
-**recommendations**, not dependencies: none are installed by `panoply bootstrap`, and the
-markdown-on-disk source of truth keeps every choice swappable.
+WfOS can integrate local-first tools for writing, retrieval, agent assistance, rendering, terminals, and workspace restoration. These tools are **providers and profile choices**, not WfOS architecture requirements.
 
-The deeper planning-capture concept that builds on this stack is archived and intentionally
-decoupled — not part of the current WfOS Level 0 product set.
+The durable contracts are:
 
-Status legend: **recommended** (the WfOS starting point) · **optional** (swappable
-alternative) · **reference** (noted, not endorsed for new work).
+- authored source remains in files and repositories the operator owns;
+- the external Writing System owns document identity, relationships, transformation, review, and projection semantics;
+- Workstreams owns output, lifecycle, and promotion boundaries;
+- a Workbench profile selects providers, workspaces, sessions, and recovery behavior;
+- WfOS may discover, route, constrain, and record provider use without absorbing provider identity or authority.
 
----
+None of the tools below is installed by `panoply bootstrap` unless a separate implementation plan explicitly adds that behavior.
 
-## The stack at a glance
-
-| Layer | Tool | Role |
-|-------|------|------|
-| Quick capture | [Logseq](https://logseq.com/) | fast notes, ideas, research, daily journaling |
-| Long-form docs | [Obsidian](https://obsidian.md/) | larger docs, specs, structured vaults |
-| Typeset / publish | [Typst](https://typst.app/) | compile markdown/Typst into polished PDFs |
-| Agent retrieval | [QMD](https://github.com/tobi/qmd) | index local markdown; hybrid search; fetch snippets/line ranges via CLI or MCP |
-| AI engine (local) | [aichat](https://github.com/sigoden/aichat) + [Ollama](https://ollama.com/) | RAG over notes, sessions, local models, no Docker |
-| AI engine (cloud) | [OpenRouter](https://openrouter.ai/) | high-tier cloud models when local isn't enough |
-
-Everything reads and writes **plain markdown in a directory you own** (git-tracked, readable
-by agents, devs, and sessions). The editor and AI engine are layers on top of that directory,
-not the source of truth.
+Status legend: **example default** · **optional alternative** · **reference only**.
 
 ---
 
-## Writing & notes
+## 1. Architecture before providers
 
-### Logseq — quick notes, ideas, research (recommended)
+The writing and knowledge workflow should be read in this order:
 
-[Logseq](https://logseq.com/) (AGPL-3.0) is an outliner for fast, low-friction capture: daily
-journals, fleeting ideas, research snippets, and linked thoughts. Its block model and backlinks
-make it ideal for the early "catch the idea before it's gone" stage. Files are local markdown.
+```mermaid
+flowchart TD
+  WritingSystem[External Writing System<br/>document identity, relations, operations and projections]
+  Workstreams[External Workstreams system<br/>Plan · Brand · Build · Control]
+  Workbench[Workbench profile<br/>providers, workspaces, sessions and recovery]
+  WfOS[WfOS<br/>discovery, routing, policy and records]
+  Providers[Replaceable providers<br/>editors, retrieval, agents, renderers, terminals]
 
-### Obsidian — larger docs and specs (recommended)
+  WritingSystem -->|document units and relationships| Workbench
+  Workstreams -->|ownership and lifecycle| Workbench
+  Workbench -->|selected composition| Providers
+  WfOS -->|discovers, routes and constrains| Workbench
+  Providers -->|native state and evidence| Workbench
+  Workbench -.->|observations and revisions| WritingSystem
+  Workbench -.->|workstream evidence| Workstreams
+```
 
-[Obsidian](https://obsidian.md/) (proprietary, free for personal use) is the home for larger,
-more structured work: specs, briefs, foundational docs, and long-form writing. Its mature plugin
-ecosystem (including local-AI plugins) and vault model suit documents that graduate out of quick
-capture. Vaults are plain markdown folders.
+This is a semantic and composition view. It prevents an editor, note application, RAG tool, terminal, or AI client from becoming the source of truth for the entire workflow.
 
-**How they pair:** capture in Logseq → promote anything worth developing into an Obsidian vault
-where it becomes a doc/spec. Both sit over markdown, so the same files stay readable to the AI
-engine and to agents.
+### Authority boundaries
 
-### SilverBullet — OSS/hackable alternative (optional)
-
-[SilverBullet](https://silverbullet.md/) (MIT) is a single-process, self-hosted markdown
-workspace that is highly scriptable. Consider it if you want a fully open-source, extensible base
-to build custom writing workflows on rather than a packaged app.
-
----
-
-## Typeset & publish — Typst
-
-[Typst](https://typst.app/open-source/) (Apache-2.0) compiles markup into publish-grade PDFs much
-faster than LaTeX, with a modern scripting language. Use it as the final step that turns markdown
-notes/specs into polished documents and whitepapers. The [tinymist](https://github.com/Myriad-Dreamin/tinymist)
-language server adds editor integration (preview, completion) in VS Code/Neovim.
-
----
-
-## AI engine — aichat + Ollama, with OpenRouter for cloud
-
-[aichat](https://github.com/sigoden/aichat) (MIT/Apache-2.0) is a single Rust binary that turns a
-notes directory into an AI workspace:
-
-- **RAG** over your markdown directory (`aichat --rag <name>`),
-- **sessions** and **roles** for context-aware, repeatable interactions,
-- **function calling / MCP / agents** for tool use,
-- a built-in local API (`aichat --serve`) any editor plugin or future UI can point at.
-
-[Ollama](https://ollama.com/) (MIT) runs open models locally with no Docker required, keeping
-notes private by default. [OpenRouter](https://openrouter.ai/) is configured as an additional
-provider so you can route to high-tier cloud models when a task needs more than a local model can
-give — same `aichat` interface, different backend.
-
-> Privacy posture: local-first by default (Ollama); cloud is opt-in per request via the OpenRouter
-> provider. Nothing leaves the machine unless you choose a cloud model.
+| Concern | Authority |
+|---|---|
+| Document content and declared meaning | authored files in the owning workstream |
+| Document identity and relationship model | Writing System contracts |
+| Output ownership and promotion | Workstreams |
+| Profile composition and desired provider state | Workbench profile |
+| Discovery, policy projection, command routing and operational records | WfOS |
+| Native editor, terminal, model, renderer or retrieval behavior | selected provider |
+| Branches, commits and ancestry | Git |
 
 ---
 
-## Agent retrieval — QMD
+## 2. Example local writing profile
 
-[QMD](https://github.com/tobi/qmd) (Query Markup Documents, MIT) is a local hybrid search engine
-for markdown collections. Agents search first (`query`, `search`), then retrieve only the sections
-they need (`get`, `multi_get` with line ranges and docids). The index and full corpus stay
-off-context; snippets lead, full text follows on demand. Cite docids and line numbers in answers.
+The following is one optional local profile, not the WfOS product set:
 
-Suggested Workstreams collections (configure yourself):
+| Capability | Example provider | Role | Posture |
+|---|---|---|---|
+| Quick capture | [Logseq](https://logseq.com/) | low-friction notes, research and journaling | optional |
+| Long-form editing | [Obsidian](https://obsidian.md/) | structured Markdown documents and relationships | optional |
+| Open-source document workspace | [SilverBullet](https://silverbullet.md/) | hackable local Markdown interface | optional alternative |
+| Typesetting | [Typst](https://typst.app/) | render source into publish-grade documents | optional |
+| Retrieval | [QMD](https://github.com/tobi/qmd) | local hybrid search and bounded retrieval | optional |
+| Local AI client | [aichat](https://github.com/sigoden/aichat) | sessions, RAG, tools and provider routing | optional |
+| Local model runtime | [Ollama](https://ollama.com/) | local model execution | optional |
+| Cloud model routing | [OpenRouter](https://openrouter.ai/) | opt-in cloud model access | optional |
+| Terminal sessions | tmux / zellij / Herdr | persistent or multiplexed terminal workspaces | provider choice |
 
-- `Plan/bin/` — fleeting capture / workbench docs
-- `Plan/src/` — validated specs and foundation docs
-- `wfos/docs/` — workspace reference
-- Obsidian vault root, if separate from Plan
+Any provider may be omitted, replaced, or used outside WfOS. The profile remains valid only if its durable responsibilities survive provider replacement.
 
-Use `qmd context add` per collection so search results carry human-readable corpus labels.
+---
+
+## 3. Provider-neutral document loop
+
+A document workflow is recursive rather than a capture-to-publish waterfall.
+
+```mermaid
+flowchart LR
+  Capture[Capture or import]
+  Develop[Develop and relate]
+  Review[Review, challenge and test]
+  Promote[Promote through owning workstream gate]
+  Project[Render, publish or expose through an interface]
+  Observe[Observe use, feedback and evidence]
+
+  Capture --> Develop --> Review
+  Review -->|accepted| Promote
+  Review -.->|rework| Develop
+  Promote --> Project --> Observe
+  Observe -.->|revise or supersede| Develop
+
+  Retrieval[Retrieval provider] <-.-> Develop
+  Agent[Agent or model provider] <-.-> Develop
+  Renderer[Renderer provider] <-.-> Project
+```
+
+A short note may use only Capture and Develop. A system foundation may loop through research, review, validation, Build proofs, and later revision many times.
+
+---
+
+## 4. Workstreams placement
+
+Tools do not determine workstream ownership. The **output being produced** determines ownership.
+
+```mermaid
+flowchart LR
+  subgraph Plan [Plan — Decisions]
+    PResearch[Research and interpretation]
+    PFoundation[Foundations, architecture and decisions]
+  end
+
+  subgraph Brand [Brand — Expressions]
+    BExpression[Design, content, media and campaign sources]
+    BPublish[Expression review and publication preparation]
+  end
+
+  subgraph Build [Build — Implementations]
+    BSpec[Implementation specs and test plans]
+    BImpl[Code, systems, automation and renderer integrations]
+  end
+
+  subgraph Control [Control — Operations]
+    COperate[Deployment, campaigns, records and governance]
+  end
+
+  PResearch --> PFoundation
+  PFoundation -->|validated| BExpression
+  PFoundation -->|validated| BSpec
+  BExpression --> BPublish
+  BPublish -->|approved| BImpl
+  BSpec --> BImpl
+  BImpl -->|released| COperate
+
+  COperate -.->|operating evidence| PResearch
+  BImpl -.->|technical evidence| PResearch
+  BPublish -.->|market evidence| PResearch
+```
+
+Examples:
+
+- an editor may be used in every workstream;
+- Typst source implementing a reusable rendering pipeline belongs in Build, while a published brand brochure source may belong in Brand;
+- a research note belongs in Plan when it informs a decision, but campaign performance records may belong in Control and their interpretation may produce a new Brand or Plan unit;
+- implementation specifications belong in Build, not Plan, even when they derive from a validated Plan foundation.
+
+---
+
+## 5. Retrieval provider example — QMD
+
+QMD is one optional local retrieval provider for Markdown collections. It can index a corpus and return bounded snippets or line ranges to an agent.
+
+Suggested profile bindings may include:
+
+- `Plan/bin/` — active foundations and research;
+- `Plan/src/` — maintained Plan canon where present;
+- `Brand/` — expression sources and research where useful;
+- `Build/bin/` — implementation specifications;
+- `wfos/docs/` — WfOS implementation reference;
+- another Writing System collection selected by the profile.
+
+Example installation and use:
 
 ```bash
-npm install -g @tobilu/qmd   # Node >= 22; macOS: brew install sqlite
+npm install -g @tobilu/qmd
 qmd collection add ~/path/to/markdown --name mynotes
 qmd context add qmd://mynotes "Description for ranking"
 qmd update && qmd embed
-qmd query "..." -n 5          # hybrid search
-qmd get "#docid:120:40"       # line-range retrieval
+qmd query "..." -n 5
+qmd get "#docid:120:40"
 ```
 
-Agent integration (install yourself; WfOS does not manage these):
+QMD indexes and retrieves. It does not become the authority for document content, relationships, gate state, or Git history.
 
-- Official skill: `npx skills add tobi/qmd --skill qmd` or copy from the repo `skills/qmd/`
-- MCP: `qmd mcp` (stdio) or `qmd mcp --http --daemon` for a shared server
-- MCP setup for Cursor/OpenClaw: [mcp-setup.md](https://github.com/tobi/qmd/blob/main/skills/qmd/references/mcp-setup.md)
-
-First run downloads ~2GB of local GGUF models into `~/.cache/qmd/`. Run `qmd doctor` if
-model-backed commands fail. QMD indexes and retrieves; aichat chats and writes back — use both or
-either.
+First use may download local model assets. Provider-specific requirements and behavior should be verified against the provider's current documentation before a profile is promoted.
 
 ---
 
-## How they fit together
+## 6. Agent and model provider example
+
+A local AI client can read retrieved context, maintain a session, call tools, and write proposed output back into an owning workstream.
 
 ```mermaid
 flowchart LR
-  Notes[Markdown notes dir<br/>Logseq + Obsidian]
-  QMD[QMD<br/>index and search]
-  Agents[Cursor / OpenClaw agents]
-  AIChat[aichat<br/>RAG + sessions + serve]
-  Ollama[Ollama<br/>local models]
-  OR[OpenRouter<br/>cloud models]
-  Typst[Typst<br/>compile to PDF]
+  Source[Owning workstream source]
+  Retrieval[Retrieval provider]
+  AgentClient[Agent or AI client]
+  LocalModel[Local model provider]
+  CloudModel[Opt-in cloud provider]
+  Proposal[Proposed authored change]
+  Review[Owning workstream review]
 
-  Notes --> QMD
-  QMD -->|"snippets then line ranges"| Agents
-  Notes --> AIChat
-  AIChat --> Ollama
-  AIChat --> OR
-  AIChat --> Notes
-  Notes --> Typst
+  Source --> Retrieval
+  Retrieval --> AgentClient
+  AgentClient --> LocalModel
+  AgentClient --> CloudModel
+  AgentClient --> Proposal
+  Proposal --> Review
+  Review -.->|revise| AgentClient
+  Review -->|accepted through normal workflow| Source
 ```
 
-1. **Capture** ideas/research in Logseq; develop docs and specs in Obsidian — all plain markdown
-   in one directory.
-2. **Index** with QMD: `collection add`, `update`, `embed`; agents search before reading whole
-   files.
-3. **Augment** with aichat: RAG and sessions read that directory; responses and structured
-   outputs are written back as markdown.
-4. **Route** to Ollama locally by default, or OpenRouter for high-tier cloud models when needed.
-5. **Publish** finished specs/docs through Typst.
+Important boundaries:
 
----
+- cloud access is opt-in according to profile and policy;
+- an agent proposal is not automatically validated, approved, released, or operationally authorized;
+- model output should retain provenance and review context appropriate to the task;
+- WfOS policy may gate commands and scope, but the owning workstream determines artifact meaning and promotion.
 
-## Workstreams placement
-
-Recommended namespace mapping for the writing stack:
-
-```mermaid
-flowchart LR
-  subgraph PlanNs [Plan — Decisions]
-    Capture[Logseq quick capture]
-    Specs[Obsidian specs and foundation docs]
-  end
-  subgraph BrandNs [Brand — Expressions]
-    Publish[Typst PDF output]
-  end
-  Capture --> Specs
-  Specs --> Publish
-  QMD[QMD retrieval] --> PlanNs
-  AIChat[aichat RAG] --> PlanNs
-```
-
-- **Plan/bin/** — fleeting capture, scratch research (Logseq-oriented flow)
-- **Plan/src/** — validated specs, foundation docs (Obsidian vault canon)
-- **Brand/lib/** — published PDFs and export copies (Typst output)
-
----
-
-## Quick start (not part of `panoply bootstrap`)
-
-These are documented installs you run manually — WfOS does not install or manage them.
+Example provider setup:
 
 ```bash
-# CLI tools (Homebrew)
+brew install aichat ollama
+ollama pull llama3.1
+ollama serve
+
+aichat --rag notes
+aichat --serve
+```
+
+Provider names and commands are examples, not stable WfOS contracts.
+
+---
+
+## 7. Renderer provider example — Typst
+
+Typst can serve as one renderer for documents, reports, briefs, diagrams, and publication artifacts.
+
+Keep these responsibilities separate:
+
+```text
+source meaning and identity
+  Writing System + owning workstream
+
+renderer adapter and build behavior
+  Build implementation
+
+brand expression source and visual direction
+  Brand
+
+published or distributed operating record
+  Control where applicable
+
+Typst compiler behavior
+  Typst provider
+```
+
+The renderer should be replaceable without changing the stable identity of the source document or the owning workstream.
+
+Example installation:
+
+```bash
+brew install typst
+```
+
+---
+
+## 8. Editors and note applications
+
+Editors and note applications are interfaces over source, not the source of truth by default.
+
+### Logseq
+
+Useful for rapid block-oriented capture, daily notes, and research. Treat any provider-specific block identifiers or database behavior as adapter concerns unless explicitly adopted into the Writing System contract.
+
+### Obsidian
+
+Useful for long-form Markdown, backlinks, graph views, and plugins. A repository may be opened as a vault, but vault configuration should not silently redefine workstream ownership or document authority.
+
+### SilverBullet
+
+Useful as an open-source and programmable Markdown interface. Its scripts and metadata may prove interface ideas while remaining replaceable.
+
+The correct provider depends on the active profile and workflow. A user who does not benefit from a provider should be able to remove it without invalidating the underlying system.
+
+---
+
+## 9. Sessions and workspace restoration
+
+A provider profile may also compose terminal, desktop, browser, file, and agent session providers.
+
+| Capability | Example providers | Boundary |
+|---|---|---|
+| Terminal persistence and multiplexing | tmux, zellij, Herdr | provider owns PTYs, panes and native session state |
+| Desktop workspace switching | FlashSpace or selected desktop provider | provider owns window/space state |
+| Resource dashboard | Freeter or custom interface | interface projection, not source authority |
+| Agent session history | selected agent provider | provider-native history; durable summaries belong in authored records where required |
+| WfOS command records | runtime-controller | operational attempts and policy results, not full provider session replacement |
+
+WfOS may coordinate providers through adapters, profiles, and records. It must not become a second terminal server, desktop window manager, editor database, or agent-history provider.
+
+A Workbench profile should distinguish:
+
+```text
+declared desired state
+provider live state
+durable authored state
+derived registry state
+ephemeral session state
+secret state
+recovery evidence
+```
+
+---
+
+## 10. Example profile flow
+
+```mermaid
+flowchart TD
+  Profile[Local writing workbench profile]
+  Files[Markdown and related authored source]
+  Editor[Selected editor]
+  Retrieval[Selected retrieval provider]
+  Agent[Selected agent client]
+  Models[Local or approved cloud models]
+  Renderer[Selected renderer]
+  Terminal[Selected terminal/session provider]
+  Records[WfOS operational records]
+
+  Profile --> Editor
+  Profile --> Retrieval
+  Profile --> Agent
+  Profile --> Renderer
+  Profile --> Terminal
+
+  Files <--> Editor
+  Files --> Retrieval
+  Retrieval --> Agent
+  Agent --> Models
+  Agent --> Files
+  Files --> Renderer
+
+  WfOS[WfOS routing and policy] --> Profile
+  WfOS --> Records
+  Terminal -. native state .-> Records
+  Agent -. bounded attempts and references .-> Records
+```
+
+This is one composition profile. It should be tested for provider omission, replacement, failure, resume, recovery, and teardown before being promoted as a durable Workbench pattern.
+
+---
+
+## 11. Quick-start example
+
+These commands manually install one optional provider set. They are not part of the WfOS bootstrap contract.
+
+```bash
+# CLI providers
 brew install aichat ollama typst
 
-# Agent retrieval (npm; Node >= 22)
+# Retrieval provider
 npm install -g @tobilu/qmd
 
-# Apps (Homebrew casks)
+# Optional GUI editors
 brew install --cask obsidian logseq
 
-# Pull a local model and start the daemon
-ollama pull llama3.1          # or any model from https://ollama.com/library
-ollama serve                  # background local model server
+# Local model example
+ollama pull llama3.1
+ollama serve
 
-# Point aichat at a local model + index your notes for RAG
-#   ~/.config/aichat/config.yaml — set the Ollama client and an OpenRouter client:
-#     clients:
-#       - type: openai-compatible
-#         name: ollama
-#         api_base: http://localhost:11434/v1
-#       - type: openai-compatible
-#         name: openrouter
-#         api_base: https://openrouter.ai/api/v1
-#         api_key: <OPENROUTER_API_KEY>
-aichat --rag notes            # build/query a RAG over your notes directory
-aichat --serve                # expose a local OpenAI-compatible API + playground
-
-# QMD — index markdown for agent search/retrieval (see Agent retrieval section above)
+# Retrieval example
 qmd collection add ~/path/to/markdown --name mynotes
 qmd update && qmd embed
 ```
 
-License notes: aichat (MIT/Apache-2.0), Ollama (MIT), QMD (MIT), Typst (Apache-2.0), Logseq (AGPL-3.0),
-Obsidian (proprietary, free tier), SilverBullet (MIT), OpenRouter (hosted service).
+Do not encode a provider as required architecture merely because it appears in this example.
 
 ---
 
-## Sessions & workspace restoration
+## 12. Relationship to WfOS
 
-Restore where you left off — windows, tabs, apps, and terminal context — across a workflow.
+WfOS responsibilities in this area are bounded:
 
-| Tool | Idea | Status |
-|------|------|--------|
-| [FlashSpace](https://github.com/wojciech-kulik/FlashSpace) | fast virtual workspace/space switching (macOS) | optional |
-| [Freeter](https://freeter.io/) | organize tools and resources per workflow | optional |
-| Decks | bring scattered knowledge back together | reference |
-| [Spaces](https://spacesformac.xyz/) | per-context window and app layouts | reference |
-| [tmux](https://github.com/tmux/tmux) / [zellij](https://github.com/zellij-org/zellij) | persistent terminal sessions (native-toolchain `session` module) | core |
-| [Kilo Code](https://github.com/Kilo-Org/kilocode) | reference for context/session storage and knowledge transfer between sessions/agents | reference |
+- discover provider capabilities and profile bindings;
+- route approved commands;
+- apply metadata-plane policy;
+- expose scoped agent or CLI interfaces;
+- record operational attempts and results;
+- project relationships and gateway state;
+- support provider adapters without absorbing provider internals.
 
-Terminal sessions are already part of the native-toolchain [`session` module](native-toolchain.md#modules); GUI
-window/space restoration is handled by the apps above today and is a candidate for future runtime-controller (Takogami)
-session management.
+WfOS does **not** own:
 
----
+- the external Writing System;
+- Workstreams output ownership;
+- editor-native databases;
+- terminal PTYs and pane state;
+- Git history;
+- model-provider behavior;
+- renderer semantics;
+- desktop window geometry.
 
-## Relationship to WfOS
+See:
 
-- These apps are **documented recommendations**, not native-toolchain-managed tools — install them yourself.
-- The markdown directory is the contract; editors and AI engines are swappable layers over it.
-- The deeper idea-capture → spec planning-capture concept is intentionally decoupled and lives
-  in the Workstreams Plan workstream as an archived concept. WfOS is not coupled to it now.
-- See [tool-catalog.md](tool-catalog.md) for the full grouped catalog and [native-toolchain.md](native-toolchain.md) for
-  the native CLI substrate.
+- [architecture.md](architecture.md) — WfOS boundaries and Workstreams integration
+- [tool-catalog.md](tool-catalog.md) — broader provider catalog
+- [native-toolchain.md](native-toolchain.md) — native CLI substrate
+- [runtime-architecture.md](runtime-architecture.md) — controller/provider coordination boundary
