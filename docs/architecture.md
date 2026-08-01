@@ -96,7 +96,7 @@ flowchart LR
   class LoopGate loopAnchor;
 ```
 
-Shape in short: `Plan ←[gates]→ | ←[gates]→ Build ←[gates]→ Brand ←[gates]→ | ←[gates]→ Control`.
+Shape in short: `↻ Plan ←[gates]→ | ←[gates]→ Build ←[gates]→ Brand ←[gates]→ | ←[gates]→ Control ↻`.
 
 | Namespace | Role | Typical artifacts | Gate |
 |-----------|------|-------------------|------|

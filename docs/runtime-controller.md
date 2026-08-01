@@ -144,7 +144,7 @@ The runtime controller will route into Workstreams namespaces through a universa
 `takogami workstream build`, not `takogami build`.
 
 Canon: [architecture.md#workstreams-collection](architecture.md#workstreams-collection). Shape:
-`Plan ←[gates]→ | Build ←→ Brand | ←[gates]→ Control`.
+`↻ Plan ←[gates]→ | ←[gates]→ Build ←[gates]→ Brand ←[gates]→ | ←[gates]→ Control ↻`.
 
 ## Routing flow (MVP)
 
