@@ -72,7 +72,7 @@ flowchart LR
   Plan[Plan — Decisions]
 
   %% A transparent middle column keeps the production wrapper centered while
-  %% providing a separate junction for the lower outward loop.
+  %% providing a separate junction for the lower bidirectional loop.
   subgraph ProductionColumn[" "]
     direction TB
 
@@ -89,13 +89,12 @@ flowchart LR
 
   Control[Control — Operations]
 
-  Plan -->|validated| Build
-  Plan -->|validated| Brand
+  Plan -->|validated| Prod
   Build -->|released| Control
 
   Plan <-.->|ops context| Control
-  Plan <-.-|loop gate| LoopGate
-  LoopGate -.->|loop gate| Control
+  Plan <-.->|loop gate| LoopGate
+  LoopGate <-.->|loop gate| Control
 
   classDef loopAnchor fill:transparent,stroke:transparent,color:transparent,stroke-width:0px;
   class LoopGate loopAnchor;
