@@ -70,8 +70,13 @@ carry `skillspector_scan` in `required_validators`. Optional AI enhancements are
 - Suggested Workstreams layout paths in docs, descriptors, and shell defaults are conventions
   only; document override points (`PANOPLY_HOME`, mount points), never imply one canonical filesystem
   layout.
-- When verifying epic or story completion, compare the repo to Build/bin/wfos specs and
-  `packages/ontarch/registry/sessions`; consult Plan/bin only for extra context.
+- When verifying epic or story completion, compare the repo to Build/bin/wfos specs,
+  `E0x_DEFERRED.md` trackers, and `packages/ontarch/registry/sessions`; consult Plan/bin only for
+  foundational context.
+- In product/brand tables, backtick archetype IDs and keep product-name emoji markers consistent
+  across similar docs for familiarity.
+- Keep Build/bin SESSIONS and STATE aligned with ontarch registry session records; do not set
+  session `next` to an epic that is not yet specced.
 
 ## Learned Workspace Facts
 
