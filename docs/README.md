@@ -19,7 +19,7 @@ do not duplicate them here. **Install / bootstrap** lives in [setup.md](setup.md
 | [runtime-controller.md](runtime-controller.md) | Takogami MVP — discovery, routing, execute, graph/bin, command records |
 | [package-translator.md](package-translator.md) | Polytope (`takogami package`) — planned |
 | [portable-component-runtime.md](portable-component-runtime.md) | Wisp — planned |
-| [agent-configs.md](agent-configs.md) | Shared agent profiles and lean AGENTS.md |
+| [agent-configs.md](agent-configs.md) | Shared agent profiles and README entrypoints |
 | [agent-skills.md](agent-skills.md) | On-demand skill registry, templates, load logging |
 | [agent-rails.md](agent-rails.md) | Rails, gates, MCP, skill scanning |
 | [git-hygiene.md](git-hygiene.md) | Hooks, gitleaks, conventional commits |

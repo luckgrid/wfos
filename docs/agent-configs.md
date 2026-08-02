@@ -3,7 +3,7 @@
 Agent apps (Claude, Cursor, Zed, Factory, OpenCode, CLI agents) each have their own prose config.
 Left alone, the same intent — what an agent may touch, which commands it may run, whether it can
 read secrets — gets restated five times. WfOS consolidates that intent into **shared profiles**
-and keeps each `AGENTS.md` lean.
+and keeps each repository or package `README.md` as the common entrypoint.
 
 ## Shared profiles
 
@@ -15,7 +15,7 @@ command allow/gate/block lists, secret access, a remote-write policy, an `[isola
 target. Apps consume the shared intent through their own (chezmoi-rendered) config syntax — they
 never become a second policy source of truth.
 
-The reusable **seed** (generic examples + README contracts + `AGENTS.template.md`) lives in
+The reusable **seed** (generic examples + README contracts + skill template bodies) lives in
 [`packages/ontarch/patterns/agents/`](../packages/ontarch/patterns/agents/README.md). Materialize
 or refresh a working `.agents/` with `moon run ontarch:agents-init` (skips existing files;
 `--force` overwrites). Working copies pin the seed via `.pattern-lock`.
@@ -94,30 +94,25 @@ registry intent. Skill-loading dev profiles (`workspace-dev`, `agent-safe-mainte
 See [`packages/panoply/dotfiles/ROUTING.md`](../packages/panoply/dotfiles/ROUTING.md) for how app
 templates consume machine profile data without becoming a policy source of truth.
 
-## The lean `AGENTS.md` pattern
+## The README entrypoint pattern
 
-`AGENTS.md` is a **pointer, not a manual**. It carries only:
+A repository, package, app, or maintained namespace uses its `README.md` as the shared entrypoint
+for humans and automated workers. It carries the scope, map, first commands, and links to the
+actual authorities for that namespace.
 
-- core rules (substrate, run-from-root, native manifests stay authoritative, stay within rails),
-- a short may / may-not table,
-- key paths,
-- the profile the workspace runs under,
-- a skills note.
+Detailed architecture and commands remain in the README and normal `docs/`; automated session
+scope, command allow/block lists, secret rules, isolation, validators, and skills remain in the
+selected profile and policies. App-specific prose does not duplicate that shared intent.
 
-Detailed commands and architecture live in `README.md` and `docs/`, loaded on demand — so opening
-`AGENTS.md` stays cheap. No app-specific prose duplicates profile intent: scope, command
-allow/block lists, and secret rules are declared once in the profile, not retold per app or per
-`AGENTS.md`. The copy-ready template is seed-owned at
-[`patterns/agents/profiles/AGENTS.template.md`](../packages/ontarch/patterns/agents/profiles/AGENTS.template.md);
-the reference instance is this workspace's [`AGENTS.md`](../AGENTS.md).
+The reusable agents-navigation pattern intentionally seeds profile, skill, tool, and graph
+contracts rather than creating a parallel repository instruction file.
 
 ## Why it matters for token cost
 
 Every app's prose config is context an agent loads. One profile means the same intent is declared
 once and consumed everywhere, instead of duplicated as prose in five places. Scoped profiles also
 load only the allowed paths and commands for a task, so irrelevant context never enters the
-prompt, and a lean `AGENTS.md` keeps per-workspace instructions short. Shared profile + lean
-`AGENTS.md` replaces per-app prose sprawl.
+prompt. Shared profile data plus the existing README hierarchy avoids a separate agent-only manual.
 
 ## Related
 

@@ -84,9 +84,20 @@ Agent layer   (mid)       descriptors, policies, scoped graphs, session context
 Application layer (high)  workflow intent, domain/system labels — minimal path surface
 ```
 
+## Worker rules
+
+This README is the package entrypoint for humans and automated workers. The detailed metadata-plane architecture remains in [`../../docs/metadata-plane.md`](../../docs/metadata-plane.md).
+
+- Reading descriptors, schemas, policies, and registry contracts is safe.
+- Generated registry files are never hand-edited; regenerate them with `ontarch sync`, `panoply doctor`, or the owning report task.
+- `moon run ontarch:validate` is the gate after changes to descriptors, schemas, policies, profiles, skills, graph contracts, or generators.
+- Profiles live in the working `$AGENTS_HOME/profiles/` navigation layer and select Ontarch policies; profiles do not replace policy authority.
+- Skill records live under `$AGENTS_HOME/skills/`; reusable pattern material lives under [`patterns/agents/`](patterns/agents/README.md).
+- Native manifests remain authoritative and must not be duplicated or overridden by metadata-plane records.
+- Keep policy metadata honest about current enforcement boundaries, especially remote writes, secrets, and runtime command blocking.
+
 ## Related
 
-- [`AGENTS.md`](AGENTS.md) — agent rules for editing metadata
 - [`../panoply/README.md`](../panoply/README.md) — the producer/consumer of this metadata
 - [`../takogami/README.md`](../takogami/README.md) — runtime-controller MVP consumer
 - [`../../docs/metadata-plane.md`](../../docs/metadata-plane.md) · [`../../docs/agent-rails.md`](../../docs/agent-rails.md)

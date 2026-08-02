@@ -10,6 +10,12 @@ Full docs: [`docs/`](docs/README.md). Start with [architecture](docs/architectur
 Archetypes are stable roles; products are swappable implementations — see
 [architecture § archetypes](docs/architecture.md#archetypes-vs-products).
 
+## Worker entrypoint
+
+This `README.md` is the shared entrypoint for humans and automated workers. Read it first, then enter a package, app, or documentation namespace through its nearest maintained `README.md`.
+
+Run commands from the workspace root unless the local README says otherwise. Native manifests remain authoritative; Ontarch describes meaning, routing, and policy but does not replace them. Automated-worker scope and rails remain in shared profiles, Ontarch policies, and the existing agent documentation rather than a parallel `AGENTS.md` hierarchy.
+
 ## Quick start
 
 Experienced-dev path (Rust + this workspace root):
@@ -51,7 +57,7 @@ cargo run -p takogami -- bin report
 
 ## Docs
 
-Index and guides: [`docs/README.md`](docs/README.md). Agents: [AGENTS.md](AGENTS.md).
+Index and guides: [`docs/README.md`](docs/README.md). Automated-worker profiles and rails: [agent configs](docs/agent-configs.md) · [agent rails](docs/agent-rails.md).
 
 ## Git
 

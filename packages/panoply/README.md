@@ -67,9 +67,17 @@ workspace build toolchains — see [`../../docs/monorepo.md`](../../docs/monorep
 
 ## Agent rails
 
+This README is the package entrypoint for humans and automated workers. Run from the WfOS workspace root unless a package command explicitly says otherwise.
+
 `panoply` reads `PANOPLY_AGENT`. In agent mode, read-only commands run; mutating ones are blocked
-per `../ontarch/policies/panoply.agent.policy.toml`. See [`AGENTS.md`](AGENTS.md) and
+per `../ontarch/policies/panoply.agent.policy.toml`. Automated workers may use `doctor`, `list`,
+`gen`, and `env`; they must not run `bootstrap`, install tools, read `pass`/`age`/`sops` secrets,
+or edit `~/.zshrc`, `~/.config`, or host symlinks without an explicit human gate. See
 [`../../docs/agent-rails.md`](../../docs/agent-rails.md).
+
+When editing the substrate, change tools in `manifest/panoply.tools.toml`, keep scripts
+POSIX/bash and `shellcheck` clean, and preserve guarded shell activation when optional tools are
+absent.
 
 ## Related
 

@@ -67,10 +67,11 @@ the schema itself so the schema stays the single source of truth. Both run on ba
 (no new dependencies) and are agent-safe.
 
 `ontarch agents-init` seeds `$AGENTS_HOME` from `packages/ontarch/patterns/agents/` (contracts
-and example records) and writes `.pattern-lock`. Seed-owned templates
-(`AGENTS.template.md`, `skills/templates/*`) stay in the pattern; resolve/validate fall back
-there. Override discovery with `AGENTS_HOME` or `WS_ROOT`; without a Workstreams-layout
-sentinel, a standalone checkout uses `$WFOS_ROOT/.agents`.
+and example records) and writes `.pattern-lock`. Reusable skill template bodies remain in the
+pattern; resolve/validate fall back there. Repository and package instructions remain in their
+own README files. Override discovery with `AGENTS_HOME` or `WS_ROOT`; without a
+Workstreams-layout sentinel, a standalone checkout uses `$WFOS_ROOT/.agents`. The applied
+Workstreams sentinel is a root `README.md` plus `Build/src/workspaces/`.
 
 Generated `units.json` and `scan.json` include a `registry_generation` object
 (`generated_at` + `source_fingerprints[]` over authored inputs). The runtime controller

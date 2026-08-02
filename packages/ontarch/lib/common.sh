@@ -33,7 +33,8 @@ WFOS_ROOT="$(cd "$ONTARCH_PKG/../.." && pwd)"
 WORKSPACES_DIR="$(cd "$WFOS_ROOT/.." && pwd)"
 
 # Walk up from $1 looking for a workspace-root sentinel.
-# Prefer an existing .agents/; else AGENTS.md + Build/src/workspaces (Workstreams layout).
+# Prefer an existing .agents/; else use README.md + Build/src/workspaces for the applied
+# Workstreams layout. README is the universal worker entrypoint and namespace marker.
 # Never returns "/" — fail closed for standalone/mis-laid-out checkouts.
 _ontarch_find_ws_root() {
   local start="$1" dir parent
@@ -43,7 +44,7 @@ _ontarch_find_ws_root() {
       printf '%s\n' "$dir"
       return 0
     fi
-    if [ -f "$dir/AGENTS.md" ] && [ -d "$dir/Build/src/workspaces" ]; then
+    if [ -f "$dir/README.md" ] && [ -d "$dir/Build/src/workspaces" ]; then
       printf '%s\n' "$dir"
       return 0
     fi

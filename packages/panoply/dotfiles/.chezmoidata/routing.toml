@@ -30,7 +30,7 @@ owned_by = "ontarch-agent-configs"
 
 [routing.claude]
 target = ".claude/ (settings + CLAUDE.md)"
-intent_source = "Workstreams/.agents/profiles + lean AGENTS.md"
+intent_source = "repository README + Workstreams/.agents/profiles"
 consumes_profile_data = true
 holds_secrets = false
 owned_by = "ontarch-agent-configs"

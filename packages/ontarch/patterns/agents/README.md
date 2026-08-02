@@ -4,6 +4,10 @@ Reusable **seed** for a workspace agent navigation layer. It is data (YAML/TOML/
 not code. `ontarch agents-init` materializes it into a working `$AGENTS_HOME` (default
 `<workspace-root>/.agents/`).
 
+Repository and package instructions remain in their maintained `README.md` files. This pattern
+provides the narrower automated-worker profiles, skills, tools, and graph contracts used after
+that shared entrypoint.
+
 ## Seed vs working copy
 
 | Concern | Home |
@@ -21,7 +25,7 @@ tools are present/missing, which skills are mapped, and how the pieces relate.
 ```txt
 patterns/agents/
 ├── PATTERN.toml           # id + version (paired with working .pattern-lock)
-├── profiles/              # README contract, AGENTS.template.md, examples/
+├── profiles/              # README contract + examples/
 ├── skills/                # README contract, examples/, templates/
 ├── tools/README.md        # local-toolkit.yml contract (file itself is generated)
 └── graphs/README.md       # pointer to Ontarch graph schema + registry
@@ -35,10 +39,9 @@ moon run ontarch:agents-init
 ```
 
 Init copies contracts and example records into `$AGENTS_HOME`, writes `.pattern-lock`, and
-refuses to overwrite existing files unless `--force`. Seed-owned templates
-(`profiles/AGENTS.template.md`, `skills/templates/*`) stay in this pattern directory —
-`ontarch skills resolve` / `validate` fall back here. `local-toolkit.yml` is never part of the
-seed — `ontarch sync` generates it.
+refuses to overwrite existing files unless `--force`. Reusable skill template bodies stay in
+this pattern directory — `ontarch skills resolve` / `validate` fall back here.
+`local-toolkit.yml` is never part of the seed — `ontarch sync` generates it.
 
 ## Related
 
