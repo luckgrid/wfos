@@ -23,8 +23,8 @@
     {
       "role": "ledger",
       "historical_locator": "Build/bin/wfos/SESSIONS.md",
-      "local_path": "Build/bin/wfos/_process/legacy-session-ledger.md",
-      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/_process/legacy-session-ledger.md"
+      "local_path": "Build/bin/wfos/archives/legacy-session-ledger.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/archives/legacy-session-ledger.md"
     },
     {
       "role": "story",

@@ -25,8 +25,8 @@
     {
       "role": "session-protocol",
       "historical_locator": "Build/bin/wfos/01_build_session_protocol.md",
-      "local_path": "Build/bin/wfos/program/execution-model/README.md",
-      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/execution-model/README.md"
+      "local_path": "Build/bin/wfos/program/execution-model.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/execution-model.md"
     },
     {
       "role": "story",
@@ -43,8 +43,8 @@
     {
       "role": "session-schema",
       "historical_locator": "Plan/bin/lg_wfos_session_memory_workflow.md#33-session-record-schema",
-      "local_path": "Build/bin/wfos/program/execution-model/session-memory.md#33-session-record-schema",
-      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/execution-model/session-memory.md#33-session-record-schema"
+      "local_path": "Build/bin/wfos/program/execution-model.md#33-session-record-schema",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/execution-model.md#33-session-record-schema"
     }
   ],
   "changed_paths": [

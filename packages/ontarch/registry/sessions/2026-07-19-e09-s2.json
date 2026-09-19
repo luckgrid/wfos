@@ -39,8 +39,8 @@
     {
       "role": "session-schema",
       "historical_locator": "Plan/bin/lg_wfos_session_memory_workflow.md",
-      "local_path": "Build/bin/wfos/program/execution-model/session-memory.md",
-      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/execution-model/session-memory.md"
+      "local_path": "Build/bin/wfos/program/execution-model.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/execution-model.md"
     }
   ],
   "changed_paths": [

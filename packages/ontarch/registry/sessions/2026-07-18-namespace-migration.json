@@ -31,8 +31,8 @@
     {
       "role": "session-protocol",
       "historical_locator": "Build/bin/wfos/01_build_session_protocol.md",
-      "local_path": "Build/bin/wfos/program/execution-model/README.md",
-      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/execution-model/README.md"
+      "local_path": "Build/bin/wfos/program/execution-model.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/execution-model.md"
     }
   ],
   "changed_paths": [
