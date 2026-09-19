@@ -14,6 +14,26 @@
     "Build/bin/wfos/E09_runtime_controller.md",
     "Build/src/workspaces/wfos/packages/takogami/README.md"
   ],
+  "workstreams_refs": [
+    {
+      "role": "plan-authority",
+      "historical_locator": "Plan/bin/wfos/lg_wfos_lvl_0_namespace_alignments.md",
+      "local_path": "Plan/bin/wfos/foundation/namespace-alignment.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Plan/bin/wfos/foundation/namespace-alignment.md"
+    },
+    {
+      "role": "state",
+      "historical_locator": "Build/bin/wfos/STATE.md",
+      "local_path": "Build/bin/wfos/_process/STATE.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/_process/STATE.md"
+    },
+    {
+      "role": "epic",
+      "historical_locator": "Build/bin/wfos/E09_runtime_controller.md",
+      "local_path": "Build/bin/wfos/program/wfos-e09/README.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e09/README.md"
+    }
+  ],
   "changed_paths": [
     "Plan/bin/wfos/lg_wfos_lvl_0_namespace_alignments.md (v0.3 authority: brand lore/assessment, CLI decision, history Kraken→Takogami)",
     "Plan/bin/{wfos/*, toolkit/*, archives/*, setup guides, session memory}.md",

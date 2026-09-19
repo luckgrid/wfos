@@ -14,6 +14,32 @@
     "Build/bin/wfos/E04_metadata_plane_registries.md#s1",
     "Plan/bin/wfos/lg_wfos_lvl_0_metadata_plane.md#101-descriptors"
   ],
+  "workstreams_refs": [
+    {
+      "role": "state",
+      "historical_locator": "Build/bin/wfos/STATE.md",
+      "local_path": "Build/bin/wfos/_process/STATE.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/_process/STATE.md"
+    },
+    {
+      "role": "ledger",
+      "historical_locator": "Build/bin/wfos/SESSIONS.md",
+      "local_path": "Build/bin/wfos/_process/legacy-session-ledger.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/_process/legacy-session-ledger.md"
+    },
+    {
+      "role": "story",
+      "historical_locator": "Build/bin/wfos/E04_metadata_plane_registries.md#s1",
+      "local_path": "Build/bin/wfos/program/wfos-e04/s1-expand-ontarch-descriptor-schema.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e04/s1-expand-ontarch-descriptor-schema.md"
+    },
+    {
+      "role": "plan-authority",
+      "historical_locator": "Plan/bin/wfos/lg_wfos_lvl_0_metadata_plane.md#101-descriptors",
+      "local_path": "Plan/bin/wfos/architecture/metadata-plane.md#101-descriptors",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Plan/bin/wfos/architecture/metadata-plane.md#101-descriptors"
+    }
+  ],
   "changed_paths": [
     "Build/src/workspaces/wfos/packages/ontarch/schemas/unit.schema.json",
     "Build/src/workspaces/wfos/packages/ontarch/descriptors/ds.descriptor.toml",

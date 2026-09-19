@@ -15,6 +15,38 @@
     "Plan/bin/wfos/lg_wfos_lvl_0_unix_substrate.md",
     "Plan/bin/lg_wfos_session_memory_workflow.md#33-session-record-schema"
   ],
+  "workstreams_refs": [
+    {
+      "role": "state",
+      "historical_locator": "Build/bin/wfos/STATE.md",
+      "local_path": "Build/bin/wfos/_process/STATE.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/_process/STATE.md"
+    },
+    {
+      "role": "session-protocol",
+      "historical_locator": "Build/bin/wfos/01_build_session_protocol.md",
+      "local_path": "Build/bin/wfos/program/execution-model/README.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/execution-model/README.md"
+    },
+    {
+      "role": "story",
+      "historical_locator": "Build/bin/wfos/E01_dotfiles_shell_substrate.md#s1",
+      "local_path": "Build/bin/wfos/program/wfos-e01/s1-adopt-chezmoi-as-the-dotfile-manager.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e01/s1-adopt-chezmoi-as-the-dotfile-manager.md"
+    },
+    {
+      "role": "plan",
+      "historical_locator": "Plan/bin/wfos/lg_wfos_lvl_0_unix_substrate.md",
+      "local_path": "Build/bin/wfos/program/wfos-e01/blueprint.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e01/blueprint.md"
+    },
+    {
+      "role": "session-schema",
+      "historical_locator": "Plan/bin/lg_wfos_session_memory_workflow.md#33-session-record-schema",
+      "local_path": "Build/bin/wfos/program/execution-model/session-memory.md#33-session-record-schema",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/execution-model/session-memory.md#33-session-record-schema"
+    }
+  ],
   "changed_paths": [
     "Build/src/workspaces/wfos/packages/panoply/dotfiles/README.md",
     "Build/src/workspaces/wfos/packages/panoply/dotfiles/.chezmoi.toml.tmpl",

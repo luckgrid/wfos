@@ -14,6 +14,26 @@
     "Build/bin/wfos/E04_metadata_plane_registries.md#s3",
     "packages/ontarch/registry/sessions/2026-06-25-e04-s2.json"
   ],
+  "workstreams_refs": [
+    {
+      "role": "state",
+      "historical_locator": "Build/bin/wfos/STATE.md",
+      "local_path": "Build/bin/wfos/_process/STATE.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/_process/STATE.md"
+    },
+    {
+      "role": "ledger",
+      "historical_locator": "Build/bin/wfos/SESSIONS.md",
+      "local_path": "Build/bin/wfos/_process/legacy-session-ledger.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/_process/legacy-session-ledger.md"
+    },
+    {
+      "role": "story",
+      "historical_locator": "Build/bin/wfos/E04_metadata_plane_registries.md#s3",
+      "local_path": "Build/bin/wfos/program/wfos-e04/s3-stand-up-workstreams-agents.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e04/s3-stand-up-workstreams-agents.md"
+    }
+  ],
   "changed_paths": [
     ".agents/README.md",
     ".agents/profiles/README.md",

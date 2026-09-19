@@ -17,6 +17,32 @@
     "packages/ontarch/registry/sessions/2026-07-19-e09-s2.json",
     "packages/ontarch/registry/sessions/2026-07-19-e09-s1.json"
   ],
+  "workstreams_refs": [
+    {
+      "role": "state",
+      "historical_locator": "Build/bin/wfos/STATE.md",
+      "local_path": "Build/bin/wfos/_process/STATE.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/_process/STATE.md"
+    },
+    {
+      "role": "story",
+      "historical_locator": "Build/bin/wfos/E09_runtime_controller.md",
+      "local_path": "Build/bin/wfos/program/wfos-e09/s3-discovery-queries-and-doctor/README.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e09/s3-discovery-queries-and-doctor/README.md"
+    },
+    {
+      "role": "correction",
+      "historical_locator": "Build/bin/wfos/2026-07-20-wfos-e09-tool-composition-amendment.md",
+      "local_path": "Build/bin/wfos/program/wfos-e09/tool-composition-amendment.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e09/tool-composition-amendment.md"
+    },
+    {
+      "role": "plan-authority",
+      "historical_locator": "Plan/bin/wfos/lg_wfos_lvl_0_runtime_controller.md",
+      "local_path": "Plan/bin/wfos/architecture/runtime-controller.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Plan/bin/wfos/architecture/runtime-controller.md"
+    }
+  ],
   "changed_paths": [
     "Build/bin/wfos/2026-07-20-wfos-e09-s3-discovery-queries-doctor-cursor-plan.md",
     "Build/bin/wfos/E09_runtime_controller.md",

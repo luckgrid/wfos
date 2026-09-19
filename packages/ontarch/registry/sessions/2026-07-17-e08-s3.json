@@ -13,6 +13,14 @@
     "packages/ontarch/registry/sessions/2026-07-17-e08-s2.json",
     "packages/ontarch/registry/sessions/2026-07-17-e08-s1.json"
   ],
+  "workstreams_refs": [
+    {
+      "role": "story",
+      "historical_locator": "Build/bin/wfos/2026-07-17-wfos-e08-bin-archive-lifecycle-sprint.md#e08s3",
+      "local_path": "Build/bin/wfos/program/wfos-e08/s3-dry-run-cleanup.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e08/s3-dry-run-cleanup.md"
+    }
+  ],
   "changed_paths": [
     "Build/src/workspaces/wfos/packages/ontarch/bin/ontarch-bin-cleanup",
     "Build/src/workspaces/wfos/packages/ontarch/bin/ontarch",
@@ -29,10 +37,10 @@
   "outcome": "ontarch-bin-cleanup implements four modes. report-only (default) and dry-run print plans with no action. archive/delete-approved validate args then refuse at draft gateway (never call rm/mv). delete-approved requires --scope; invalid/traversal scopes rejected; PANOPLY_AGENT=1 refused. Blocked: no-manifest, permanent, lib/src, approved_to mismatch. moon ontarch:bin-cleanup wired.",
   "validation": "report-only and dry-run exit 0; archive/delete-approved exit 1 with deferred message; agent + bad-scope refusals exit 1; ontarch:validate PASS; no bin/lib/src mutations.",
   "decisions": [
-    "draft gateway: archive/delete validate then refuse \u2014 real mutation deferred to H12/Takogami",
+    "draft gateway: archive/delete validate then refuse — real mutation deferred to H12/Takogami",
     "delete-approved requires both --scope under namespace bin/ and matching approved_to"
   ],
-  "next": "E08.S4 \u2014 archive classification",
+  "next": "E08.S4 — archive classification",
   "blockers": [],
   "token_note": "exact cleanup plan in one read; enabling safety prerequisite"
 }

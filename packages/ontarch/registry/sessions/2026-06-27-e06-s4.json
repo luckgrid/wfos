@@ -13,6 +13,14 @@
     "packages/ontarch/registry/sessions/2026-06-27-e06-s3.json",
     "Build/src/workspaces/wfos/docs/tool-catalog.md"
   ],
+  "workstreams_refs": [
+    {
+      "role": "story",
+      "historical_locator": "Build/bin/wfos/2026-06-27-wfos-e06-skills-and-commands-sprint.md#e06s4",
+      "local_path": "Build/bin/wfos/program/wfos-e06/s4-fabric-patterns.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e06/s4-fabric-patterns.md"
+    }
+  ],
   "changed_paths": [
     "Workstreams/.agents/skills/summarize.fabric.toml",
     "Workstreams/.agents/skills/extract-wisdom.fabric.toml",
@@ -27,7 +35,7 @@
   "decisions": [
     "Fabric optional per tool-catalog; pattern bodies deferred to install time"
   ],
-  "next": "E06.S5 \u2014 skill security",
+  "next": "E06.S5 — skill security",
   "blockers": [],
-  "token_note": "Reusable Fabric patterns avoid re-deriving prompts on demand \u2014 medium token lever."
+  "token_note": "Reusable Fabric patterns avoid re-deriving prompts on demand — medium token lever."
 }

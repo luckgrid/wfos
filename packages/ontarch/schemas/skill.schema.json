@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "wfos/ontarch/schemas/skill.schema.json",
   "title": "Ontarch skill record",
-  "description": "A curated skill, template, or pattern record authored under Workstreams/.agents/skills/*.toml. The registry holds records only — bodies resolve on invocation from $SKILLS_HOME or repo templates. Indexed (flattened) into registry/skills.json by `ontarch sync`.",
+  "description": "A curated skill, template, or pattern record authored under the consumer workspace .agents/skills/*.toml. The registry holds records only — bodies resolve on invocation from $SKILLS_HOME or repo templates. Indexed (flattened) into registry/skills.json by `ontarch sync`.",
   "type": "object",
   "required": ["id", "source", "kind"],
   "additionalProperties": true,

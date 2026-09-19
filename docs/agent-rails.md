@@ -81,7 +81,7 @@ blocks those intents when they appear as resolved child commands. See [bin-archi
 
 Scoped agents default to a **local branch or worktree**, never the main worktree — isolation
 reduces the context surface to the scoped branch and keeps agent work off shared state. Each agent
-profile declares an `[isolation]` field (`Workstreams/.agents/profiles/*.toml`):
+profile declares an `[isolation]` field (`.agents/profiles/*.toml`):
 
 | Profile | `mode` | `jj` |
 |---------|--------|------|
@@ -161,7 +161,7 @@ an unreviewed dependency — it does not run.
 
 This is a **gate, not a convention**. Any agent profile that may load external skills declares
 `[skills] loads_external = true` and must list `skillspector_scan` in its `required_validators`
-(`Workstreams/.agents/profiles/*.toml`). `ontarch validate` enforces the pairing: a profile that
+(`.agents/profiles/*.toml`). `ontarch validate` enforces the pairing: a profile that
 loads skills without the `skillspector_scan` validator fails the gate. The `workspace-dev` and
 `agent-safe-maintenance` profiles carry it; `docs-only` sets `loads_external = false` and loads no
 skills.

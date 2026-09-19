@@ -74,4 +74,4 @@ dot -Tsvg registry/graph.dot -o graph.svg
 - Descriptors (edge source): [`../descriptors/`](../descriptors/)
 - Policies (edge source): [`../policies/`](../policies/)
 - Runtime consumer: [`../../takogami/README.md`](../../takogami/README.md)
-- Navigation view: `Workstreams/.agents/graphs/README.md`
+- Navigation view: `.agents/graphs/README.md`

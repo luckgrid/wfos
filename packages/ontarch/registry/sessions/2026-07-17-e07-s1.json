@@ -13,6 +13,20 @@
     "Build/bin/wfos/STATE.md",
     "packages/ontarch/registry/sessions/2026-06-27-e06-s5.json"
   ],
+  "workstreams_refs": [
+    {
+      "role": "story",
+      "historical_locator": "Build/bin/wfos/2026-07-17-wfos-e07-git-hygiene-workspaces-sprint.md#e07s1",
+      "local_path": "Build/bin/wfos/program/wfos-e07/s1-hook-baseline.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e07/s1-hook-baseline.md"
+    },
+    {
+      "role": "state",
+      "historical_locator": "Build/bin/wfos/STATE.md",
+      "local_path": "Build/bin/wfos/_process/STATE.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/_process/STATE.md"
+    }
+  ],
   "changed_paths": [
     "Build/src/workspaces/wfos/.pre-commit-config.yaml",
     "Build/src/workspaces/wfos/docs/git-hygiene.md",
@@ -28,7 +42,7 @@
     "hooks are per-repo, never global",
     "local hooks use installed binaries (no network); pinned repos build isolated envs at human install time"
   ],
-  "next": "E07.S2 \u2014 gitleaks gate",
+  "next": "E07.S2 — gitleaks gate",
   "blockers": [],
   "token_note": "clean, parseable diffs compress better; config validated read-only without installing hooks"
 }

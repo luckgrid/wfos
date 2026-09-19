@@ -15,6 +15,26 @@
     "Build/src/workspaces/wfos/AGENTS.md",
     "packages/ontarch/registry/sessions/2026-07-17-e08-s5.json"
   ],
+  "workstreams_refs": [
+    {
+      "role": "plan-authority",
+      "historical_locator": "Plan/bin/wfos/lg_wfos_lvl_0_namespace_alignments.md",
+      "local_path": "Plan/bin/wfos/foundation/namespace-alignment.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Plan/bin/wfos/foundation/namespace-alignment.md"
+    },
+    {
+      "role": "state",
+      "historical_locator": "Build/bin/wfos/STATE.md",
+      "local_path": "Build/bin/wfos/_process/STATE.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/_process/STATE.md"
+    },
+    {
+      "role": "session-protocol",
+      "historical_locator": "Build/bin/wfos/01_build_session_protocol.md",
+      "local_path": "Build/bin/wfos/program/execution-model/README.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/execution-model/README.md"
+    }
+  ],
   "changed_paths": [
     "Build/src/workspaces/wfos/packages/{dust→panoply, archon→ontarch, kraken→takogami, hypercube→polytope, ether→wisp}/",
     "Build/src/workspaces/wfos/packages/panoply/bin/{dust→panoply}*",

@@ -16,6 +16,38 @@
     "packages/ontarch/registry/sessions/2026-06-25-e04-s3.json",
     "Plan/bin/wfos/lg_wfos_lvl_0_metadata_plane.md#104-policies"
   ],
+  "workstreams_refs": [
+    {
+      "role": "state",
+      "historical_locator": "Build/bin/wfos/STATE.md",
+      "local_path": "Build/bin/wfos/_process/STATE.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/_process/STATE.md"
+    },
+    {
+      "role": "ledger",
+      "historical_locator": "Build/bin/wfos/SESSIONS.md",
+      "local_path": "Build/bin/wfos/_process/legacy-session-ledger.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/_process/legacy-session-ledger.md"
+    },
+    {
+      "role": "story",
+      "historical_locator": "Build/bin/wfos/E04_metadata_plane_registries.md#s4",
+      "local_path": "Build/bin/wfos/program/wfos-e04/s4-policy-and-graph-descriptors.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e04/s4-policy-and-graph-descriptors.md"
+    },
+    {
+      "role": "progress",
+      "historical_locator": "Build/bin/wfos/E04_PROGRESS_NOTES.md",
+      "local_path": "Build/bin/wfos/program/wfos-e04/progress-notes.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e04/progress-notes.md"
+    },
+    {
+      "role": "plan-authority",
+      "historical_locator": "Plan/bin/wfos/lg_wfos_lvl_0_metadata_plane.md#104-policies",
+      "local_path": "Plan/bin/wfos/architecture/metadata-plane.md#104-policies",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Plan/bin/wfos/architecture/metadata-plane.md#104-policies"
+    }
+  ],
   "changed_paths": [
     "Build/bin/wfos/E04_PROGRESS_NOTES.md",
     "Build/src/workspaces/wfos/packages/ontarch/policies/no-agent-git-push.policy.toml",
