@@ -327,8 +327,8 @@
     {
       "role": "story-correction",
       "historical_locator": "Build/bin/wfos/2026-07-24-wfos-e09-s6.1-execution-record-integrity-harderning-addendum.md",
-      "local_path": "Build/bin/wfos/program/wfos-e09/s6-command-records-and-native-execution/s6-1-execution-record-integrity/README.md",
-      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e09/s6-command-records-and-native-execution/s6-1-execution-record-integrity/README.md"
+      "local_path": "Build/bin/wfos/program/wfos-e09/s6-command-records-and-native-execution/t1-execution-record-integrity/README.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e09/s6-command-records-and-native-execution/t1-execution-record-integrity/README.md"
     }
   ]
 }

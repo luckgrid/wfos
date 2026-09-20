@@ -4,8 +4,8 @@ Structured, machine-parseable session records, one JSON file per build session
 (`<session_id>.json`). Written by the agent at session close per the
 session record schema in `luckgrid/lg-workstreams`:
 
-- local path: `Build/bin/wfos/program/execution-model/session-memory.md#33-session-record-schema`
-- GitHub: https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/execution-model/session-memory.md#33-session-record-schema
+- local path: `Build/bin/wfos/program/execution-model.md#33-session-record-schema`
+- GitHub: https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/execution-model.md#33-session-record-schema
 
 **Filename / `session_id` date rule:** use
 `YYYY-MM-DD-eNN-sN` where `YYYY-MM-DD` is the **local (PDT) implementation/completion

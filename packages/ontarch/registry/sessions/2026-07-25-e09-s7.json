@@ -2339,14 +2339,14 @@
     {
       "role": "process-evidence",
       "historical_locator": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-4-i01-acceptance-corrections-addendum.md",
-      "local_path": "Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/2026-07-27-wfos-e09-s7-phase-4-i01-acceptance-corrections-addendum.md",
-      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/2026-07-27-wfos-e09-s7-phase-4-i01-acceptance-corrections-addendum.md"
+      "local_path": "2026-07-27-i0-e09-s7-phase-4-i01-acceptance-corrections-addendum.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/2026-07-27-i0-e09-s7-phase-4-i01-acceptance-corrections-addendum.md"
     },
     {
       "role": "process-evidence",
       "historical_locator": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-4-evidence-review-addendum.md",
-      "local_path": "Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/2026-07-27-wfos-e09-s7-phase-4-evidence-review-addendum.md",
-      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/2026-07-27-wfos-e09-s7-phase-4-evidence-review-addendum.md"
+      "local_path": "2026-07-27-i0-e09-s7-phase-4-evidence-review-addendum.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/2026-07-27-i0-e09-s7-phase-4-evidence-review-addendum.md"
     },
     {
       "role": "story",
@@ -2357,110 +2357,110 @@
     {
       "role": "plan",
       "historical_locator": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-5-documentation-evidence-closure-plan.md",
-      "local_path": "Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/p5-documentation-and-evidence.md",
-      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/p5-documentation-and-evidence.md"
+      "local_path": "Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/t5-documentation-and-evidence.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/t5-documentation-and-evidence.md"
     },
     {
       "role": "process-evidence",
       "historical_locator": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-3-i04-addendum.md",
-      "local_path": "Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/2026-07-27-wfos-e09-s7-phase-3-i04-addendum.md",
-      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/2026-07-27-wfos-e09-s7-phase-3-i04-addendum.md"
+      "local_path": "2026-07-27-i0-e09-s7-phase-3-i04-addendum.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/2026-07-27-i0-e09-s7-phase-3-i04-addendum.md"
     },
     {
       "role": "process-evidence",
       "historical_locator": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-3-final-closure-helper-resolution-and-evidence-addendum.md",
-      "local_path": "Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/2026-07-27-wfos-e09-s7-phase-3-closure-helper-resolution-and-evidence-addendum.md",
-      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/2026-07-27-wfos-e09-s7-phase-3-closure-helper-resolution-and-evidence-addendum.md"
+      "local_path": "2026-07-27-i0-e09-s7-phase-3-closure-helper-resolution-and-evidence-addendum.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/2026-07-27-i0-e09-s7-phase-3-closure-helper-resolution-and-evidence-addendum.md"
     },
     {
       "role": "process-evidence",
       "historical_locator": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-3-closure-follow-up-review-final-hardening-addendum.md",
-      "local_path": "Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/2026-07-27-wfos-e09-s7-phase-3-closure-follow-up-review-hardening-addendum.md",
-      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/2026-07-27-wfos-e09-s7-phase-3-closure-follow-up-review-hardening-addendum.md"
+      "local_path": "2026-07-27-i0-e09-s7-phase-3-closure-follow-up-review-hardening-addendum.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/2026-07-27-i0-e09-s7-phase-3-closure-follow-up-review-hardening-addendum.md"
     },
     {
       "role": "process-evidence",
       "historical_locator": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-3-implementation-review-closure-corrections-addendum.md",
-      "local_path": "Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/2026-07-27-wfos-e09-s7-phase-3-implementation-review-closure-corrections-addendum.md",
-      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/2026-07-27-wfos-e09-s7-phase-3-implementation-review-closure-corrections-addendum.md"
+      "local_path": "2026-07-27-i0-e09-s7-phase-3-implementation-review-closure-corrections-addendum.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/2026-07-27-i0-e09-s7-phase-3-implementation-review-closure-corrections-addendum.md"
     },
     {
       "role": "plan",
       "historical_locator": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-3-projection-authorization-bin-routing-implementation-spec.md",
-      "local_path": "Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/p3-projection-authorization-and-bin-routing.md",
-      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/p3-projection-authorization-and-bin-routing.md"
+      "local_path": "Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/t3-projection-authorization-and-bin-routing.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/t3-projection-authorization-and-bin-routing.md"
     },
     {
       "role": "process-evidence",
       "historical_locator": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-2-final-closure-evidence-follow-up-addendum.md",
-      "local_path": "Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/2026-07-27-wfos-e09-s7-phase-2-closure-evidence-follow-up-addendum.md",
-      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/2026-07-27-wfos-e09-s7-phase-2-closure-evidence-follow-up-addendum.md"
+      "local_path": "2026-07-27-i0-e09-s7-phase-2-closure-evidence-follow-up-addendum.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/2026-07-27-i0-e09-s7-phase-2-closure-evidence-follow-up-addendum.md"
     },
     {
       "role": "process-evidence",
       "historical_locator": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-2-closure-follow-up-review-final-corrections-addendum.md",
-      "local_path": "Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/2026-07-27-wfos-e09-s7-phase-2-closure-follow-up-review-corrections-addendum.md",
-      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/2026-07-27-wfos-e09-s7-phase-2-closure-follow-up-review-corrections-addendum.md"
+      "local_path": "2026-07-27-i0-e09-s7-phase-2-closure-follow-up-review-corrections-addendum.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/2026-07-27-i0-e09-s7-phase-2-closure-follow-up-review-corrections-addendum.md"
     },
     {
       "role": "process-evidence",
       "historical_locator": "Build/bin/wfos/2026-07-26-wfos-e09-s7-phase-2-implementation-review-closure-corrections-addendum.md",
-      "local_path": "Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/2026-07-26-wfos-e09-s7-phase-2-implementation-review-closure-corrections-addendum.md",
-      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/2026-07-26-wfos-e09-s7-phase-2-implementation-review-closure-corrections-addendum.md"
+      "local_path": "2026-07-26-i0-e09-s7-phase-2-implementation-review-closure-corrections-addendum.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/2026-07-26-i0-e09-s7-phase-2-implementation-review-closure-corrections-addendum.md"
     },
     {
       "role": "process-evidence",
       "historical_locator": "Build/bin/wfos/2026-07-26-wfos-e09-s7-phase-2-readiness-review-and-implementation-acceptance-addendum.md",
-      "local_path": "Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/2026-07-26-wfos-e09-s7-phase-2-readiness-review-and-implementation-acceptance-addendum.md",
-      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/2026-07-26-wfos-e09-s7-phase-2-readiness-review-and-implementation-acceptance-addendum.md"
+      "local_path": "2026-07-26-i0-e09-s7-phase-2-readiness-review-and-implementation-acceptance-addendum.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/2026-07-26-i0-e09-s7-phase-2-readiness-review-and-implementation-acceptance-addendum.md"
     },
     {
       "role": "process-evidence",
       "historical_locator": "Build/bin/wfos/2026-07-26-wfos-e09-s7-phase-1-closure-follow-up-review-final-corrections.md",
-      "local_path": "Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/2026-07-26-wfos-e09-s7-phase-1-closure-follow-up-review-corrections.md",
-      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/2026-07-26-wfos-e09-s7-phase-1-closure-follow-up-review-corrections.md"
+      "local_path": "2026-07-26-i0-e09-s7-phase-1-closure-follow-up-review-corrections.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/2026-07-26-i0-e09-s7-phase-1-closure-follow-up-review-corrections.md"
     },
     {
       "role": "process-evidence",
       "historical_locator": "Build/bin/wfos/2026-07-26-wfos-e09-s7-phase-1-implementation-review-closure-corrections-addendum.md",
-      "local_path": "Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/2026-07-26-wfos-e09-s7-phase-1-implementation-review-closure-corrections-addendum.md",
-      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/2026-07-26-wfos-e09-s7-phase-1-implementation-review-closure-corrections-addendum.md"
+      "local_path": "2026-07-26-i0-e09-s7-phase-1-implementation-review-closure-corrections-addendum.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/2026-07-26-i0-e09-s7-phase-1-implementation-review-closure-corrections-addendum.md"
     },
     {
       "role": "process-evidence",
       "historical_locator": "Build/bin/wfos/2026-07-26-wfos-e09-s7-phase-0-follow-up-review-phase-1-completion-addendum.md",
-      "local_path": "Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/2026-07-26-wfos-e09-s7-phase-0-follow-up-review-phase-1-closure-addendum.md",
-      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/2026-07-26-wfos-e09-s7-phase-0-follow-up-review-phase-1-closure-addendum.md"
+      "local_path": "2026-07-26-i0-e09-s7-phase-0-follow-up-review-phase-1-closure-addendum.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/2026-07-26-i0-e09-s7-phase-0-follow-up-review-phase-1-closure-addendum.md"
     },
     {
       "role": "process-evidence",
       "historical_locator": "Build/bin/wfos/2026-07-25-wfos-e09-s7-phase-0-review-phase-1-corrections-addendum.md",
-      "local_path": "Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/2026-07-25-wfos-e09-s7-phase-0-review-phase-1-corrections-addendum.md",
-      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/2026-07-25-wfos-e09-s7-phase-0-review-phase-1-corrections-addendum.md"
+      "local_path": "2026-07-25-i0-e09-s7-phase-0-review-phase-1-corrections-addendum.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/2026-07-25-i0-e09-s7-phase-0-review-phase-1-corrections-addendum.md"
     },
     {
       "role": "process-evidence",
       "historical_locator": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-3-i05-addendum.md",
-      "local_path": "Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/2026-07-27-wfos-e09-s7-phase-3-i05-addendum.md",
-      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/2026-07-27-wfos-e09-s7-phase-3-i05-addendum.md"
+      "local_path": "2026-07-27-i0-e09-s7-phase-3-i05-addendum.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/2026-07-27-i0-e09-s7-phase-3-i05-addendum.md"
     },
     {
       "role": "process-evidence",
       "historical_locator": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-3-i06-addendum.md",
-      "local_path": "Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/2026-07-27-wfos-e09-s7-phase-3-i06-addendum.md",
-      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/2026-07-27-wfos-e09-s7-phase-3-i06-addendum.md"
+      "local_path": "2026-07-27-i0-e09-s7-phase-3-i06-addendum.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/2026-07-27-i0-e09-s7-phase-3-i06-addendum.md"
     },
     {
       "role": "process-evidence",
       "historical_locator": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-3-i07-addendum.md",
-      "local_path": "Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/2026-07-27-wfos-e09-s7-phase-3-i07-addendum.md",
-      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/2026-07-27-wfos-e09-s7-phase-3-i07-addendum.md"
+      "local_path": "2026-07-27-i0-e09-s7-phase-3-i07-addendum.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/2026-07-27-i0-e09-s7-phase-3-i07-addendum.md"
     },
     {
       "role": "process-evidence",
       "historical_locator": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-5-i01-documentation-corrections-addendum.md",
-      "local_path": "Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/2026-07-27-wfos-e09-s7-phase-5-i01-documentation-corrections-addendum.md",
-      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/2026-07-27-wfos-e09-s7-phase-5-i01-documentation-corrections-addendum.md"
+      "local_path": "2026-07-27-i0-e09-s7-phase-5-i01-documentation-corrections-addendum.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/2026-07-27-i0-e09-s7-phase-5-i01-documentation-corrections-addendum.md"
     }
   ],
   "next": "E10 planning/kickoff (not started)",

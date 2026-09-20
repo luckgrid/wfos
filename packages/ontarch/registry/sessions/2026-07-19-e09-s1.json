@@ -26,8 +26,8 @@
     {
       "role": "story",
       "historical_locator": "Build/bin/wfos/E09_runtime_controller.md",
-      "local_path": "Build/bin/wfos/program/wfos-e09/s1-takogami-cli-foundation/README.md",
-      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e09/s1-takogami-cli-foundation/README.md"
+      "local_path": "Build/bin/wfos/program/wfos-e09/s1-takogami-cli-foundation.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e09/s1-takogami-cli-foundation.md"
     }
   ],
   "changed_paths": [

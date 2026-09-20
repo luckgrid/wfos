@@ -27,8 +27,8 @@
     {
       "role": "story",
       "historical_locator": "Build/bin/wfos/E09_runtime_controller.md",
-      "local_path": "Build/bin/wfos/program/wfos-e09/s3-discovery-queries-and-doctor/README.md",
-      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e09/s3-discovery-queries-and-doctor/README.md"
+      "local_path": "Build/bin/wfos/program/wfos-e09/s3-discovery-queries-and-doctor.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e09/s3-discovery-queries-and-doctor.md"
     },
     {
       "role": "correction",

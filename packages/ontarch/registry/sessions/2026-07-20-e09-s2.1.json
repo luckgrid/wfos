@@ -32,8 +32,8 @@
     {
       "role": "story-correction",
       "historical_locator": "Build/bin/wfos/2026-07-20-wfos-e09-s2-command-record-contract-delta.md",
-      "local_path": "Build/bin/wfos/program/wfos-e09/s2-metadata-and-runtime-contracts/s2-1-command-record-correction/README.md",
-      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e09/s2-metadata-and-runtime-contracts/s2-1-command-record-correction/README.md"
+      "local_path": "Build/bin/wfos/program/wfos-e09/s2-metadata-and-runtime-contracts/t1-command-record-correction/README.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e09/s2-metadata-and-runtime-contracts/t1-command-record-correction/README.md"
     },
     {
       "role": "plan-authority",
