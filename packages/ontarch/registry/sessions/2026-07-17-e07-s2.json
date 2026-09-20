@@ -12,6 +12,14 @@
     "Build/bin/wfos/2026-07-17-wfos-e07-git-hygiene-workspaces-sprint.md#e07s2",
     "packages/ontarch/registry/sessions/2026-07-17-e07-s1.json"
   ],
+  "workstreams_refs": [
+    {
+      "role": "story",
+      "historical_locator": "Build/bin/wfos/2026-07-17-wfos-e07-git-hygiene-workspaces-sprint.md#e07s2",
+      "local_path": "Build/bin/wfos/program/wfos-e07/s2-gitleaks-gate.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e07/s2-gitleaks-gate.md"
+    }
+  ],
   "changed_paths": [
     "Build/src/workspaces/wfos/.gitleaks.toml",
     "Build/src/workspaces/wfos/.pre-commit-config.yaml",
@@ -23,13 +31,13 @@
     "shellcheck -e SC1091 packages/ontarch/bin/ontarch-gitleaks",
     "ontarch secrets-scan dir <temp-fixture>"
   ],
-  "outcome": "gitleaks wired as a local pre-commit hook (gitleaks git --staged, uses installed binary, no network) + .gitleaks.toml baseline (useDefault + low-noise allowlist for generated registry/session output). bin/ontarch-gitleaks report-only wrapper (detect | staged | dir <path>) dispatched via ontarch secrets-scan + moon ontarch:secrets-scan task. gitleaks 8.30 uses git/dir subcommands (not protect/detect) \u2014 adjusted accordingly.",
+  "outcome": "gitleaks wired as a local pre-commit hook (gitleaks git --staged, uses installed binary, no network) + .gitleaks.toml baseline (useDefault + low-noise allowlist for generated registry/session output). bin/ontarch-gitleaks report-only wrapper (detect | staged | dir <path>) dispatched via ontarch secrets-scan + moon ontarch:secrets-scan task. gitleaks 8.30 uses git/dir subcommands (not protect/detect) — adjusted accordingly.",
   "validation": "Planted a fake GitHub PAT in a throwaway temp dir; ontarch secrets-scan dir <tmp> reported RuleID github-pat with File + Line (redacted) and exited 1. shellcheck clean.",
   "decisions": [
-    "local gitleaks hook over the gitleaks-managed repo hook \u2014 uses installed binary, no clone/network",
+    "local gitleaks hook over the gitleaks-managed repo hook — uses installed binary, no clone/network",
     "periodic whole-repo scan is a workflow-automation concern; the routine here is report-only"
   ],
-  "next": "E07.S3 \u2014 conventional commits",
+  "next": "E07.S3 — conventional commits",
   "blockers": [],
-  "token_note": "enabling \u2014 prevents the secret-in-context failure before it reaches a commit or an agent"
+  "token_note": "enabling — prevents the secret-in-context failure before it reaches a commit or an agent"
 }

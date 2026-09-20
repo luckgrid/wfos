@@ -13,13 +13,33 @@
     "Build/bin/wfos/SESSIONS.md (tail)",
     "Build/bin/wfos/E03_native_toolchain.md#s3"
   ],
+  "workstreams_refs": [
+    {
+      "role": "state",
+      "historical_locator": "Build/bin/wfos/STATE.md",
+      "local_path": "Build/bin/wfos/_process/STATE.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/_process/STATE.md"
+    },
+    {
+      "role": "ledger",
+      "historical_locator": "Build/bin/wfos/SESSIONS.md",
+      "local_path": "Build/bin/wfos/archives/legacy-session-ledger.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/archives/legacy-session-ledger.md"
+    },
+    {
+      "role": "story",
+      "historical_locator": "Build/bin/wfos/E03_native_toolchain.md#s3",
+      "local_path": "Build/bin/wfos/program/wfos-e03/s3-install-missing-defaults.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e03/s3-install-missing-defaults.md"
+    }
+  ],
   "changed_paths": [],
   "commands_run": [
     "bin/panoply gen brewfile --missing --defaults",
     "bin/panoply bootstrap --dry-run",
     "bin/panoply doctor --json --no-write | jq .missing_defaults"
   ],
-  "outcome": "Install plan for the 5 missing defaults derived and verified by dry-run (no installs performed \u2014 agent rails). The 5 default formulae are: zsh-autosuggestions, zsh-syntax-highlighting, tealdeer (tldr), btop, dua-cli. A full `panoply bootstrap` additionally installs the optional brew-bearing missing tools (zsh-autocomplete, choose-rust, gitleaks); aube has no brew formula (detect-only). The plan is reproducible via `panoply gen brewfile --missing --defaults`; no redundant install doc was added (same lean, human-gated pattern as E01/E02 deferrals).",
+  "outcome": "Install plan for the 5 missing defaults derived and verified by dry-run (no installs performed — agent rails). The 5 default formulae are: zsh-autosuggestions, zsh-syntax-highlighting, tealdeer (tldr), btop, dua-cli. A full `panoply bootstrap` additionally installs the optional brew-bearing missing tools (zsh-autocomplete, choose-rust, gitleaks); aube has no brew formula (detect-only). The plan is reproducible via `panoply gen brewfile --missing --defaults`; no redundant install doc was added (same lean, human-gated pattern as E01/E02 deferrals).",
   "human_action_required": {
     "command_full": "panoply bootstrap   (installs the 8 missing brew tools + wires the shell)",
     "command_defaults_only": "brew install zsh-autosuggestions zsh-syntax-highlighting tealdeer btop dua-cli",
@@ -29,9 +49,9 @@
   "validation": "Agent portion PASS: `gen brewfile --missing --defaults` lists exactly the 5 defaults; `bootstrap --dry-run` confirms the same set (+optional extras) and performs no installs/config writes. DEFERRED (human): `panoply bootstrap` run -> `panoply doctor` reports 0 missing defaults. Cannot be completed by the agent (no_global_install rail).",
   "decisions": [
     "S3 produces a reproducible, generator-derived install plan rather than a static doc; the manifest stays the source of truth",
-    "the 0-missing-defaults acceptance is a human step (install), recorded as DEFERRED \u2014 mirrors E01 chezmoi-apply and E02 sops-encryption deferrals"
+    "the 0-missing-defaults acceptance is a human step (install), recorded as DEFERRED — mirrors E01 chezmoi-apply and E02 sops-encryption deferrals"
   ],
-  "next": "E03.S4 \u2014 RTK as recommended-default output compressor",
+  "next": "E03.S4 — RTK as recommended-default output compressor",
   "blockers": [],
   "deferred": "human runs `panoply bootstrap` to install the 5 defaults; then `panoply doctor` must report 0 missing defaults",
   "token_note": "loaded 1 story block + STATE/ledger tail; plan is generator output (no install logs); no canon ref needed"

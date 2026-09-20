@@ -16,6 +16,20 @@
     "packages/ontarch/registry/sessions/2026-07-19-takogami-brand-migration.json",
     "packages/ontarch/registry/sessions/2026-07-18-namespace-migration.json"
   ],
+  "workstreams_refs": [
+    {
+      "role": "state",
+      "historical_locator": "Build/bin/wfos/STATE.md",
+      "local_path": "Build/bin/wfos/_process/STATE.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/_process/STATE.md"
+    },
+    {
+      "role": "story",
+      "historical_locator": "Build/bin/wfos/E09_runtime_controller.md",
+      "local_path": "Build/bin/wfos/program/wfos-e09/s1-takogami-cli-foundation.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e09/s1-takogami-cli-foundation.md"
+    }
+  ],
   "changed_paths": [
     "Build/src/workspaces/wfos/Cargo.toml",
     "Build/src/workspaces/wfos/Cargo.lock",

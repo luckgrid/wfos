@@ -16,6 +16,38 @@
     "Plan/bin/wfos/lg_wfos_lvl_0_agent_rails.md",
     "packages/ontarch/registry/sessions/2026-06-26-e05-s4.json"
   ],
+  "workstreams_refs": [
+    {
+      "role": "state",
+      "historical_locator": "Build/bin/wfos/STATE.md",
+      "local_path": "Build/bin/wfos/_process/STATE.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/_process/STATE.md"
+    },
+    {
+      "role": "ledger",
+      "historical_locator": "Build/bin/wfos/SESSIONS.md",
+      "local_path": "Build/bin/wfos/archives/legacy-session-ledger.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/archives/legacy-session-ledger.md"
+    },
+    {
+      "role": "story",
+      "historical_locator": "Build/bin/wfos/E06_skills_and_commands.md#s1",
+      "local_path": "Build/bin/wfos/program/wfos-e06/s1-skill-registry.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e06/s1-skill-registry.md"
+    },
+    {
+      "role": "plan",
+      "historical_locator": "Build/bin/wfos/2026-06-27-wfos-e06-skills-and-commands-sprint.md",
+      "local_path": "Build/bin/wfos/program/wfos-e06/blueprint.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e06/blueprint.md"
+    },
+    {
+      "role": "plan-authority",
+      "historical_locator": "Plan/bin/wfos/lg_wfos_lvl_0_agent_rails.md",
+      "local_path": "Plan/bin/wfos/architecture/agent-rails.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Plan/bin/wfos/architecture/agent-rails.md"
+    }
+  ],
   "changed_paths": [
     "Workstreams/.agents/skills/review.toml",
     "Workstreams/.agents/skills/improve.toml",
@@ -34,14 +66,14 @@
     "moon run ontarch:validate",
     "jq '.skills | length' packages/ontarch/registry/skills.json"
   ],
-  "outcome": "Skill registry stood up. New skill.schema.json (draft-07). registry.sh gains ontarch_skill_record flattener; ontarch_emit_skills projects curated TOML into compact skills.json. ontarch-validate gains _validate_skills (required keys, id/kind/source enums, touches\u21d2risks). Four curated POC records (review, improve, qmd, ponytail) with version pins from host skill bodies and passing scan cache. .agents/skills/README.md replaced stub with real contract. New docs/agent-skills.md documents registry model and token thesis.",
-  "validation": "moon run ontarch:validate PASS including skills; moon run ontarch:sync \u2192 skills.json with 4+ flattened skill records (9 total after later stories' files present in tree \u2014 S1 gate: \u22654 curated skills). Each record maps id/source/supported_agent_apps/allowed_contexts/inputs/outputs/risks/validator.",
+  "outcome": "Skill registry stood up. New skill.schema.json (draft-07). registry.sh gains ontarch_skill_record flattener; ontarch_emit_skills projects curated TOML into compact skills.json. ontarch-validate gains _validate_skills (required keys, id/kind/source enums, touches⇒risks). Four curated POC records (review, improve, qmd, ponytail) with version pins from host skill bodies and passing scan cache. .agents/skills/README.md replaced stub with real contract. New docs/agent-skills.md documents registry model and token thesis.",
+  "validation": "moon run ontarch:validate PASS including skills; moon run ontarch:sync → skills.json with 4+ flattened skill records (9 total after later stories' files present in tree — S1 gate: ≥4 curated skills). Each record maps id/source/supported_agent_apps/allowed_contexts/inputs/outputs/risks/validator.",
   "decisions": [
     "review id maps body_ref pre-review-guide (installed review skill on host)",
     "Version pin uses sha256 prefix of SKILL.md when skills-lock.json entry absent",
     "Registry holds records only; bodies stay under SKILLS_HOME"
   ],
-  "next": "E06.S2 \u2014 on-demand loading (allowed_skill_ids + resolve + graph)",
+  "next": "E06.S2 — on-demand loading (allowed_skill_ids + resolve + graph)",
   "blockers": [],
-  "token_note": "Skill ID in context vs full skill body \u2014 registry indexes metadata only; the biggest avoidable context cost after command output is pre-loading skill catalogs."
+  "token_note": "Skill ID in context vs full skill body — registry indexes metadata only; the biggest avoidable context cost after command output is pre-loading skill catalogs."
 }

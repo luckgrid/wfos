@@ -138,7 +138,7 @@ can appear on disk only when filesystem expression is actually needed.
 
 Each product contributes its own descriptor, schema(s), and policy following the native-toolchain
 example: a descriptor for how it connects, a schema for any generated artifact, and a policy
-for its agent rails. Agent operating profiles are authored under `Workstreams/.agents/profiles/`
+for its agent rails. Agent operating profiles are authored under the consumer workspace `.agents/profiles/`
 and validated/indexed by the metadata plane (see [agent-configs.md](agent-configs.md)). Generated,
 host-specific output goes under `registry/` and is gitignored; contracts and policies are tracked.
 

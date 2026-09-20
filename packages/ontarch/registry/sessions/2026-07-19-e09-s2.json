@@ -17,6 +17,32 @@
     "packages/ontarch/registry/sessions/2026-07-19-e09-s1.json",
     "packages/ontarch/registry/sessions/2026-07-19-takogami-brand-migration.json"
   ],
+  "workstreams_refs": [
+    {
+      "role": "state",
+      "historical_locator": "Build/bin/wfos/STATE.md",
+      "local_path": "Build/bin/wfos/_process/STATE.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/_process/STATE.md"
+    },
+    {
+      "role": "story",
+      "historical_locator": "Build/bin/wfos/E09_runtime_controller.md",
+      "local_path": "Build/bin/wfos/program/wfos-e09/s2-metadata-and-runtime-contracts/README.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e09/s2-metadata-and-runtime-contracts/README.md"
+    },
+    {
+      "role": "plan-authority",
+      "historical_locator": "Plan/bin/wfos/lg_wfos_lvl_0_metadata_plane.md",
+      "local_path": "Plan/bin/wfos/architecture/metadata-plane.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Plan/bin/wfos/architecture/metadata-plane.md"
+    },
+    {
+      "role": "session-schema",
+      "historical_locator": "Plan/bin/lg_wfos_session_memory_workflow.md",
+      "local_path": "Build/bin/wfos/program/execution-model.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/execution-model.md"
+    }
+  ],
   "changed_paths": [
     "Build/src/workspaces/wfos/packages/takogami/src/contracts/",
     "Build/src/workspaces/wfos/packages/takogami/src/{lib,error,exit_codes,output}.rs",

@@ -227,7 +227,7 @@
       "phase": "4-i01-hermetic-acceptance-corrections",
       "title": "E09.S7 Phase 4 i01 hermetic acceptance and evidence corrections",
       "status": "done",
-      "addendum": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-4-i01-acceptance-corrections-addendum.md",
+      "addendum": "Build/bin/wfos/_process/sessions/2026-07-27-i17-e09-s7-t4-hermetic-acceptance-corrections-addendum.md",
       "reviewed_phase4_candidate": "87599c3ab8bdfdbf459063f2a9377b74622abfea",
       "reviewed_phase4_evidence": "e6e2208fe0f2640391b781ee52effaf6d4c3068e",
       "reviewed_phase4_evidence_followup": "bb2ef820b4f7b967b11ca249b50f2b0be9e3b470",
@@ -534,7 +534,7 @@
       "phase": "3-i04-path-candidate-classification",
       "title": "E09.S7 Phase 3 i04 PATH candidate classification corrections (J01–J02)",
       "status": "done",
-      "addendum": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-3-i04-addendum.md",
+      "addendum": "Build/bin/wfos/_process/sessions/2026-07-27-i11-e09-s7-t3-path-candidate-classification-addendum.md",
       "reviewed_addendum_workstreams_commit": "e03213d40711b4ce4f4458a887ed756398b092bc",
       "starting_commit": "42a5729301a302f07763b926f89e1b1321858038",
       "final_candidate_commit": "ded30ca9b004e8ff104611ba32c4f5a655c816dd",
@@ -1783,7 +1783,7 @@
       "phase": "3-i05-test-hook-isolation",
       "title": "E09.S7 Phase 3 i05 isolate test mutation seams from production (K01–K03)",
       "status": "done",
-      "addendum": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-3-i05-addendum.md",
+      "addendum": "Build/bin/wfos/_process/sessions/2026-07-27-i12-e09-s7-t3-test-mutation-seam-isolation-addendum.md",
       "reviewed_addendum_workstreams_commit": "c3c9003e205761425562f9530e48dd886b2766f8",
       "starting_commit": "fa875f7c4bef9950891efb6c531cba94d9d86848",
       "final_candidate_commit": "a84519b",
@@ -1865,7 +1865,7 @@
       "phase": "3-i06-test-hook-coverage-and-evidence",
       "title": "E09.S7 Phase 3 i06 complete helper mutation hook coverage and candidate evidence (L01–L03)",
       "status": "done",
-      "addendum": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-3-i06-addendum.md",
+      "addendum": "Build/bin/wfos/_process/sessions/2026-07-27-i13-e09-s7-t3-test-hook-candidate-evidence-addendum.md",
       "reviewed_i05_head": "c7d7c23b3709c7d69f844d5cd578f662e9a04db9",
       "workstreams_addendum_commit": "17b58141cef9810eb04ac3b81df6b477b7f70f28",
       "reviewed_workstreams_addendum_head": "17b58141cef9810eb04ac3b81df6b477b7f70f28",
@@ -2041,7 +2041,7 @@
       "phase": "3-i07-final-evidence-reconciliation",
       "title": "E09.S7 Phase 3 i07 final evidence reconciliation and Phase 4/Phase 5 handoff",
       "status": "done",
-      "addendum": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-3-i07-addendum.md",
+      "addendum": "Build/bin/wfos/_process/sessions/2026-07-27-i14-e09-s7-t3-final-evidence-reconciliation-addendum.md",
       "reviewed_wfos_head": "857247f82a7f48f6350b8ef79a05a6bcb342f2ff",
       "reviewed_workstreams_head": "4c403c824dd29efcb524babd407727e3ec54024d",
       "workstreams_addendum_commit": "4c403c824dd29efcb524babd407727e3ec54024d",
@@ -2238,7 +2238,7 @@
       "phase": "5-i01-documentation-contract-and-release-provenance-corrections",
       "title": "E09.S7 Phase 5 i01 documentation corrections",
       "status": "done",
-      "plan": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-5-i01-documentation-corrections-addendum.md",
+      "plan": "Build/bin/wfos/_process/sessions/2026-07-27-i18-e09-s7-t5-documentation-corrections-addendum.md",
       "phase5_i01_docs_candidate": "b628655eb80b54c2afc5afdf39e64459f2dc581a",
       "phase5_i01_evidence_commit": "70e2a0dfbae7e87d21ab2cad07e2b74c794bc2ed",
       "phase5_i01_evidence_followup": "0b3553d874f712e6260ba5045284bcbe6076e44f",
@@ -2325,9 +2325,143 @@
   ],
   "loaded_context": [
     "Build/bin/wfos/STATE.md",
-    "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-4-i01-acceptance-corrections-addendum.md",
+    "Build/bin/wfos/_process/sessions/2026-07-27-i17-e09-s7-t4-hermetic-acceptance-corrections-addendum.md",
     "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-4-evidence-review-addendum.md",
     "packages/ontarch/registry/sessions/2026-07-25-e09-s7.json"
+  ],
+  "workstreams_refs": [
+    {
+      "role": "state",
+      "historical_locator": "Build/bin/wfos/STATE.md",
+      "local_path": "Build/bin/wfos/_process/STATE.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/_process/STATE.md"
+    },
+    {
+      "role": "process-evidence",
+      "historical_locator": "Build/bin/wfos/_process/sessions/2026-07-27-i17-e09-s7-t4-hermetic-acceptance-corrections-addendum.md",
+      "local_path": "2026-07-27-i17-e09-s7-t4-hermetic-acceptance-corrections-addendum.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/2026-07-27-i17-e09-s7-t4-hermetic-acceptance-corrections-addendum.md"
+    },
+    {
+      "role": "process-evidence",
+      "historical_locator": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-4-evidence-review-addendum.md",
+      "local_path": "2026-07-27-i16-e09-s7-t4-evidence-review-addendum.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/2026-07-27-i16-e09-s7-t4-evidence-review-addendum.md"
+    },
+    {
+      "role": "story",
+      "historical_locator": "Build/bin/wfos/2026-07-25-wfos-e09-s7-graph-bin-projections-mvp-hardening-implementation-plan.md",
+      "local_path": "Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/README.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/README.md"
+    },
+    {
+      "role": "plan",
+      "historical_locator": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-5-documentation-evidence-closure-plan.md",
+      "local_path": "Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/t5-documentation-and-evidence.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/t5-documentation-and-evidence.md"
+    },
+    {
+      "role": "process-evidence",
+      "historical_locator": "Build/bin/wfos/_process/sessions/2026-07-27-i11-e09-s7-t3-path-candidate-classification-addendum.md",
+      "local_path": "2026-07-27-i11-e09-s7-t3-path-candidate-classification-addendum.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/2026-07-27-i11-e09-s7-t3-path-candidate-classification-addendum.md"
+    },
+    {
+      "role": "process-evidence",
+      "historical_locator": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-3-final-closure-helper-resolution-and-evidence-addendum.md",
+      "local_path": "2026-07-27-i10-e09-s7-t3-helper-resolution-evidence-addendum.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/2026-07-27-i10-e09-s7-t3-helper-resolution-evidence-addendum.md"
+    },
+    {
+      "role": "process-evidence",
+      "historical_locator": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-3-closure-follow-up-review-final-hardening-addendum.md",
+      "local_path": "2026-07-27-i9-e09-s7-t3-closure-follow-up-hardening-addendum.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/2026-07-27-i9-e09-s7-t3-closure-follow-up-hardening-addendum.md"
+    },
+    {
+      "role": "process-evidence",
+      "historical_locator": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-3-implementation-review-closure-corrections-addendum.md",
+      "local_path": "2026-07-27-i15-e09-s7-t3-implementation-review-closure-corrections-addendum.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/2026-07-27-i15-e09-s7-t3-implementation-review-closure-corrections-addendum.md"
+    },
+    {
+      "role": "plan",
+      "historical_locator": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-3-projection-authorization-bin-routing-implementation-spec.md",
+      "local_path": "Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/t3-projection-authorization-and-bin-routing.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e09/s7-graph-bin-projections/t3-projection-authorization-and-bin-routing.md"
+    },
+    {
+      "role": "process-evidence",
+      "historical_locator": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-2-final-closure-evidence-follow-up-addendum.md",
+      "local_path": "2026-07-27-i7-e09-s7-t2-closure-evidence-follow-up-addendum.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/2026-07-27-i7-e09-s7-t2-closure-evidence-follow-up-addendum.md"
+    },
+    {
+      "role": "process-evidence",
+      "historical_locator": "Build/bin/wfos/2026-07-27-wfos-e09-s7-phase-2-closure-follow-up-review-final-corrections-addendum.md",
+      "local_path": "2026-07-27-i8-e09-s7-t2-closure-follow-up-corrections-addendum.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/2026-07-27-i8-e09-s7-t2-closure-follow-up-corrections-addendum.md"
+    },
+    {
+      "role": "process-evidence",
+      "historical_locator": "Build/bin/wfos/2026-07-26-wfos-e09-s7-phase-2-implementation-review-closure-corrections-addendum.md",
+      "local_path": "2026-07-26-i5-e09-s7-t2-implementation-review-closure-corrections-addendum.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/2026-07-26-i5-e09-s7-t2-implementation-review-closure-corrections-addendum.md"
+    },
+    {
+      "role": "process-evidence",
+      "historical_locator": "Build/bin/wfos/2026-07-26-wfos-e09-s7-phase-2-readiness-review-and-implementation-acceptance-addendum.md",
+      "local_path": "2026-07-26-i6-e09-s7-t2-readiness-review-and-implementation-acceptance-addendum.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/2026-07-26-i6-e09-s7-t2-readiness-review-and-implementation-acceptance-addendum.md"
+    },
+    {
+      "role": "process-evidence",
+      "historical_locator": "Build/bin/wfos/2026-07-26-wfos-e09-s7-phase-1-closure-follow-up-review-final-corrections.md",
+      "local_path": "2026-07-26-i3-e09-s7-t1-closure-follow-up-corrections.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/2026-07-26-i3-e09-s7-t1-closure-follow-up-corrections.md"
+    },
+    {
+      "role": "process-evidence",
+      "historical_locator": "Build/bin/wfos/2026-07-26-wfos-e09-s7-phase-1-implementation-review-closure-corrections-addendum.md",
+      "local_path": "2026-07-26-i4-e09-s7-t1-implementation-review-closure-corrections-addendum.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/2026-07-26-i4-e09-s7-t1-implementation-review-closure-corrections-addendum.md"
+    },
+    {
+      "role": "process-evidence",
+      "historical_locator": "Build/bin/wfos/2026-07-26-wfos-e09-s7-phase-0-follow-up-review-phase-1-completion-addendum.md",
+      "local_path": "2026-07-26-i2-e09-s7-t1-follow-up-review-closure-addendum.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/2026-07-26-i2-e09-s7-t1-follow-up-review-closure-addendum.md"
+    },
+    {
+      "role": "process-evidence",
+      "historical_locator": "Build/bin/wfos/2026-07-25-wfos-e09-s7-phase-0-review-phase-1-corrections-addendum.md",
+      "local_path": "2026-07-25-i0-e09-s7-t1-acceptance-map-review-corrections-addendum.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/_process/sessions/2026-07-25-i0-e09-s7-t1-acceptance-map-review-corrections-addendum.md"
+    },
+    {
+      "role": "process-evidence",
+      "historical_locator": "Build/bin/wfos/_process/sessions/2026-07-27-i12-e09-s7-t3-test-mutation-seam-isolation-addendum.md",
+      "local_path": "2026-07-27-i12-e09-s7-t3-test-mutation-seam-isolation-addendum.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/2026-07-27-i12-e09-s7-t3-test-mutation-seam-isolation-addendum.md"
+    },
+    {
+      "role": "process-evidence",
+      "historical_locator": "Build/bin/wfos/_process/sessions/2026-07-27-i13-e09-s7-t3-test-hook-candidate-evidence-addendum.md",
+      "local_path": "2026-07-27-i13-e09-s7-t3-test-hook-candidate-evidence-addendum.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/2026-07-27-i13-e09-s7-t3-test-hook-candidate-evidence-addendum.md"
+    },
+    {
+      "role": "process-evidence",
+      "historical_locator": "Build/bin/wfos/_process/sessions/2026-07-27-i14-e09-s7-t3-final-evidence-reconciliation-addendum.md",
+      "local_path": "2026-07-27-i14-e09-s7-t3-final-evidence-reconciliation-addendum.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/2026-07-27-i14-e09-s7-t3-final-evidence-reconciliation-addendum.md"
+    },
+    {
+      "role": "process-evidence",
+      "historical_locator": "Build/bin/wfos/_process/sessions/2026-07-27-i18-e09-s7-t5-documentation-corrections-addendum.md",
+      "local_path": "2026-07-27-i18-e09-s7-t5-documentation-corrections-addendum.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/2026-07-27-i18-e09-s7-t5-documentation-corrections-addendum.md"
+    }
   ],
   "next": "E10 planning/kickoff (not started)",
   "blockers": [

@@ -13,6 +13,14 @@
     "packages/ontarch/registry/sessions/2026-07-17-e07-s5.json",
     "packages/ontarch/registry/sessions/2026-07-17-e07-s6.json"
   ],
+  "workstreams_refs": [
+    {
+      "role": "story",
+      "historical_locator": "Build/bin/wfos/2026-07-17-wfos-e08-bin-archive-lifecycle-sprint.md#e08s1",
+      "local_path": "Build/bin/wfos/program/wfos-e08/s1-report-only-bin-inventory.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e08/s1-report-only-bin-inventory.md"
+    }
+  ],
   "changed_paths": [
     "Build/src/workspaces/wfos/packages/ontarch/lib/registry.sh",
     "Build/src/workspaces/wfos/packages/ontarch/bin/ontarch-bin-report",
@@ -34,7 +42,7 @@
     "inventory root is WS_ROOT/*/bin/<workflow>/ (namespace bins), not Build/src/workspaces package bins",
     "size via du -sk (portable); fd preferred with find fallback; no dua dependency"
   ],
-  "next": "E08.S2 \u2014 manifest schema",
+  "next": "E08.S2 — manifest schema",
   "blockers": [],
   "token_note": "one inventory read replaces N du/ls/stat explorations across namespace bin/ trees"
 }

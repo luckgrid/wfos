@@ -1,6 +1,6 @@
 # Config routing rules — machine-readable.
 #
-# The routing contract keeps SHARED INTENT in registries / Workstreams/.agents and APP-SPECIFIC
+# The routing contract keeps SHARED INTENT in registries / .agents and APP-SPECIFIC
 # SYNTAX in each app's own config file. App configs CONSUME shared profile data (via chezmoi
 # templates); they are NEVER the policy source of truth, and they NEVER hold secrets.
 #
@@ -16,35 +16,35 @@
 
 [routing.zed]
 target = ".config/zed/settings.json"
-intent_source = "Workstreams/.agents/profiles + ontarch descriptors"
+intent_source = ".agents/profiles + ontarch descriptors"
 consumes_profile_data = true
 holds_secrets = false
 owned_by = "ontarch-agent-configs"
 
 [routing.cursor]
 target = ".cursor/ (rules + mcp.json)"
-intent_source = "Workstreams/.agents/profiles + ontarch policies"
+intent_source = ".agents/profiles + ontarch policies"
 consumes_profile_data = true
 holds_secrets = false
 owned_by = "ontarch-agent-configs"
 
 [routing.claude]
 target = ".claude/ (settings + CLAUDE.md)"
-intent_source = "repository README + Workstreams/.agents/profiles"
+intent_source = "repository README + .agents/profiles"
 consumes_profile_data = true
 holds_secrets = false
 owned_by = "ontarch-agent-configs"
 
 [routing.factory]
 target = ".factory/ (config)"
-intent_source = "Workstreams/.agents/profiles"
+intent_source = ".agents/profiles"
 consumes_profile_data = true
 holds_secrets = false
 owned_by = "ontarch-agent-configs"
 
 [routing.opencode]
 target = ".config/opencode/ (config)"
-intent_source = "Workstreams/.agents/profiles + ontarch descriptors"
+intent_source = ".agents/profiles + ontarch descriptors"
 consumes_profile_data = true
 holds_secrets = false
 owned_by = "ontarch-agent-configs"

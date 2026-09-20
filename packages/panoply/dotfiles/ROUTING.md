@@ -9,7 +9,7 @@ this doc is the human-readable rationale.
 
 | Layer | Home | What it holds | Who reads it |
 |-------|------|---------------|--------------|
-| Shared intent | `Workstreams/.agents/` + ontarch `descriptors`/`policies` | cross-app rules, scopes, allowed/blocked paths, command policy | agents (one read) |
+| Shared intent | `.agents/` + ontarch `descriptors`/`policies` | cross-app rules, scopes, allowed/blocked paths, command policy | agents (one read) |
 | Profile data | `dotfiles/.chezmoidata/` | which targets render per profile; non-secret config values | chezmoi at render time |
 | App syntax | each app's own config file (`.config/zed`, `.cursor`, `.claude`, …) | only the app-specific *expression* of the shared intent | the app |
 
@@ -18,7 +18,7 @@ flow in.
 
 ```mermaid
 flowchart TD
-  Intent["Shared intent\nWorkstreams/.agents + Ontarch descriptors/policies"]
+  Intent["Shared intent\n.agents + Ontarch descriptors/policies"]
   Profiles["Profile data\n.chezmoidata/profiles.toml"]
   Render["chezmoi render per profile"]
   Zed[".config/zed"]
@@ -44,8 +44,8 @@ flowchart TD
    are wired via the [secrets module](../../../docs/native-toolchain.md). Enforced by the no-secrets
    scan in [`bin/validate.sh`](bin/validate.sh).
 2. **No app config is the policy source of truth.** Policy lives in ontarch descriptors/policies and
-   `Workstreams/.agents/`. An app config is a downstream *expression*, never the canon.
-3. **Cross-app rules route through `Workstreams/.agents/` + ontarch descriptors**, so one read
+   `.agents/`. An app config is a downstream *expression*, never the canon.
+3. **Cross-app rules route through `.agents/` + ontarch descriptors**, so one read
    answers "what may this agent touch" instead of crawling each app's prose. See
    [metadata-plane](../../../docs/metadata-plane.md) and [agent-rails](../../../docs/agent-rails.md).
 4. **App configs consume shared profile data.** Each app config is rendered by chezmoi from the same
@@ -54,7 +54,7 @@ flowchart TD
 ## Two profile layers
 
 Chezmoi templates read **machine profiles** (`.chezmoidata/profiles.toml`: `gui`, `secrets`,
-`rtk`, render categories). Agent **operating profiles** (`Workstreams/.agents/profiles/*.toml`:
+`rtk`, render categories). Agent **operating profiles** (`.agents/profiles/*.toml`:
 scope, commands, rails, validators, `output.compressor`) are validated by Ontarch and indexed into
 `registry/profiles.json`. App templates today gate on machine profile flags; registry compressor
 intent is the agent-layer declaration. Keep machine `rtk` aligned with the active agent profile's
@@ -80,7 +80,7 @@ opt-out). The pattern, for any app:
 {
   "telemetry": { "metrics": {{ $p.gui }} },
   "assistant": { "enabled": {{ $p.gui }} }
-  // app-specific Zed syntax only; scopes/policy stay in Workstreams/.agents
+  // app-specific Zed syntax only; scopes/policy stay in .agents
 }
 ```
 
@@ -95,5 +95,5 @@ once instead of holding every app's prose config in context. See
 
 - [`.chezmoidata/routing.toml`](.chezmoidata/routing.toml) — machine-readable routing contract
 - [`README.md`](README.md) — source layout + profiles
-- [`../../../docs/metadata-plane.md`](../../../docs/metadata-plane.md) — metadata plane / `Workstreams/.agents`
+- [`../../../docs/metadata-plane.md`](../../../docs/metadata-plane.md) — metadata plane / `.agents`
 - [`../../../docs/agent-rails.md`](../../../docs/agent-rails.md) — agent configs & profiles

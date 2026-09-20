@@ -13,6 +13,26 @@
     "Build/bin/wfos/SESSIONS.md (tail)",
     "Build/bin/wfos/E02_secrets_and_vaults.md#s4"
   ],
+  "workstreams_refs": [
+    {
+      "role": "state",
+      "historical_locator": "Build/bin/wfos/STATE.md",
+      "local_path": "Build/bin/wfos/_process/STATE.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/_process/STATE.md"
+    },
+    {
+      "role": "ledger",
+      "historical_locator": "Build/bin/wfos/SESSIONS.md",
+      "local_path": "Build/bin/wfos/archives/legacy-session-ledger.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/archives/legacy-session-ledger.md"
+    },
+    {
+      "role": "story",
+      "historical_locator": "Build/bin/wfos/E02_secrets_and_vaults.md#s4",
+      "local_path": "Build/bin/wfos/program/wfos-e02/s4-gitleaks-prerequisite.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e02/s4-gitleaks-prerequisite.md"
+    }
+  ],
   "changed_paths": [
     "Build/src/workspaces/wfos/packages/panoply/manifest/panoply.tools.toml",
     "Build/src/workspaces/wfos/packages/panoply/config/Brewfile"

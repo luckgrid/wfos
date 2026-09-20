@@ -8,7 +8,7 @@ and keeps each repository or package `README.md` as the common entrypoint.
 ## Shared profiles
 
 A profile is one declaration consumed by every app. Profiles live in the **working** agent
-navigation layer at [`Workstreams/.agents/profiles/`](../../../../../.agents/profiles/README.md)
+navigation layer at the consumer workspace root under `.agents/profiles/`
 (tracked TOML; `$AGENTS_HOME` when overridden). Each declares scope (allowed/blocked paths),
 command allow/gate/block lists, secret access, a remote-write policy, an `[isolation]` field
 (worktree/branch scope + jj opt-in), required validators, an output compressor, and a session-log
@@ -67,7 +67,7 @@ WfOS carries **two** profile concepts. They answer different questions and must 
 
 | Layer | Home | Question it answers | Consumed by |
 |-------|------|-------------------|-------------|
-| **Agent operating profile** | `Workstreams/.agents/profiles/*.toml` | What may this agent session touch? (scope, commands, rails, validators, compressor intent) | Agents, metadata-plane (`ontarch validate` / `ontarch sync` → `profiles.json`), app renderers that read registry data |
+| **Agent operating profile** | consumer workspace `.agents/profiles/*.toml` | What may this agent session touch? (scope, commands, rails, validators, compressor intent) | Agents, metadata-plane (`ontarch validate` / `ontarch sync` → `profiles.json`), app renderers that read registry data |
 | **Machine / chezmoi profile** | `packages/panoply/dotfiles/.chezmoidata/profiles.toml` | What config targets render on this host? (GUI, secrets, `rtk` shell hook) | chezmoi at render time (`local-macos-full`, `agent-safe`, …) |
 
 ```mermaid
@@ -118,4 +118,4 @@ prompt. Shared profile data plus the existing README hierarchy avoids a separate
 
 - [Agent rails and gates](agent-rails.md) — the rails, gates, and the SkillSpector skill gate.
 - [Metadata plane](metadata-plane.md) — descriptors, policies, registry, and graph.
-- [`.agents/profiles/README.md`](../../../../../.agents/profiles/README.md) — the profile contract.
+- Consumer workspace `.agents/profiles/README.md` — the profile contract materialized from Ontarch's agent pattern.

@@ -16,6 +16,32 @@
     "packages/ontarch/registry/sessions/2026-06-25-e04-s4.json",
     "packages/ontarch/registry/QUERIES.md"
   ],
+  "workstreams_refs": [
+    {
+      "role": "state",
+      "historical_locator": "Build/bin/wfos/STATE.md",
+      "local_path": "Build/bin/wfos/_process/STATE.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/_process/STATE.md"
+    },
+    {
+      "role": "ledger",
+      "historical_locator": "Build/bin/wfos/SESSIONS.md",
+      "local_path": "Build/bin/wfos/archives/legacy-session-ledger.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/archives/legacy-session-ledger.md"
+    },
+    {
+      "role": "story",
+      "historical_locator": "Build/bin/wfos/E04_metadata_plane_registries.md#s5",
+      "local_path": "Build/bin/wfos/program/wfos-e04/s5-registry-as-context-cache-poc.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e04/s5-registry-as-context-cache-poc.md"
+    },
+    {
+      "role": "progress",
+      "historical_locator": "Build/bin/wfos/E04_PROGRESS_NOTES.md",
+      "local_path": "Build/bin/wfos/program/wfos-e04/progress-notes.md",
+      "github_url": "https://github.com/luckgrid/lg-workstreams/blob/main/Build/bin/wfos/program/wfos-e04/progress-notes.md"
+    }
+  ],
   "changed_paths": [
     "Build/bin/wfos/STATE.md",
     "Build/bin/wfos/SESSIONS.md",
