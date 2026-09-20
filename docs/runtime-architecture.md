@@ -2,9 +2,14 @@
 
 This is the engine blueprint that sits under the
 [runtime controller (Takogami)](runtime-controller.md): a high-performance, terminal-first
-orchestrator driven by a unified CLI/TUI. It proxies native utilities, coordinates asynchronous
-data across simultaneous workstreams, isolates distinct tenant/brand execution profiles, and
-integrates AI augmentation natively.
+Level 0 orchestrator. It proxies native utilities, coordinates asynchronous data across
+simultaneous workstreams, isolates distinct tenant/brand execution profiles, and integrates
+AI augmentation natively.
+
+This engine is one implementation surface inside the broader WfOS workflow operating
+environment. It should not absorb generic Workflow Definition/execution semantics, terminal
+multiplexer ownership, agent-harness internals, or provider-native state merely because the
+controller can coordinate those systems.
 
 It is a target architecture. The first useful version is a single-process CLI; the pieces
 below describe how that scales without a rewrite.

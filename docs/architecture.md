@@ -1,13 +1,53 @@
 # Architecture
 
-WfOS Level 0 is the lowest practical layer of a Workflows Operating System: the local
-machine, dev server, or sandbox where work actually happens. It does not replace your OS,
-shell, package managers, or build tools — it organizes them, routes to them, and exposes
-their meaning through a consistent local interface.
+WfOS is a **workflow operating environment**: it provides stable coordination abstractions
+over heterogeneous workflow runtimes, capabilities, providers, tools, resources, policy,
+state, and execution contexts.
+
+WfOS Level 0 is the lowest practical implementation layer of that model: the local machine,
+dev server, or sandbox where work actually happens. It does not replace your OS, shell,
+package managers, build tools, terminal/session providers, or agent harnesses. Instead, it
+discovers, binds, authorizes, routes to, invokes, and observes them through explicit
+interfaces while provider-native systems remain authoritative.
 
 The layer should be boring, practical, and powerful. It is **local-first** (no network or
 cloud account required to be useful), **configuration-driven** (metadata and policy define
 what exists and how it connects), and **modular** (every part is optional and swappable).
+
+> **WfOS is not defined by tool aggregation.** A current product may wrap or coordinate many
+> tools, but aggregation is an implementation mechanism beneath the operating abstraction.
+
+## Operating environment versus runtime implementations
+
+The distinction matters because several runtime/control layers can coexist without becoming
+synonyms.
+
+```text
+WfOS
+  workflow operating environment
+  policy · routing · scheduling · provider/resource coordination
+  state/observation · provenance · human control
+        ↓
+Workflow Runtime(s)
+  execute Workflow Definitions
+  maintain workflow-execution state
+        ↓
+Capabilities / Providers
+  workspaces · sessions · agents · version control · native tools · context systems
+```
+
+A **Workflow Runtime** owns the execution semantics of a Workflow Definition. WfOS may host,
+coordinate, observe, persist, or provide resources to that runtime, but the concepts remain
+separate.
+
+The Level 0 **runtime-controller** is narrower again. Takogami is the current reference
+product for local discovery, policy, sealed command routing, provider invocation, and
+records. It implements important WfOS operating responsibilities; it is not the complete
+definition of a Workflows Operating System.
+
+This separation keeps the architecture extensible without turning WfOS into an absorption
+layer. A component belongs in WfOS core only when it represents a stable operating
+responsibility across heterogeneous providers—not merely because a current CLI can invoke it.
 
 ## Archetypes vs products
 

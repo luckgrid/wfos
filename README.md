@@ -1,10 +1,17 @@
 # WfOS
 
-**WfOS** (Workflows Operating System) is a local-first control layer for a developer machine.
-It does not replace your OS, shell, or package managers — it organizes them, routes to them,
-and exposes their meaning through a consistent local interface. It is modular and
-non-disruptive: adopt one package, keep your own environment, and grow into the rest when it
-earns its place.
+**WfOS** (Workflows Operating System) is a workflow operating environment: a stable
+coordination layer over workflow runtimes, capabilities, providers, tools, resources, policy,
+state, and execution contexts.
+
+This repository implements the **local-first Level 0** of that larger model for developer
+machines. Level 0 does not replace your OS, shell, package managers, build tools, terminals,
+or agent harnesses. It discovers and coordinates them through explicit interfaces, policy,
+routing, metadata, and records while leaving provider-native ownership intact.
+
+Tool aggregation is an implementation detail of some Level 0 products, not the architectural
+definition of WfOS. The system is modular and non-disruptive: adopt one package, keep your own
+environment, and grow into broader workflow coordination only when it earns its place.
 
 Full docs: [`docs/`](docs/README.md). Start with [architecture](docs/architecture.md).
 Archetypes are stable roles; products are swappable implementations — see
